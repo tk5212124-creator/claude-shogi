@@ -3,7 +3,7 @@ name: Deploy Shogi to GitHub Pages
 on:
   push:
     branches:
-      - claude/shogi-app-debug-40abyr
+      - main
   workflow_dispatch:
 
 permissions:
