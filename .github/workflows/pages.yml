@@ -29,6 +29,8 @@ jobs:
           cp shogi.html _site/index.html
           cp shogi.html _site/shogi.html
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
