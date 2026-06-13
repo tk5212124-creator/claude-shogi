@@ -1,0 +1,2641 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>将棋対局</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700;800&family=Zen+Maru+Gothic:wght@500;700&family=Cinzel:wght@600&display=swap');
+
+  :root{
+    --board:#f0d49a;
+    --board2:#e6c179;
+    --board-line:#6b4a1e;
+    --grid:#c9a85c;
+    --koma-top:#fdf0cf;
+    --koma-bot:#e9c884;
+    --koma-edge:#8a6126;
+    --ink:#2a1d0c;
+    --accent:#e0563f;
+    --gold:#f5cf6b;
+    --sel:#62d1a0;
+    --move:#7fe0b0;
+    --panel:#211a33;
+    --panel2:#2c2347;
+    --glow:#8b6bff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -5%, rgba(139,107,255,.28), transparent 60%),
+      radial-gradient(ellipse 70% 40% at 50% 105%, rgba(224,86,63,.18), transparent 60%),
+      linear-gradient(170deg,#1a1530 0%,#13102a 45%,#0d0a1c 100%);
+    background-attachment:fixed;
+    color:#ece3ff;
+    font-family:'Zen Maru Gothic',sans-serif;
+    min-height:100vh;
+    display:flex;flex-direction:column;align-items:center;
+    padding:18px 10px 40px;
+    -webkit-tap-highlight-color:transparent;
+  }
+  h1{
+    font-family:'Shippori Mincho',serif;
+    font-weight:800;letter-spacing:.42em;
+    font-size:1.75rem;margin-bottom:2px;text-indent:.42em;
+    background:linear-gradient(180deg,#fff6df,#f5cf6b 55%,#d99a3c);
+    -webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 2px 6px rgba(245,207,107,.4));
+  }
+  .sub{font-size:.72rem;letter-spacing:.25em;color:#b3a8d8;margin-bottom:4px;text-align:center;}
+
+  .captured{
+    width:100%;max-width:430px;
+    min-height:42px;
+    background:linear-gradient(160deg,var(--panel2),var(--panel));
+    border:1px solid rgba(139,107,255,.3);border-radius:12px;
+    padding:7px 9px;margin:6px 0;
+    display:flex;flex-wrap:wrap;gap:5px;align-items:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 4px 16px rgba(0,0,0,.3);
+  }
+  .captured .lbl{font-size:.7rem;color:#b3a8d8;letter-spacing:.15em;margin-right:4px;}
+  .cap-koma{
+    font-family:'Shippori Mincho',serif;font-weight:700;
+    width:30px;height:34px;border-radius:5px;
+    background:linear-gradient(160deg,var(--koma-top),var(--koma-bot));color:var(--ink);
+    border:1px solid var(--koma-edge);
+    display:flex;flex-direction:row-reverse;align-items:center;justify-content:center;
+    box-sizing:border-box;overflow:hidden;text-align:center;line-height:1;
+    font-size:1.05rem;cursor:pointer;position:relative;
+    box-shadow:0 1px 2px rgba(0,0,0,.3);
+  }
+  .cap-koma .koma-name{writing-mode:vertical-rl;text-orientation:upright;line-height:1.02;}
+  .cap-koma.small .koma-name{font-size:.62rem;}
+  .cap-koma.tiny  .koma-name{font-size:.5rem;}
+  .cap-koma .koma-suffix{writing-mode:vertical-rl;text-orientation:upright;
+    font-size:.34rem;line-height:1;opacity:.8;margin-right:.5px;align-self:center;}
+  .cap-koma.enemy{background:linear-gradient(160deg,#6a5a8a,#473a63);color:#ece3ff;transform:rotate(180deg);cursor:default;}
+  .cap-koma .ct{position:absolute;bottom:-3px;right:-3px;font-size:.6rem;
+    background:var(--accent);color:#fff;border-radius:50%;
+    width:14px;height:14px;display:flex;align-items:center;justify-content:center;font-family:sans-serif;}
+  .cap-koma.sel{outline:2px solid var(--sel);outline-offset:1px;}
+  .cap-koma.cap-add{background:linear-gradient(160deg,#3a7d5e,#2a5d44);color:#dff5ec;
+    border:1px dashed var(--sel);transform:none;cursor:pointer;font-family:sans-serif;}
+
+  .board-wrap{position:relative;padding:10px;
+    background:linear-gradient(135deg,#4a3a6e,#2e2447);
+    border-radius:18px;
+    box-shadow:0 0 0 2px rgba(245,207,107,.35), 0 14px 40px rgba(0,0,0,.55),
+      inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  .board-wrap::before{
+    content:"";position:absolute;inset:4px;border-radius:14px;
+    border:1px solid rgba(245,207,107,.25);pointer-events:none;
+  }
+  .board{
+    display:grid;
+    grid-template-columns:repeat(9,minmax(0,1fr));
+    grid-template-rows:repeat(9,minmax(0,1fr));
+    width:min(92vw,410px);height:min(92vw,410px);
+    background:linear-gradient(160deg,var(--board),var(--board2));
+    border:3px solid #7a5320;
+    border-radius:6px;
+    box-shadow:inset 0 0 24px rgba(106,74,30,.4);
+    overflow:hidden;
+  }
+  .cell{
+    position:relative;
+    min-width:0;min-height:0;
+    aspect-ratio:1/1;
+    overflow:hidden;
+    border:.5px solid rgba(107,74,30,.55);
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+  }
+  .cell.movable::after{
+    content:"";position:absolute;width:30%;height:30%;
+    background:radial-gradient(circle,var(--move),#3aa977);
+    border-radius:50%;opacity:.85;
+    box-shadow:0 0 8px rgba(127,224,176,.7);
+    animation:pulse 1.4s ease-in-out infinite;
+  }
+  .cell.movable.has-koma::after{
+    width:88%;height:88%;background:transparent;
+    border:3px solid var(--accent);border-radius:8px;opacity:.9;
+    box-shadow:0 0 10px rgba(224,86,63,.6);
+  }
+  @keyframes pulse{0%,100%{transform:scale(1);opacity:.85;}50%{transform:scale(1.25);opacity:1;}}
+  .cell.sel{background:radial-gradient(circle,rgba(98,209,160,.55),rgba(98,209,160,.2));}
+  .cell.last{background:rgba(224,86,63,.18);}
+  .cell.check{
+    background:radial-gradient(circle,rgba(224,86,63,.6),rgba(224,86,63,.25));
+    animation:checkpulse 1s ease-in-out infinite;
+  }
+  @keyframes checkpulse{0%,100%{box-shadow:inset 0 0 0 3px var(--accent), inset 0 0 12px rgba(224,86,63,.5);}
+    50%{box-shadow:inset 0 0 0 3px #ff7a63, inset 0 0 22px rgba(224,86,63,.85);}}
+
+  .koma{
+    font-family:'Shippori Mincho',serif;font-weight:700;
+    width:90%;height:90%;max-width:100%;max-height:100%;
+    box-sizing:border-box;overflow:hidden;
+    background:
+      radial-gradient(ellipse 120% 60% at 50% 8%, rgba(255,255,255,.65), transparent 55%),
+      linear-gradient(158deg,var(--koma-top) 0%,#f0d9a4 50%,var(--koma-bot) 100%);
+    color:var(--ink);
+    border:1px solid var(--koma-edge);
+    border-radius:18% 18% 10% 10%/34% 34% 10% 10%;
+    display:flex;flex-direction:row-reverse;align-items:center;justify-content:center;
+    font-size:min(4.2vw,18px);line-height:1;
+    box-shadow:0 2px 5px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.7), inset 0 -2px 4px rgba(138,97,38,.3);
+    user-select:none;
+    text-align:center;
+    transition:transform .08s;
+  }
+  /* 駒名は縦書き1列。サイズは駒名の文字数（small=2字, tiny=3字以上）で調整。 */
+  .koma-name{writing-mode:vertical-rl;text-orientation:upright;line-height:1.02;letter-spacing:0;max-height:100%;overflow:hidden;}
+  .koma.small .koma-name{font-size:min(3.4vw,15px);}
+  .koma.tiny  .koma-name{font-size:min(2.4vw,10.5px);}
+  /* 「(大局)」は駒名の左に細く小さく縦書きで添える */
+  .koma-suffix{writing-mode:vertical-rl;text-orientation:upright;
+    font-size:min(1.7vw,7.5px);line-height:1;opacity:.8;margin-right:1px;align-self:center;}
+  .koma.daikyoku{gap:0;}
+  .koma.promoted{color:var(--accent);}
+  .koma{position:relative;}
+  .orig-mark{position:absolute;top:0;right:0;font-size:7px;line-height:1;
+    background:var(--accent);color:#fff;border-radius:0 2px 0 4px;padding:1px 2px;font-family:sans-serif;}
+  .othello-disc{width:80%;height:80%;border-radius:50%;
+    box-shadow:0 2px 5px rgba(0,0,0,.5), inset 0 2px 4px rgba(255,255,255,.3);}
+  .othello-disc.black{background:radial-gradient(circle at 35% 30%, #5a5a6e, #1a1a24 70%);
+    border:1px solid #000;}
+  .othello-disc.white{background:radial-gradient(circle at 35% 30%, #ffffff, #d0d0dc 70%);
+    border:1px solid #aaa;}
+  .koma.enemy{transform:rotate(180deg);
+    background:linear-gradient(158deg,#b7a6cf,#8d7ab0 55%,#6a5790);
+    color:#1a1330;border-color:#4a3a6e;}
+
+  .controls{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;justify-content:center;max-width:440px;}
+  button{
+    font-family:'Zen Maru Gothic',sans-serif;
+    background:linear-gradient(160deg,#352a55,#251d3d);
+    color:#ddd2f5;
+    border:1px solid rgba(139,107,255,.4);border-radius:10px;
+    padding:9px 15px;font-size:.85rem;letter-spacing:.08em;cursor:pointer;
+    transition:.15s;
+    box-shadow:0 2px 8px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  button:hover{background:linear-gradient(160deg,#43356b,#2e2450);transform:translateY(-1px);}
+  button:active{transform:translateY(0);}
+  button.primary{background:linear-gradient(160deg,#e0563f,#c13b28);border-color:#e0563f;color:#fff;
+    box-shadow:0 2px 12px rgba(224,86,63,.4);}
+  button.primary:hover{background:linear-gradient(160deg,#ec6650,#d04330);}
+  button.on{background:linear-gradient(160deg,#2f7d5e,#1f5e44);border-color:var(--sel);color:#dff5ec;
+    box-shadow:0 2px 12px rgba(98,209,160,.35);}
+  button.on:hover{background:linear-gradient(160deg,#389070,#27684c);}
+
+  .status{
+    margin-top:14px;font-size:.9rem;letter-spacing:.08em;
+    min-height:1.4em;color:#ece3ff;text-align:center;font-weight:600;
+    padding:8px 18px;border-radius:999px;
+    background:linear-gradient(160deg,rgba(53,42,85,.7),rgba(37,29,61,.7));
+    border:1px solid rgba(139,107,255,.3);
+    display:inline-block;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  .status.think{color:var(--gold);border-color:rgba(245,207,107,.45);}
+  .status.win{color:var(--sel);font-weight:700;text-shadow:0 0 12px rgba(98,209,160,.6);border-color:var(--sel);}
+  .status.lose{color:var(--accent);font-weight:700;text-shadow:0 0 12px rgba(224,86,63,.6);border-color:var(--accent);}
+
+  .promo-modal{
+    position:fixed;inset:0;background:rgba(8,6,18,.72);backdrop-filter:blur(3px);
+    display:none;align-items:center;justify-content:center;z-index:20;
+  }
+  .promo-modal.show{display:flex;}
+  .promo-box{background:linear-gradient(160deg,var(--panel2),var(--panel));
+    border:1px solid rgba(245,207,107,.35);border-radius:16px;
+    padding:22px;text-align:center;box-shadow:0 16px 50px rgba(0,0,0,.6);}
+  .promo-box p{margin-bottom:16px;letter-spacing:.1em;}
+  .promo-box .opts{display:flex;gap:14px;justify-content:center;}
+  .promo-box .opts button{font-size:1.4rem;font-family:'Shippori Mincho',serif;padding:12px 20px;}
+
+  .pick-box{background:linear-gradient(160deg,var(--panel2),var(--panel));
+    border:1px solid rgba(245,207,107,.3);border-radius:16px;
+    padding:18px;max-width:min(94vw,460px);max-height:84vh;overflow-y:auto;
+    box-shadow:0 16px 50px rgba(0,0,0,.6);}
+  .pick-box p{margin-bottom:12px;letter-spacing:.08em;text-align:center;}
+  .pick-section{margin-bottom:12px;}
+  .pick-lbl{font-size:.72rem;color:var(--gold);letter-spacing:.2em;display:block;margin-bottom:6px;}
+  .pick-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;}
+  .pick-koma{
+    font-family:'Shippori Mincho',serif;font-weight:700;
+    background:linear-gradient(158deg,var(--koma-top),var(--koma-bot));color:var(--ink);
+    border:1px solid var(--koma-edge);border-radius:7px;
+    aspect-ratio:5/6;display:flex;align-items:center;justify-content:center;
+    flex-wrap:wrap;
+    cursor:pointer;padding:2px;text-align:center;line-height:1.05;
+    font-size:13px;overflow:hidden;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .pick-koma span{flex:0 0 100%;}
+  .pick-koma.k2{font-size:10px;}
+  .pick-koma.k3{font-size:8px;letter-spacing:-.5px;}
+  .pick-koma:hover{filter:brightness(1.08);transform:scale(1.05);}
+  .pick-actions{display:flex;gap:10px;justify-content:center;margin-top:8px;}
+  .sort-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .sort-lbl{font-size:.74rem;color:var(--gold);letter-spacing:.12em;}
+  #sortSel{
+    flex:1;font-family:'Zen Maru Gothic',sans-serif;font-size:.82rem;
+    background:linear-gradient(160deg,#352a55,#251d3d);color:#ddd2f5;
+    border:1px solid rgba(139,107,255,.4);border-radius:8px;padding:7px 10px;cursor:pointer;
+  }
+  .pick-scroll{max-height:54vh;overflow-y:auto;padding-right:4px;
+    scrollbar-width:thin;scrollbar-color:var(--glow) transparent;}
+  .pick-scroll::-webkit-scrollbar{width:6px;}
+  .pick-scroll::-webkit-scrollbar-thumb{background:var(--glow);border-radius:3px;}
+  .pick-koma.selmark{outline:2px solid var(--sel);outline-offset:1px;box-shadow:0 0 10px rgba(98,209,160,.7);}
+  .cell.multisel{
+    box-shadow:inset 0 0 0 3px var(--sel), inset 0 0 14px rgba(98,209,160,.5);
+    background:radial-gradient(circle,rgba(98,209,160,.32),rgba(98,209,160,.12));
+    animation:msglow 1.3s ease-in-out infinite;
+  }
+  @keyframes msglow{0%,100%{box-shadow:inset 0 0 0 3px var(--sel), inset 0 0 14px rgba(98,209,160,.45);}
+    50%{box-shadow:inset 0 0 0 3px #8affd0, inset 0 0 20px rgba(98,209,160,.75);}}
+  .ms-badge{
+    position:absolute;top:1px;left:1px;z-index:5;
+    min-width:16px;height:16px;padding:0 3px;
+    background:linear-gradient(160deg,#2f7d5e,#1f5e44);
+    color:#dff5ec;border:1px solid #8affd0;border-radius:8px;
+    font-family:sans-serif;font-size:10px;font-weight:700;line-height:14px;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 1px 3px rgba(0,0,0,.5);
+    pointer-events:none;
+  }
+  #pvPromo{background:linear-gradient(160deg,#caa23f,#9c7c28);border-color:var(--gold);color:#1a1330;}
+  .multi-bar{
+    width:100%;max-width:430px;margin-top:10px;
+    display:flex;gap:8px;align-items:center;justify-content:space-between;
+    background:linear-gradient(160deg,#2f7d5e,#1f5e44);
+    border:1px solid var(--sel);border-radius:12px;padding:8px 12px;
+    box-shadow:0 4px 16px rgba(98,209,160,.3);
+  }
+  .multi-bar span{font-size:.84rem;color:#dff5ec;font-weight:700;}
+  .rule-row{display:flex;align-items:center;gap:10px;padding:10px 6px;font-size:.86rem;color:#ece3ff;
+    border-bottom:1px solid rgba(139,107,255,.15);cursor:pointer;}
+  .rule-row input{width:18px;height:18px;accent-color:var(--glow);}
+  .rule-note{font-size:.72rem;color:#b3a8d8;line-height:1.5;margin:10px 0;}
+  .side-toggle{flex:1;}
+  .side-toggle.on{background:linear-gradient(160deg,#6a5a8a,#473a63);border-color:#8d7ab0;color:#ece3ff;}
+  .edit-bar{width:100%;max-width:430px;margin-top:10px;
+    background:linear-gradient(160deg,var(--panel2),var(--panel));
+    border:1px solid rgba(245,207,107,.3);border-radius:12px;padding:10px 12px;}
+  .edit-bar-lbl{font-size:.74rem;color:var(--gold);letter-spacing:.12em;display:block;margin-bottom:8px;}
+  .edit-bar-row{display:flex;flex-wrap:wrap;gap:6px;}
+  .edit-bar-row button{font-size:.78rem;padding:8px 10px;flex:1 1 auto;}
+  .rank-tag{display:inline-block;padding:1px 8px;border-radius:8px;color:#1a1330;font-weight:700;font-size:.82em;}
+  .qty-btn{width:38px;height:38px;border-radius:10px;font-size:1.2rem;padding:0;
+    display:flex;align-items:center;justify-content:center;}
+  .rank-legend{display:flex;flex-wrap:wrap;gap:6px 10px;margin-bottom:8px;font-size:.66rem;color:#b3a8d8;}
+  .rank-legend span{display:flex;align-items:center;gap:3px;}
+  .rank-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
+
+  /* リプレイパネル */
+  .replay-panel{
+    width:100%;max-width:430px;margin-top:14px;
+    background:linear-gradient(160deg,var(--panel2),var(--panel));
+    border:1px solid rgba(139,107,255,.3);border-radius:14px;
+    padding:12px 14px;
+    box-shadow:0 4px 16px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  .replay-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;}
+  .replay-title{font-family:'Shippori Mincho',serif;font-weight:700;color:var(--gold);letter-spacing:.12em;font-size:.95rem;}
+  .replay-count{font-size:.78rem;color:#b3a8d8;}
+  .replay-row{display:flex;gap:6px;justify-content:center;align-items:center;margin-bottom:8px;}
+  .replay-row button{padding:8px 10px;font-size:.9rem;min-width:42px;}
+  .speed-row{gap:10px;}
+  .spd-lbl{font-size:.76rem;color:#b3a8d8;letter-spacing:.1em;}
+  #rpSpeedVal{font-size:.8rem;color:var(--gold);min-width:34px;text-align:right;}
+  .replay-seek-wrap{padding:2px 2px 0;}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;height:6px;border-radius:4px;
+    background:linear-gradient(90deg,var(--glow),#4a3a6e);outline:none;cursor:pointer;
+  }
+  #rpSpeed{flex:1;}
+  #rpSeek{width:100%;}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#fff,var(--gold));
+    box-shadow:0 0 8px rgba(245,207,107,.7);cursor:pointer;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:18px;height:18px;border:none;border-radius:50%;
+    background:var(--gold);box-shadow:0 0 8px rgba(245,207,107,.7);cursor:pointer;
+  }
+  body.replay-active .board-wrap{box-shadow:0 0 0 2px var(--glow), 0 14px 40px rgba(139,107,255,.4), inset 0 1px 0 rgba(255,255,255,.08);}
+
+  /* 動きプレビュー */
+  .pick-preview{display:flex;gap:14px;align-items:flex-start;margin-bottom:6px;}
+  .pv-mini{
+    display:grid;grid-template-columns:repeat(7,1fr);
+    width:154px;min-width:154px;height:154px;
+    border:2px solid #5a3d18;border-radius:3px;background:var(--board);
+  }
+  .pv-cell{border:.5px solid var(--board-line);position:relative;}
+  .pv-cell.center{background:#d9b25e;}
+  .pv-cell.move::after{content:"";position:absolute;inset:22%;
+    background:var(--move);border-radius:50%;opacity:.85;}
+  .pv-cell.jump::after{content:"";position:absolute;inset:18%;
+    border:2px solid var(--accent);border-radius:50%;opacity:.9;}
+  .pv-cell.run::after{content:"";position:absolute;inset:14%;
+    background:var(--move);border-radius:2px;opacity:.65;}
+  .pv-cell .dot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:11px;font-weight:700;color:var(--ink);font-family:'Shippori Mincho',serif;}
+  .pv-info{flex:1;min-width:0;}
+  .pv-name{font-family:'Shippori Mincho',serif;font-weight:700;font-size:1.15rem;margin-bottom:4px;}
+  .pv-move{font-size:.8rem;color:#e7d9c2;line-height:1.5;margin-bottom:6px;}
+  .pv-desc{font-size:.76rem;color:#b6a486;line-height:1.5;margin-bottom:10px;}
+  .pv-legend{font-size:.66rem;color:#9c8a70;margin-top:4px;letter-spacing:.04em;}
+  .pv-actions{display:flex;flex-direction:column;gap:8px;}
+  .pv-actions button{width:100%;}
+</style>
+</head>
+<body>
+  <h1>将棋</h1>
+  <div class="sub">対 局 ・ 先 手 が あ な た</div>
+  <div class="sub" style="font-size:.62rem;color:#7d6e57;margin-top:-8px;">編集モードで大局将棋 全209種＋成92種が使えます</div>
+
+  <div class="captured" id="capEnemy"><span class="lbl">相手</span></div>
+  <div class="board-wrap"><div class="board" id="board"></div></div>
+  <div class="captured" id="capYou"><span class="lbl">あなた</span></div>
+
+  <div class="status" id="status">あなたの番です</div>
+
+  <div class="controls">
+    <button id="autoYou">あなた：手動</button>
+    <button id="autoEnemy">相手：CPU</button>
+    <button id="speed">速度：標準</button>
+  </div>
+  <div class="controls">
+    <button id="editMode">編集モード：OFF</button>
+    <button id="ruleBtn">ルール設定</button>
+    <button class="primary" id="undo">待った</button>
+    <button id="reset">投了・指し直し</button>
+    <button id="resetBoard">初期配置に戻す</button>
+  </div>
+
+  <div class="multi-bar" id="multiBar" style="display:none;">
+    <span id="multiCount">0マス選択中</span>
+    <button class="primary" id="multiChange">まとめて変更</button>
+    <button id="multiClear">選択解除</button>
+  </div>
+
+  <div class="edit-bar" id="editBar" style="display:none;">
+    <span class="edit-bar-lbl">編集ツール</span>
+    <div class="edit-bar-row">
+      <button id="copyToEnemy">自陣の配置を敵にコピー</button>
+      <button id="randomPower">ランダム置換（強さ近い）</button>
+      <button id="randomRank">ランダム置換（同じ格）</button>
+      <button id="randomFull">ランダム置換（完全）</button>
+      <button id="restoreCustom">記憶した配置に戻す</button>
+    </div>
+  </div>
+
+  <div class="replay-panel" id="replayPanel">
+    <div class="replay-head">
+      <span class="replay-title">棋譜リプレイ</span>
+      <span class="replay-count" id="replayCount">0手</span>
+    </div>
+    <div class="replay-row">
+      <button id="rpStart">⏮</button>
+      <button id="rpPrev">◀</button>
+      <button class="primary" id="rpPlay">▶ 再生</button>
+      <button id="rpNext">▶</button>
+      <button id="rpEnd">⏭</button>
+    </div>
+    <div class="replay-row speed-row">
+      <span class="spd-lbl">速度</span>
+      <input type="range" id="rpSpeed" min="1" max="10" value="1">
+      <span id="rpSpeedVal">1倍</span>
+    </div>
+    <div class="replay-seek-wrap">
+      <input type="range" id="rpSeek" min="0" max="0" value="0">
+    </div>
+    <div class="replay-row" style="margin-top:6px;margin-bottom:0;">
+      <button id="rpExit">対局に戻る</button>
+    </div>
+  </div>
+
+  <div class="promo-modal" id="promoModal">
+    <div class="promo-box">
+      <p>成りますか？</p>
+      <div class="opts">
+        <button id="promoYes">成</button>
+        <button id="promoNo">不成</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="promo-modal" id="pickModal">
+    <div class="pick-box">
+      <p id="pickTitle">駒を選んでください</p>
+      <div id="pickPreview" class="pick-preview" style="display:none;">
+        <div class="pv-mini" id="pvMini"></div>
+        <div class="pv-info">
+          <div class="pv-name" id="pvName"></div>
+          <div class="pv-move" id="pvMove"></div>
+          <div class="pv-legend">● 移動　◻ 走り(その先も)　◯ 飛び越え</div>
+          <div class="pv-desc" id="pvDesc"></div>
+          <div class="pv-actions">
+            <div id="pvQtyRow" style="display:none;align-items:center;gap:8px;width:100%;justify-content:center;margin-bottom:6px;">
+              <span style="font-size:.82rem;color:var(--gold);">枚数</span>
+              <button id="pvQtyMinus" class="qty-btn">−</button>
+              <span id="pvQty" style="min-width:2em;text-align:center;font-weight:700;font-size:1.1rem;">1</span>
+              <button id="pvQtyPlus" class="qty-btn">＋</button>
+            </div>
+            <button class="primary" id="pvConfirm">この駒にする</button>
+            <button id="pvPromo" style="display:none;">成り後を見る ⤵</button>
+            <button id="pvBack">一覧に戻る</button>
+          </div>
+        </div>
+      </div>
+      <div id="pickList">
+        <div class="sort-bar">
+          <span class="sort-lbl">並び替え</span>
+          <select id="sortSel">
+            <option value="default">標準</option>
+            <option value="kana_asc">字順（上から）</option>
+            <option value="kana_desc">字順（下から）</option>
+            <option value="power_desc">強さ順（強い→弱い）</option>
+            <option value="power_asc">弱さ順（弱い→強い）</option>
+            <option value="hist_pick">履歴（選択した順）</option>
+            <option value="hist_view">履歴（見た順）</option>
+          </select>
+        </div>
+        <div class="sort-bar">
+          <span class="sort-lbl">置く側</span>
+          <button id="sideToggle" class="side-toggle">あなたの駒</button>
+        </div>
+        <div class="rank-legend">
+          <span><i style="background:#ff6b9d"></i>玉将格</span>
+          <span><i style="background:#ff9a2e"></i>大将</span>
+          <span><i style="background:#f0b400"></i>副将</span>
+          <span><i style="background:#2ec988"></i>角将級</span>
+          <span><i style="background:#5b82e8"></i>一般</span>
+          <span><i style="background:#9a86c4"></i>格なし</span>
+        </div>
+        <div class="pick-scroll" id="pickScroll">
+          <div class="pick-section"><span class="pick-lbl" id="lblBasic">本将棋</span><div class="pick-grid" id="pickBasic"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblDaikyoku">大局将棋</span><div class="pick-grid" id="pickDaikyoku"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblChess">チェス</span><div class="pick-grid" id="pickChess"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblHasami">はさみ将棋（特殊駒）</span><div class="pick-grid" id="pickHasami"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblOthello">オセロ（特殊駒）</span><div class="pick-grid" id="pickOthello"></div></div>
+        </div>
+        <div class="pick-actions">
+          <button id="pickEmpty">空マスにする</button>
+          <button id="pickCancel">キャンセル</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="promo-modal" id="editMenuModal">
+    <div class="promo-box">
+      <p id="editMenuTitle">駒の操作</p>
+      <div class="opts" style="flex-direction:column;gap:10px;">
+        <button id="emInfo">説明を見る</button>
+        <button class="primary" id="emChange">この駒を変更</button>
+        <button id="emSelectAdd">複数選択に追加</button>
+        <button id="emCancel">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="promo-modal" id="ruleModal">
+    <div class="pick-box" style="max-width:min(92vw,400px);">
+      <p>ルール設定</p>
+      <label class="rule-row"><input type="checkbox" id="rDrops"> 持ち駒を使う（取った駒を打てる）</label>
+      <label class="rule-row"><input type="checkbox" id="rKeep"> 取った駒は成ったまま持ち駒にする</label>
+      <label class="rule-row"><input type="checkbox" id="rNifu"> 二歩を禁止する</label>
+      <label class="rule-row"><input type="checkbox" id="rSennichite"> 千日手（同一局面4回）で引き分け</label>
+      <label class="rule-row"><input type="checkbox" id="rRankless"> 格なしの駒（チェス駒・成駒・はさみ駒）を一般駒として扱う（範囲攻撃で取られる）</label>
+      <label class="rule-row"><input type="checkbox" id="rRandSpecial"> ランダム置換の候補にはさみ駒・オセロ駒を含める</label>
+      <p class="rule-note">チェスの駒は編集モードの一覧から配置できます（キャスリング対応）。設定変更は次の指し手から反映されます。</p>
+      <div class="pick-actions">
+        <button class="primary" id="ruleClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ===== 駒定義（データ駆動）=====
+ 各駒 PIECES[t] = { k:漢字, v:価値, promote:成り先(任意),
+   m:[ {dr,dc,r}, ... ] }   ※ r=1:1歩, r=Infinity:走り, r=N:最大Nマス, r='jump':飛び越え1点
+ 方向は「あなた(p=1)」基準。前(上)が dr=-1。相手は自動で上下反転。
+ player: 1=あなた(手前/上向き) , -1=相手(奥/下向き)
+*/
+const F=Infinity;
+// ===== 大局将棋 全299駒データ（出典: jh85/taikyokushogi, MIT License）=====
+const TP={
+  "AB":{n:"Angry Boar",k:"嗔猪",pr:"+FB",v:240,fl:[],m:[[-1, -1, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, -1, 1], [1, 1, 1]]},
+  "B":{n:"Angle Mover",k:"角行",pr:"DH",v:560,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 1, "F"]]},
+  "BA":{n:"Running Bear",k:"走熊",pr:"+FBR",v:520,fl:[],m:[[-1, 1, "F"], [1, -1, "F"], [-1, -1, 1], [-1, 0, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1], [1, 1, 1]]},
+  "BB":{n:"Blind Bear",k:"盲熊",pr:"+FSG",v:80,fl:[],m:[[0, -1, 1], [0, 1, 1]]},
+  "BC":{n:"Beast Cadet",k:"獣吏",pr:"BO",v:560,fl:[],m:[[-1, -1, 2], [-1, 0, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "BD":{n:"Buddhist Devil",k:"仏狼",pr:"+HT",v:280,fl:[],m:[[-1, -1, 2], [-1, 1, 2], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "BE":{n:"Bear Soldier",k:"熊兵",pr:"+SBR",v:620,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, 2], [0, 1, 2], [1, 0, 1]]},
+  "BG":{n:"Angle General",k:"角将",pr:"+RDM",v:560,fl:["range:NE, SE, SW, NW"],m:[[-1, 1, "F"], [1, 1, "F"], [1, -1, "F"], [-1, -1, "F"]]},
+  "BI":{n:"Blind Dog",k:"盲犬",pr:"VS",v:200,fl:[],m:[[-1, -1, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "BL":{n:"Blue Dragon",k:"青龍",pr:"+DDR",v:580,fl:[],m:[[-1, 0, "F"], [-1, 1, "F"], [1, 0, "F"], [0, -1, 2], [0, 1, 2]]},
+  "BM":{n:"Blind Monkey",k:"盲猿",pr:"+FSG",v:80,fl:[],m:[[0, -1, 1], [0, 1, 1]]},
+  "BN":{n:"Cannon Soldier",k:"砲兵",pr:"+CNG",v:440,fl:[],m:[[-1, -1, 2], [-1, 0, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, 0, 1]]},
+  "BO":{n:"Beast Officer",k:"獣曹",pr:"+BBR",v:560,fl:[],m:[[-1, -1, 2], [-1, 0, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "BS":{n:"Boar Soldier",k:"猪兵",pr:"+RBO",v:620,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, 2], [0, 1, 2], [1, 0, 1]]},
+  "BT":{n:"Blind Tiger",k:"盲虎",pr:"+FSG",v:280,fl:[],m:[[-1, -1, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, -1, 1], [1, 0, 1], [1, 1, 1]]},
+  "C":{n:"Copper General",k:"銅将",pr:"SM",v:160,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [1, 0, 1]]},
+  "CA":{n:"Capricorn",k:"摩羯",pr:"HM",v:720,fl:["hook"],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [-1, 0, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "CC":{n:"Huai Chicken",k:"淮鶏",pr:"+WST",v:200,fl:[],m:[[-1, -1, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "CD":{n:"Ceramic Dove",k:"瓦鳩",pr:null,v:880,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [-1, 0, 2], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
+  "CE":{n:"Cloud Eagle",k:"雲鷲",pr:"+SEA",v:320,fl:[],m:[[-1, -1, 2], [-1, 1, 2], [-1, 0, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "CG":{n:"Chicken General",k:"鶏将",pr:"+FCK",v:160,fl:[],m:[[-1, 0, 2], [1, -1, 1], [1, 1, 1]]},
+  "CH":{n:"Chariot Soldier",k:"車兵",pr:"+HTK",v:440,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [0, -1, 2], [0, 1, 2]]},
+  "CI":{n:"Stone Chariot",k:"石車",pr:"+WHR",v:520,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [0, -1, 2], [0, 1, 2]]},
+  "CK":{n:"Flying Chicken",k:"飛鶏",pr:"+RHK",v:160,fl:[],m:[[-1, -1, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1]]},
+  "CL":{n:"Cloud Dragon",k:"雲龍",pr:"GD",v:820,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"], [-1, 0, 1], [0, -1, 1], [0, 1, 1]]},
+  "CM":{n:"Climbing Monkey",k:"登猿",pr:"VS",v:160,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [1, 0, 1]]},
+  "CN":{n:"Center Standard",k:"中旗",pr:"SD",v:880,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [-1, -1, 2], [-1, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "CO":{n:"Fowl Officer",k:"禽曹",pr:"+FOW",v:560,fl:[],m:[[-1, -1, 2], [-1, 0, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "CP":{n:"Crown Prince",k:"太子",pr:"K",v:99999,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, -1, 1], [1, 0, 1], [1, 1, 1]]},
+  "CR":{n:"Copper Chariot",k:"銅車",pr:"+CEL",v:440,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [-1, -1, 2], [-1, 1, 2]]},
+  "CS":{n:"Cat Sword",k:"猫刄",pr:"DH",v:160,fl:[],m:[[-1, -1, 1], [-1, 1, 1], [1, -1, 1], [1, 1, 1]]},
+  "CT":{n:"Fowl Cadet",k:"禽吏",pr:"CO",v:560,fl:[],m:[[-1, -1, 2], [-1, 0, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "D":{n:"Dog",k:"犬",pr:"+MUG",v:120,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1]]},
+  "DE":{n:"Drunken Elephant",k:"醉象",pr:"CP",v:200,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1]]},
+  "DH":{n:"Dragon Horse",k:"竜馬",pr:"HF",v:720,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [-1, 0, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "DK":{n:"Dragon King",k:"竜王",pr:"EL",v:720,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [1, -1, 1], [1, 1, 1]]},
+  "DL":{n:"Howling Dog Left",k:"吼犬左",pr:"+LDG",v:180,fl:[],m:[[-1, 0, "F"], [1, 0, 1]]},
+  "DM":{n:"Fire Demon",k:"火鬼",pr:"+FFR",v:440,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, 0, 2], [1, 0, 2]]},
+  "DO":{n:"Donkey",k:"驢馬",pr:"CD",v:320,fl:[],m:[[-1, 0, 2], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
+  "DR":{n:"Howling Dog Right",k:"吼犬右",pr:"+RDG",v:180,fl:[],m:[[-1, 0, "F"], [1, 0, 1]]},
+  "DS":{n:"Dark Spirit",k:"暗魔",pr:"+BSP",v:280,fl:[],m:[[-1, 0, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, -1, 1], [1, 0, 1], [1, 1, 1]]},
+  "DV":{n:"Deva",k:"提婆",pr:"+KTE",v:280,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [0, -1, 1], [0, 1, 1], [1, -1, 1], [1, 0, 1], [1, 1, 1]]},
+  "EA":{n:"Earth General",k:"土将",pr:"WE",v:80,fl:[],m:[[-1, 0, 1], [1, 0, 1]]},
+  "EB":{n:"Enchanted Badger",k:"化狸",pr:"CD",v:320,fl:[],m:[[-1, 0, 2], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
+  "EC":{n:"Earth Chariot",k:"土車",pr:"+RBI",v:360,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [0, -1, 1], [0, 1, 1]]},
+  "ED":{n:"Earth Dragon",k:"地龍",pr:null,v:480,fl:[],m:[[1, -1, "F"], [1, 1, "F"], [-1, 0, 2], [-1, -1, 1], [-1, 1, 1], [1, 0, 1]]},
+  "EG":{n:"Fierce Eagle",k:"猛鷲",pr:"EL",v:440,fl:[],m:[[-1, -1, 2], [-1, 1, 2], [-1, 0, 1], [0, -1, 1], [0, 1, 1], [1, -1, 2], [1, 1, 2]]},
+  "EL":{n:"Flying Eagle",k:"飛鷲",pr:"+GEA",v:1260,fl:[],m:[[-1, 0, "F"], [-1, -1, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"], [-2, 2, "J"], [-2, -2, "J"]]},
+  "ES":{n:"Eastern Barbarian",k:"東夷",pr:"LN",v:320,fl:[],m:[[-1, 0, 2], [-1, -1, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, 0, 2]]},
+  "EW":{n:"Evil Wolf",k:"悪狼",pr:"+PWO",v:200,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1]]},
+  "F":{n:"Fire General",k:"火将",pr:"GG",v:240,fl:[],m:[[-1, 0, 2], [-1, -1, 1], [-1, 1, 1], [1, 0, 2]]},
+  "FC":{n:"Flying Cat",k:"飛猫",pr:"R",v:60,fl:[],m:[]},
+  "FD":{n:"Flying Dragon",k:"飛龍",pr:"DK",v:280,fl:[],m:[[2, -2, "J"], [-2, 2, "J"], [-2, -2, "J"], [2, 2, "J"]]},
+  "FE":{n:"Free Eagle",k:"自在鷲",pr:null,v:2520,fl:["igui"],m:[[-1, 0, "F"], [-1, 1, "F"], [0, 1, "F"], [1, 1, "F"], [1, 0, "F"], [1, -1, "F"], [0, -1, "F"], [-1, -1, "F"], [-3, -3, "J"], [-3, 3, "J"], [0, 2, "J"], [2, 2, "J"], [-2, -2, "J"], [-2, -1, "J"], [-1, -2, "J"], [-2, 1, "J"], [3, -3, "J"], [3, 3, "J"], [0, -2, "J"], [2, -2, "J"], [2, -1, "J"], [1, 2, "J"], [2, 1, "J"], [-2, 0, "J"], [-2, 2, "J"], [2, 0, "J"], [1, -2, "J"], [-1, 2, "J"]]},
+  "FG":{n:"Fragrant Elephant",k:"香象",pr:"+EKI",v:640,fl:[],m:[[-1, -1, 2], [-1, 0, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 0, 2], [1, 1, 2]]},
+  "FH":{n:"Flying Horse",k:"飛馬",pr:"Q",v:320,fl:[],m:[[-1, -1, 2], [-1, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "FI":{n:"Fire Dragon",k:"火龍",pr:"KM",v:880,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [-1, -1, 2], [-1, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "FL":{n:"Fierce Leopard",k:"猛豹",pr:"B",v:80,fl:[],m:[[-1, 0, 1], [1, 0, 1]]},
+  "FO":{n:"Forest Demon",k:"森鬼",pr:"+THR",v:660,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, 0, "F"], [-1, 0, 2], [0, -1, 2], [0, 1, 2]]},
+  "FP":{n:"Free Pup",k:"奔犬",pr:"+FDG",v:800,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, 0, "F"], [0, -1, 2], [0, 1, 2], [1, -1, 1], [1, 1, 1]]},
+  "FR":{n:"Free Demon",k:"奔狼",pr:"Q",v:1000,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, -1, "F"], [1, 1, "F"], [-1, 0, 2], [1, 0, 2]]},
+  "FS":{n:"Flying Swallow",k:"飛燕",pr:"R",v:320,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, 0, 1]]},
+  "FT":{n:"Free Dream-eater",k:"奔獏",pr:"Q",v:440,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [0, -1, 2], [0, 1, 2]]},
+  "FY":{n:"Flying Goose",k:"飛雁",pr:"SW",v:160,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [1, 0, 1]]},
+  "G":{n:"Gold General",k:"金将",pr:"R",v:240,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "GB":{n:"Go-between",k:"仲人",pr:"DE",v:80,fl:[],m:[[-1, 0, 1], [1, 0, 1]]},
+  "GC":{n:"Gold Chariot",k:"金車",pr:"+PPR",v:600,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [0, -1, 2], [0, 1, 2], [1, -1, 1], [1, 1, 1]]},
+  "GD":{n:"Great Dragon",k:"大龍",pr:"+ADR",v:720,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [-1, 0, 2], [1, 0, 2]]},
+  "GE":{n:"Great Standard",k:"大旗",pr:null,v:1000,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [1, -1, 2], [1, 1, 2]]},
+  "GG":{n:"Great General",k:"大将",pr:null,v:1120,fl:["range:N, NE, E, SE, S, SW, W, NW"],m:[[-1, 0, "F"], [-1, 1, "F"], [0, 1, "F"], [1, 1, "F"], [1, 0, "F"], [1, -1, "F"], [0, -1, "F"], [-1, -1, "F"]]},
+  "GL":{n:"Gold Stag",k:"金鹿",pr:"WH",v:440,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, 2], [1, 1, 2]]},
+  "GN":{n:"Wood General",k:"木将",pr:"WE",v:160,fl:[],m:[[-1, -1, 2], [-1, 1, 2]]},
+  "GO":{n:"Gold Bird",k:"金鳥",pr:"+FBI",v:440,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [1, -1, 2], [1, 1, 2]]},
+  "GR":{n:"Great Dove",k:"大鳩",pr:"WO",v:880,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [-1, 0, 2], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
+  "GS":{n:"Great Stag",k:"大鹿",pr:"+FST",v:860,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [1, -1, 2], [1, 1, 2], [-2, 2, "J"], [-2, -2, "J"]]},
+  "GT":{n:"Great Turtle",k:"大亀",pr:"+SPT",v:1260,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"], [-2, 0, "J"], [2, 0, "J"]]},
+  "GU":{n:"Guardian of the Gods",k:"神獣",pr:"+HT",v:320,fl:[],m:[[-1, 0, 2], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
+  "H":{n:"Horse General",k:"馬将",pr:"+FHO",v:200,fl:[],m:[[-1, 0, 2], [-1, -1, 1], [-1, 1, 1], [1, 0, 1]]},
+  "HE":{n:"Ram's-head Soldier",k:"羊兵",pr:"+TSO",v:320,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, 0, 1]]},
+  "HF":{n:"Horned Hawk",k:"角鷹",pr:"+GHK",v:1190,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"], [-2, 0, "J"]]},
+  "HM":{n:"Hook Mover",k:"鉤行",pr:null,v:560,fl:["hook"],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"]]},
+  "HO":{n:"Horseman",k:"馬手",pr:"+CVL",v:720,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, 0, "F"], [0, -1, 2], [0, 1, 2]]},
+  "HR":{n:"Running Horse",k:"走馬",pr:"FR",v:600,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, 0, 1], [2, -2, "J"], [2, 2, "J"]]},
+  "HS":{n:"Horse Soldier",k:"馬兵",pr:"HR",v:620,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, 2], [0, 1, 2], [1, 0, 1]]},
+  "I":{n:"Iron General",k:"鉄将",pr:"WE",v:120,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1]]},
+  "K":{n:"King",k:"玉将",pr:null,v:99999,fl:[],m:[[-1, -1, 2], [-1, 0, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 0, 2], [1, 1, 2]]},
+  "KM":{n:"Kirin Master",k:"麒麟児",pr:null,v:1220,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [-1, 0, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"], [0, -1, 3], [0, 1, 3], [-3, 0, "J"], [3, 0, "J"]]},
+  "KR":{n:"Kirin",k:"麒麟",pr:"GO",v:380,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [1, -1, 1], [1, 0, 1], [1, 1, 1], [0, 2, "J"], [0, -2, "J"]]},
+  "L":{n:"Incense Chariot",k:"香車",pr:"WH",v:140,fl:[],m:[[-1, 0, "F"]]},
+  "LB":{n:"Longbow Soldier",k:"弓兵",pr:"+LBG",v:500,fl:[],m:[[-1, 0, "F"], [-1, -1, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, 0, 1]]},
+  "LC":{n:"Left Chariot",k:"左車",pr:"+LIC",v:460,fl:[],m:[[-1, 0, "F"], [-1, 1, "F"], [1, -1, "F"], [0, -1, 1]]},
+  "LD":{n:"Lion Dog",k:"狛犬",pr:"+GEL",v:1440,fl:[],m:[[-1, 0, 1], [-1, 1, 1], [0, 1, 1], [1, 1, 1], [1, 0, 1], [1, -1, 1], [0, -1, 1], [-1, -1, 1], [2, -2, "J"], [2, -1, "J"], [1, 2, "J"], [2, 2, "J"], [-2, -1, "J"], [-2, -2, "J"], [-1, -2, "J"], [2, 1, "J"], [-2, 1, "J"], [2, 0, "J"], [1, -2, "J"], [-2, 0, "J"], [0, 2, "J"], [-1, 2, "J"], [-2, 2, "J"], [0, -2, "J"]]},
+  "LE":{n:"Left Dragon",k:"左龍",pr:"VI",v:500,fl:[],m:[[-1, 1, "F"], [0, 1, "F"], [1, 1, "F"], [0, -1, 2]]},
+  "LG":{n:"Left General",k:"左将",pr:"+LAR",v:200,fl:[],m:[[-1, 0, 1], [-1, 1, 1], [0, 1, 1], [1, 0, 1], [1, 1, 1]]},
+  "LI":{n:"Lion Hawk",k:"獅鷹",pr:null,v:60,fl:["area2", "igui"],m:[]},
+  "LL":{n:"Little Turtle",k:"小亀",pr:"+TRT",v:1140,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [-1, 0, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"], [0, -1, 2], [0, 1, 2], [-2, 0, "J"], [2, 0, "J"]]},
+  "LN":{n:"Lion",k:"獅子",pr:"+FFI",v:1440,fl:["area2", "igui"],m:[[-1, 0, 1], [-1, 1, 1], [0, 1, 1], [1, 1, 1], [1, 0, 1], [1, -1, 1], [0, -1, 1], [-1, -1, 1], [2, -2, "J"], [2, -1, "J"], [1, 2, "J"], [2, 2, "J"], [-2, -1, "J"], [-2, -2, "J"], [-1, -2, "J"], [2, 1, "J"], [-2, 1, "J"], [2, 0, "J"], [1, -2, "J"], [-2, 0, "J"], [0, 2, "J"], [-1, 2, "J"], [-2, 2, "J"], [0, -2, "J"]]},
+  "LO":{n:"Tengu",k:"天狗",pr:null,v:560,fl:["hook"],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 1, "F"]]},
+  "LP":{n:"Leopard Soldier",k:"豹兵",pr:"+RLE",v:500,fl:[],m:[[-1, 0, "F"], [-1, -1, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, 0, 1]]},
+  "LS":{n:"Little Standard",k:"小旗",pr:"RS",v:800,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [-1, -1, 2], [-1, 1, 2], [1, -1, 1], [1, 1, 1]]},
+  "LT":{n:"Left Tiger",k:"左虎",pr:"TS",v:500,fl:[],m:[[-1, 1, "F"], [0, 1, "F"], [1, 1, "F"], [-1, -1, 1], [1, -1, 1]]},
+  "M":{n:"Mountain General",k:"山将",pr:"+MTA",v:240,fl:[],m:[[-1, -1, 2], [-1, 1, 2], [-1, 0, 1], [1, 0, 1]]},
+  "MF":{n:"Mountain Hawk",k:"山鷹",pr:"HF",v:1070,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [1, -1, 2], [1, 1, 2], [-2, 0, "J"]]},
+  "MK":{n:"Side Monkey",k:"横猿",pr:"SL",v:400,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, -1, 1], [-1, 1, 1], [1, 0, 1]]},
+  "ML":{n:"Left Mountain Eagle",k:"山鷲左",pr:"EL",v:1130,fl:[],m:[[-1, 0, "F"], [-1, 1, "F"], [-1, -1, "F"], [0, -1, "F"], [0, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, 2], [-2, -2, "J"]]},
+  "MR":{n:"Right Mountain Eagle",k:"山鷲右",pr:"EL",v:1130,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [1, 1, "F"], [1, -1, 2], [-2, 2, "J"]]},
+  "MS":{n:"Mountain Stag",k:"山鹿",pr:"GS",v:440,fl:[],m:[[-1, -1, 2], [-1, 1, 2], [-1, 0, 1], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
+  "MT":{n:"Center Master",k:"中師",pr:null,v:1160,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, 0, "F"], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 1, 2], [-2, 0, "J"], [-2, 2, "J"], [2, 0, "J"], [-2, -2, "J"]]},
+  "N":{n:"Cassia Horse",k:"桂馬",pr:"SL",v:140,fl:[],m:[[-2, 1, "J"], [-2, -1, "J"]]},
+  "NB":{n:"Northern Barbarian",k:"北狄",pr:"WO",v:320,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [0, -1, 2], [0, 1, 2], [1, 0, 1]]},
+  "NK":{n:"Neighboring King",k:"近王",pr:"SD",v:200,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1]]},
+  "NT":{n:"Fierce Wolf",k:"猛狼",pr:"+BEY",v:200,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [1, -1, 1], [1, 1, 1]]},
+  "O":{n:"Ox General",k:"牛将",pr:"+FOX",v:200,fl:[],m:[[-1, 0, 2], [-1, -1, 1], [-1, 1, 1], [1, 0, 1]]},
+  "OC":{n:"Ox Chariot",k:"牛車",pr:"+POX",v:140,fl:[],m:[[-1, 0, "F"]]},
+  "OK":{n:"Old Kite",k:"老鳶",pr:"LO",v:400,fl:[],m:[[-1, -1, 2], [-1, 1, 2], [0, -1, 1], [0, 1, 1], [1, -1, 2], [1, 1, 2]]},
+  "OM":{n:"Old Monkey",k:"老猿",pr:"+MWI",v:200,fl:[],m:[[-1, -1, 1], [-1, 1, 1], [1, -1, 1], [1, 0, 1], [1, 1, 1]]},
+  "OR":{n:"Old Rat",k:"老鼠",pr:"+MBI",v:120,fl:[],m:[[-1, 0, 1], [1, -1, 1], [1, 1, 1]]},
+  "OS":{n:"Ox Soldier",k:"牛兵",pr:"+ROX",v:620,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, 2], [0, 1, 2], [1, 0, 1]]},
+  "OW":{n:"Swooping Owl",k:"臥梟",pr:"CE",v:120,fl:[],m:[[-1, 0, 1], [1, -1, 1], [1, 1, 1]]},
+  "OX":{n:"Flying Ox",k:"飛牛",pr:"+FOI",v:840,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"]]},
+  "P":{n:"Pawn",k:"歩兵",pr:"G",v:60,fl:[],m:[[-1, 0, 1]]},
+  "PC":{n:"Peacock",k:"孔雀",pr:"LO",v:440,fl:["hook"],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, 2], [1, 1, 2]]},
+  "PE":{n:"Peng Master",k:"鵬師",pr:null,v:60,fl:[],m:[]},
+  "PG":{n:"Pup General",k:"狗将",pr:"FP",v:200,fl:[],m:[[-1, 0, 2], [-1, -1, 1], [-1, 1, 1], [1, 0, 1]]},
+  "PH":{n:"Phoenix",k:"鳳凰",pr:"GO",v:440,fl:[],m:[[-1, 0, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1], [2, -2, "J"], [-2, 2, "J"], [-2, -2, "J"], [2, 2, "J"]]},
+  "PI":{n:"Pig General",k:"豕将",pr:"+FPI",v:240,fl:[],m:[[-1, -1, 2], [-1, 1, 2], [1, 0, 2]]},
+  "PM":{n:"Phoenix Master",k:"鳳師",pr:null,v:60,fl:[],m:[]},
+  "PR":{n:"Prancing Stag",k:"踊鹿",pr:"SQ",v:400,fl:[],m:[[-1, -1, 2], [-1, 1, 2], [0, -1, 1], [0, 1, 1], [1, -1, 2], [1, 1, 2]]},
+  "PS":{n:"Poisonous Serpent",k:"毒蛇",pr:"HM",v:360,fl:[],m:[[-1, 0, 2], [-1, -1, 1], [-1, 1, 1], [0, -1, 2], [0, 1, 2], [1, 0, 1]]},
+  "Q":{n:"Free King",k:"奔王",pr:"GG",v:1120,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"]]},
+  "R":{n:"Flying Chariot",k:"飛車",pr:"DK",v:560,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"]]},
+  "RA":{n:"Rain Dragon",k:"雨龍",pr:"GD",v:820,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"], [-1, -1, 1], [-1, 0, 1], [-1, 1, 1]]},
+  "RB":{n:"Rushing Bird",k:"走兎",pr:"FR",v:320,fl:[],m:[[-1, 0, 2], [-1, -1, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, -1, 1], [1, 1, 1]]},
+  "RC":{n:"Right Chariot",k:"右車",pr:"+RIC",v:460,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [1, 1, "F"], [0, 1, 1]]},
+  "RD":{n:"Reclining Dragon",k:"臥龍",pr:"GD",v:160,fl:[],m:[[-1, 0, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "RE":{n:"River General",k:"河将",pr:"+HRI",v:200,fl:[],m:[[-1, 0, 2], [-1, -1, 1], [-1, 1, 1], [1, 0, 1]]},
+  "RG":{n:"Right General",k:"右将",pr:"+RAR",v:200,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [0, -1, 1], [1, -1, 1], [1, 0, 1]]},
+  "RH":{n:"Running Chariot",k:"走車",pr:"+CCH",v:640,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, 0, "F"], [0, -1, 1], [0, 1, 1]]},
+  "RI":{n:"Right Dragon",k:"右龍",pr:"BL",v:500,fl:[],m:[[-1, -1, "F"], [0, -1, "F"], [1, -1, "F"], [0, 1, 2]]},
+  "RN":{n:"Running Stag",k:"走鹿",pr:"+FST",v:640,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, 2]]},
+  "RO":{n:"Flying General",k:"飛将",pr:"+FCR",v:560,fl:["range:N, E, S, W"],m:[[-1, 0, "F"], [0, 1, "F"], [1, 0, "F"], [0, -1, "F"]]},
+  "RP":{n:"Running Pup",k:"走狗",pr:"+FLE",v:320,fl:[],m:[[-1, 0, "F"], [1, -1, "F"], [1, 0, 1]]},
+  "RR":{n:"Running Rabbit",k:"走兎",pr:"TF",v:540,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, -1, 1], [1, 0, 1], [1, 1, 1]]},
+  "RS":{n:"Rear Standard",k:"後旗",pr:"CN",v:880,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [-1, -1, 2], [-1, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "RT":{n:"Running Tiger",k:"走虎",pr:"+FTI",v:320,fl:[],m:[[-1, 0, "F"], [1, 1, "F"], [1, 0, 1]]},
+  "RU":{n:"Running Serpent",k:"走蛇",pr:"+FSE",v:320,fl:[],m:[[-1, 0, "F"], [1, -1, "F"], [1, 0, 1]]},
+  "RV":{n:"Reverse Chariot",k:"反車",pr:"W",v:280,fl:[],m:[[-1, 0, "F"], [1, 0, "F"]]},
+  "RW":{n:"Running Wolf",k:"走狼",pr:"+FWO",v:600,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [-1, 0, 1]]},
+  "S":{n:"Silver General",k:"銀将",pr:"VM",v:200,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [1, -1, 1], [1, 1, 1]]},
+  "SA":{n:"Side Boar",k:"横猪",pr:"+FBI",v:520,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [1, -1, 1], [1, 0, 1], [1, 1, 1]]},
+  "SC":{n:"Crossbow Soldier",k:"弩兵",pr:"+CBG",v:440,fl:[],m:[[-1, -1, 2], [-1, 0, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, 0, 1]]},
+  "SD":{n:"Front Standard",k:"前旗",pr:"GE",v:880,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [-1, -1, 2], [-1, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "SE":{n:"Sword Soldier",k:"剣兵",pr:"+SWG",v:120,fl:[],m:[[-1, -1, 1], [-1, 1, 1], [1, 0, 1]]},
+  "SF":{n:"Side Flyer",k:"飛龍",pr:"SI",v:440,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, -1, 1], [-1, 1, 1], [1, -1, 1], [1, 1, 1]]},
+  "SG":{n:"Stone General",k:"石将",pr:"WE",v:80,fl:[],m:[[-1, -1, 1], [-1, 1, 1]]},
+  "SI":{n:"Side Dragon",k:"横飛",pr:"+RDR",v:420,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"]]},
+  "SL":{n:"Side Soldier",k:"横兵",pr:"WB",v:400,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, 0, 2], [1, 0, 1]]},
+  "SM":{n:"Side Mover",k:"横行",pr:"+FBI",v:360,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, 0, 1], [1, 0, 1]]},
+  "SN":{n:"Coiled Serpent",k:"蟠蛇",pr:"+CDR",v:160,fl:[],m:[[-1, 0, 1], [1, -1, 1], [1, 0, 1], [1, 1, 1]]},
+  "SO":{n:"Soldier",k:"兵士",pr:"+CVL",v:640,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, 0, "F"], [0, -1, 1], [0, 1, 1]]},
+  "SP":{n:"Spear Soldier",k:"槍兵",pr:"+SPG",v:260,fl:[],m:[[-1, 0, "F"], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "SQ":{n:"Square Mover",k:"方行",pr:"+SCH",v:560,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"]]},
+  "SR":{n:"Silver Rabbit",k:"銀兎",pr:"W",v:440,fl:[],m:[[1, -1, "F"], [1, 1, "F"], [-1, -1, 2], [-1, 1, 2]]},
+  "SS":{n:"Side Serpent",k:"横蛇",pr:"+GSH",v:400,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, 0, 2], [1, 0, 1]]},
+  "ST":{n:"Strutting Crow",k:"闊歩",pr:"+FHK",v:120,fl:[],m:[[-1, 0, 1], [1, -1, 1], [1, 1, 1]]},
+  "SU":{n:"Southern Barbarian",k:"南蛮",pr:"GO",v:320,fl:[],m:[[-1, 0, 2], [-1, -1, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, 0, 2]]},
+  "SV":{n:"Silver Chariot",k:"銀車",pr:"+GWI",v:520,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [-1, -1, 2], [-1, 1, 2], [1, -1, 1], [1, 1, 1]]},
+  "SW":{n:"Swallow's Wings",k:"燕羽",pr:"+GSW",v:360,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, 0, 1], [1, 0, 1]]},
+  "SX":{n:"Side Ox",k:"横牛",pr:"OX",v:360,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, 1, 1], [1, -1, 1]]},
+  "T":{n:"Tile General",k:"瓦将",pr:"WE",v:120,fl:[],m:[[-1, -1, 1], [-1, 1, 1], [1, 0, 1]]},
+  "TC":{n:"Tile Chariot",k:"瓦車",pr:"+RTI",v:360,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [-1, 1, 1], [1, -1, 1]]},
+  "TD":{n:"Turtle Dove",k:"山鳩",pr:"GR",v:280,fl:[],m:[[-1, -1, 2], [-1, 1, 2], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "TF":{n:"Treacherous Fox",k:"狡狐",pr:"+MCR",v:60,fl:[],m:[]},
+  "TG":{n:"Fierce Tiger",k:"猛虎",pr:"+GTI",v:140,fl:[],m:[[-1, 0, "F"]]},
+  "TS":{n:"Turtle-snake",k:"玄武",pr:"+DTU",v:520,fl:[],m:[[-1, 1, "F"], [1, -1, "F"], [-1, -1, 1], [-1, 0, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1], [1, 1, 1]]},
+  "TT":{n:"Right Tiger",k:"右虎",pr:"WT",v:500,fl:[],m:[[-1, -1, "F"], [0, -1, "F"], [1, -1, "F"], [-1, 1, 1], [1, 1, 1]]},
+  "VB":{n:"Fierce Bear",k:"猛熊",pr:"+GBR",v:280,fl:[],m:[[-1, -1, 2], [-1, 1, 2], [-1, 0, 1], [0, -1, 1], [0, 1, 1]]},
+  "VD":{n:"Fierce Dragon",k:"猛龍",pr:"GD",v:320,fl:["range:NE, SE, SW, NW"],m:[[-1, 0, 2], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
+  "VE":{n:"Vertical Bear",k:"竪熊",pr:"+FBR",v:340,fl:[],m:[[-1, 0, "F"], [0, -1, 2], [0, 1, 2], [1, 0, 1]]},
+  "VG":{n:"Vice General",k:"副将",pr:"GG",v:280,fl:["range:NE, SE, SW, NW"],m:[[-2, 0, "J"], [0, 2, "J"], [0, -2, "J"], [2, 0, "J"]]},
+  "VH":{n:"Vertical Horse",k:"竪馬",pr:"DH",v:260,fl:[],m:[[-1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [1, 0, 1]]},
+  "VI":{n:"Vermillion Sparrow",k:"朱雀",pr:"+DSP",v:520,fl:[],m:[[-1, -1, "F"], [1, 1, "F"], [-1, 0, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, -1, 1], [1, 0, 1]]},
+  "VL":{n:"Vertical Leopard",k:"竪豹",pr:"+GLE",v:340,fl:[],m:[[-1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "VM":{n:"Vertical Mover",k:"竪行",pr:"OX",v:360,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [0, -1, 1], [0, 1, 1]]},
+  "VO":{n:"Fierce Ox",k:"猛牛",pr:"OX",v:360,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [-1, 0, 1], [1, 0, 1]]},
+  "VP":{n:"Vertical Pup",k:"竪狗",pr:"+LKI",v:260,fl:[],m:[[-1, 0, "F"], [1, -1, 1], [1, 0, 1], [1, 1, 1]]},
+  "VR":{n:"Vertical Soldier",k:"竪兵",pr:"CH",v:400,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, 0, 2], [1, 0, 1]]},
+  "VS":{n:"Fierce Stag",k:"猛鹿",pr:"+RUB",v:200,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [1, -1, 1], [1, 1, 1]]},
+  "VT":{n:"Vertical Tiger",k:"竪虎",pr:"+FTI",v:220,fl:[],m:[[-1, 0, "F"], [1, 0, 2]]},
+  "VW":{n:"Vertical Wolf",k:"竪狼",pr:"RW",v:300,fl:[],m:[[-1, 0, "F"], [0, -1, 1], [0, 1, 1], [1, 0, 2]]},
+  "W":{n:"Whale",k:"鯨鯢",pr:"+GWH",v:700,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"]]},
+  "WA":{n:"Water Dragon",k:"水龍",pr:"PM",v:880,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [-1, -1, 2], [-1, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "WB":{n:"Water Ox",k:"水牛",pr:"+GDE",v:600,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [0, -1, 2], [0, 1, 2], [1, -1, 1], [1, 1, 1]]},
+  "WC":{n:"Wood Chariot",k:"木車",pr:"+WST2",v:360,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [-1, -1, 1], [1, 1, 1]]},
+  "WD":{n:"Wind Dragon",k:"風龍",pr:"+FDR",v:740,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, 1, "F"], [1, -1, 1]]},
+  "WE":{n:"White Elephant",k:"白象",pr:"+EKI",v:640,fl:[],m:[[-1, -1, 2], [-1, 0, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 0, 2], [1, 1, 2]]},
+  "WF":{n:"Side Wolf",k:"横狼",pr:"+FWO",v:360,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, -1, 1], [1, 1, 1]]},
+  "WG":{n:"Water General",k:"水将",pr:"VG",v:240,fl:[],m:[[-1, -1, 2], [-1, 1, 2], [-1, 0, 1], [1, 0, 1]]},
+  "WH":{n:"White Foal",k:"白駒",pr:"+GFO",v:560,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, 0, "F"]]},
+  "WI":{n:"Wind Horse",k:"風馬",pr:"+HHO",v:300,fl:[],m:[[-1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [1, 0, 2]]},
+  "WL":{n:"Woodland Demon",k:"林鬼",pr:"+SPE",v:880,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, 0, "F"], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "WN":{n:"Wind General",k:"風将",pr:"+FWI",v:360,fl:[],m:[[-1, 0, 2], [-1, -1, 1], [-1, 1, 1], [0, -1, 2], [0, 1, 2], [1, 0, 1]]},
+  "WO":{n:"Wooden Dove",k:"鳩槃",pr:null,v:60,fl:[],m:[]},
+  "WR":{n:"Sumo Wrestler",k:"力士",pr:"+HT",v:320,fl:[],m:[[-1, -1, 2], [-1, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "WS":{n:"Western Barbarian",k:"西戎",pr:"LD",v:320,fl:[],m:[[-1, 0, 2], [-1, -1, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, 0, 2]]},
+  "WT":{n:"White Tiger",k:"白虎",pr:"+DTI",v:580,fl:[],m:[[-1, -1, "F"], [0, -1, "F"], [0, 1, "F"], [-1, 0, 2], [1, 0, 2]]},
+  "YA":{n:"Nature Spirit",k:"夜叉",pr:"+HT",v:280,fl:[],m:[[-1, -1, 1], [-1, 1, 1], [0, -1, 2], [0, 1, 2], [1, 0, 1]]},
+  "+ADR":{n:"Ancient Dragon",k:"大龍",pr:null,v:840,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"]]},
+  "+BBR":{n:"Beast Bird",k:"禽鳥",pr:null,v:940,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
+  "+BEY":{n:"Bear's Eyes",k:"熊眼",pr:null,v:320,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, -1, 1], [1, 0, 1], [1, 1, 1]]},
+  "+BSP":{n:"Buddhist Spirit",k:"仏聖",pr:null,v:1440,fl:[],m:[[-1, 0, 1], [-1, 1, 1], [0, 1, 1], [1, 1, 1], [1, 0, 1], [1, -1, 1], [0, -1, 1], [-1, -1, 1], [2, -2, "J"], [2, -1, "J"], [1, 2, "J"], [2, 2, "J"], [-2, -1, "J"], [-2, -2, "J"], [-1, -2, "J"], [2, 1, "J"], [-2, 1, "J"], [2, 0, "J"], [1, -2, "J"], [-2, 0, "J"], [0, 2, "J"], [-1, 2, "J"], [-2, 2, "J"], [0, -2, "J"]]},
+  "+CBG":{n:"Crossbow General",k:"弩将",pr:null,v:540,fl:[],m:[[-1, 0, "F"], [-1, -1, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
+  "+CCH":{n:"Cannon Chariot",k:"砲車",pr:null,v:640,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, 0, "F"], [0, -1, 1], [0, 1, 1]]},
+  "+CDR":{n:"Coiled Dragon",k:"蟠龍",pr:null,v:560,fl:[],m:[[-1, 0, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"]]},
+  "+CEL":{n:"Copper Elephant",k:"銅象",pr:null,v:440,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [1, -1, 1], [1, 1, 1]]},
+  "+CNG":{n:"Cannon General",k:"砲将",pr:null,v:660,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
+  "+CVL":{n:"Cavalier",k:"騎士",pr:null,v:840,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"]]},
+  "+DDR":{n:"Divine Dragon",k:"神龍",pr:null,v:640,fl:[],m:[[-1, 0, "F"], [-1, 1, "F"], [0, 1, "F"], [1, 0, "F"], [0, -1, 2]]},
+  "+DSP":{n:"Divine Sparrow",k:"神雀",pr:null,v:620,fl:[],m:[[-1, -1, "F"], [1, -1, "F"], [1, 1, "F"], [-1, 0, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "+DTI":{n:"Divine Tiger",k:"神虎",pr:null,v:640,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, 2]]},
+  "+DTU":{n:"Divine Turtle",k:"神亀",pr:null,v:620,fl:[],m:[[-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [-1, -1, 1], [-1, 0, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "+EKI":{n:"Elephant King",k:"象王",pr:null,v:880,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [-1, 0, 2], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
+  "+FBR":{n:"Free Bear",k:"奔熊",pr:null,v:620,fl:[],m:[[-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [-1, -1, 1], [-1, 0, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "+FB":{n:"Free Boar",k:"奔猪",pr:null,v:740,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, 1]]},
+  "+FCK":{n:"Free Chicken",k:"奔鶏",pr:null,v:300,fl:[],m:[[-1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1]]},
+  "+FCR":{n:"Flying Crocodile",k:"飛鰐",pr:null,v:320,fl:["range:N, E, S, W"],m:[[-1, -1, 2], [-1, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "+FDG":{n:"Free Dog",k:"奔犬",pr:null,v:800,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, 0, "F"], [0, -1, 2], [0, 1, 2], [1, -1, 1], [1, 1, 1]]},
+  "+FDR":{n:"Free Dragon",k:"奔龍",pr:null,v:980,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"]]},
+  "+FFI":{n:"Furious Fiend",k:"憤迅",pr:null,v:1440,fl:[],m:[[-1, 0, 1], [-1, 1, 1], [0, 1, 1], [1, 1, 1], [1, 0, 1], [1, -1, 1], [0, -1, 1], [-1, -1, 1], [2, -2, "J"], [2, -1, "J"], [1, 2, "J"], [2, 2, "J"], [-2, -1, "J"], [-2, -2, "J"], [-1, -2, "J"], [2, 1, "J"], [-2, 1, "J"], [2, 0, "J"], [1, -2, "J"], [-2, 0, "J"], [0, 2, "J"], [-1, 2, "J"], [-2, 2, "J"], [0, -2, "J"]]},
+  "+FFR":{n:"Free Fire",k:"奔火",pr:null,v:440,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, 0, 2], [1, 0, 2]]},
+  "+FHK":{n:"Flying Hawk",k:"飛鷹",pr:null,v:600,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [-1, 0, 1]]},
+  "+FHO":{n:"Free Horse",k:"奔馬",pr:null,v:700,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"]]},
+  "+FLE":{n:"Free Leopard",k:"奔豹",pr:null,v:700,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"]]},
+  "+FOW":{n:"Fowl",k:"禽",pr:null,v:560,fl:[],m:[[-1, -1, 2], [-1, 0, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "+FOX":{n:"Free Ox",k:"奔牛",pr:null,v:700,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"]]},
+  "+FOI":{n:"Fire Ox",k:"火牛",pr:null,v:360,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [0, -1, 1], [0, 1, 1]]},
+  "+FPI":{n:"Free Pig",k:"奔豕",pr:null,v:700,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"]]},
+  "+FSE":{n:"Free Serpent",k:"奔蛇",pr:null,v:560,fl:[],m:[[-1, 0, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"]]},
+  "+FSG":{n:"Flying Stag",k:"飛鹿",pr:null,v:520,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, -1, 1], [1, 1, 1]]},
+  "+FST":{n:"Free Stag",k:"奔鹿",pr:null,v:1120,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"]]},
+  "+FTI":{n:"Free Tiger",k:"奔虎",pr:null,v:220,fl:[],m:[[-1, 0, "F"], [1, 0, 2]]},
+  "+FWI":{n:"Fierce Wind",k:"猛威",pr:null,v:300,fl:[],m:[[-1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [1, 0, 2]]},
+  "+FWO":{n:"Free Wolf",k:"奔狼",pr:null,v:700,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"]]},
+  "+GBR":{n:"Great Bear",k:"大熊",pr:null,v:540,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "+GDE":{n:"Great Dream-eater",k:"大獏",pr:null,v:2520,fl:[],m:[[-1, 0, "F"], [-1, 1, "F"], [0, 1, "F"], [1, 1, "F"], [1, 0, "F"], [1, -1, "F"], [0, -1, "F"], [-1, -1, "F"], [-3, -3, "J"], [-3, 3, "J"], [0, 2, "J"], [2, 2, "J"], [-2, -2, "J"], [-2, -1, "J"], [-1, -2, "J"], [-2, 1, "J"], [3, -3, "J"], [3, 3, "J"], [0, -2, "J"], [2, -2, "J"], [2, -1, "J"], [1, 2, "J"], [2, 1, "J"], [-2, 0, "J"], [-2, 2, "J"], [2, 0, "J"], [1, -2, "J"], [-1, 2, "J"]]},
+  "+GEA":{n:"Great Eagle",k:"大鷲",pr:null,v:1260,fl:[],m:[[-1, 0, "F"], [-1, -1, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"], [-2, 2, "J"], [-2, -2, "J"]]},
+  "+GEL":{n:"Great Elephant",k:"大象",pr:null,v:720,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [-1, -1, 2], [-1, 1, 2]]},
+  "+GFO":{n:"Great Foal",k:"大駒",pr:null,v:560,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, 0, "F"]]},
+  "+GHK":{n:"Great Hawk",k:"大鷹",pr:null,v:1190,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"], [-2, 0, "J"]]},
+  "+GSH":{n:"Great Shark",k:"大鮫",pr:null,v:880,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [-1, -1, 2], [-1, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "+GSW":{n:"Gliding Swallow",k:"滑燕",pr:null,v:560,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"]]},
+  "+GTI":{n:"Great Tiger",k:"大虎",pr:null,v:460,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [-1, 0, 1]]},
+  "+GLE":{n:"Great Leopard",k:"大豹",pr:null,v:500,fl:[],m:[[-1, 0, "F"], [-1, -1, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, 0, 1]]},
+  "+GWH":{n:"Great Whale",k:"大鯨",pr:null,v:700,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"]]},
+  "+GWI":{n:"Goose Wing",k:"雁翼",pr:null,v:400,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [0, -1, 2], [0, 1, 2], [1, -1, 1], [1, 0, 1], [1, 1, 1]]},
+  "+HHO":{n:"Heavenly Horse",k:"天馬",pr:null,v:420,fl:[],m:[[-1, 0, "F"], [-2, 1, "J"], [2, 1, "J"], [2, -1, "J"], [-2, -1, "J"]]},
+  "+HRI":{n:"Huai River",k:"淮河",pr:null,v:360,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, 0, 1], [1, 0, 1]]},
+  "+HT":{n:"Heavenly Tetrarch",k:"四天王",pr:null,v:640,fl:[],m:[[-1, -1, 2], [-1, 0, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 0, 2], [1, 1, 2]]},
+  "+HTK":{n:"Heavenly Tetrarch King",k:"四天王王",pr:null,v:1680,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"], [2, -2, "J"], [-2, -2, "J"], [2, 0, "J"], [-2, 0, "J"], [0, 2, "J"], [2, 2, "J"], [-2, 2, "J"], [0, -2, "J"]]},
+  "+KTE":{n:"King of Teachings",k:"教王",pr:null,v:1440,fl:[],m:[[-1, 0, 1], [-1, 1, 1], [0, 1, 1], [1, 1, 1], [1, 0, 1], [1, -1, 1], [0, -1, 1], [-1, -1, 1], [2, -2, "J"], [2, -1, "J"], [1, 2, "J"], [2, 2, "J"], [-2, -1, "J"], [-2, -2, "J"], [-1, -2, "J"], [2, 1, "J"], [-2, 1, "J"], [2, 0, "J"], [1, -2, "J"], [-2, 0, "J"], [0, 2, "J"], [-1, 2, "J"], [-2, 2, "J"], [0, -2, "J"]]},
+  "+LAR":{n:"Left Army",k:"左軍",pr:null,v:620,fl:[],m:[[-1, -1, "F"], [0, -1, "F"], [1, -1, "F"], [-1, 0, 1], [-1, 1, 1], [0, 1, 1], [1, 0, 1], [1, 1, 1]]},
+  "+LBG":{n:"Longbow General",k:"弓将",pr:null,v:720,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, 0, "F"], [0, -1, 2], [0, 1, 2]]},
+  "+LDG":{n:"Left Dog",k:"左犬",pr:null,v:320,fl:[],m:[[-1, 0, "F"], [1, 1, "F"], [1, 0, 1]]},
+  "+LIC":{n:"Left Iron Chariot",k:"左鉄車",pr:null,v:460,fl:[],m:[[-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [0, -1, 1]]},
+  "+LKI":{n:"Leopard King",k:"豹王",pr:null,v:640,fl:[],m:[[-1, -1, 2], [-1, 0, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 0, 2], [1, 1, 2]]},
+  "+MBI":{n:"Mocking Bird",k:"嘲鳥",pr:null,v:560,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, 0, "F"]]},
+  "+MCR":{n:"Mountain Crane",k:"山鶴",pr:null,v:2520,fl:[],m:[[-1, 0, "F"], [-1, 1, "F"], [0, 1, "F"], [1, 1, "F"], [1, 0, "F"], [1, -1, "F"], [0, -1, "F"], [-1, -1, "F"], [-3, -3, "J"], [-3, 3, "J"], [0, 2, "J"], [2, 2, "J"], [-2, -2, "J"], [-2, -1, "J"], [-1, -2, "J"], [-2, 1, "J"], [3, -3, "J"], [3, 3, "J"], [0, -2, "J"], [2, -2, "J"], [2, -1, "J"], [1, 2, "J"], [2, 1, "J"], [-2, 0, "J"], [-2, 2, "J"], [2, 0, "J"], [1, -2, "J"], [-1, 2, "J"]]},
+  "+MTA":{n:"Mount Tai",k:"泰山",pr:null,v:800,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [-1, 0, 2], [0, -1, 2], [0, 1, 2]]},
+  "+MUG":{n:"Multi General",k:"万将",pr:null,v:560,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [1, 0, "F"]]},
+  "+MWI":{n:"Mountain Witch",k:"山母",pr:null,v:700,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"]]},
+  "+POX":{n:"Plodding Ox",k:"歩牛",pr:null,v:440,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [1, -1, 1], [1, 1, 1]]},
+  "+PPR":{n:"Playful Parrot",k:"遊鸚",pr:null,v:760,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [-1, -1, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "+PWO":{n:"Poisonous Wolf",k:"毒狼",pr:null,v:320,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1], [1, -1, 1], [1, 0, 1], [1, 1, 1]]},
+  "+RAR":{n:"Right Army",k:"右軍",pr:null,v:620,fl:[],m:[[-1, 1, "F"], [0, 1, "F"], [1, 1, "F"], [-1, -1, 1], [-1, 0, 1], [0, -1, 1], [1, -1, 1], [1, 0, 1]]},
+  "+RBI":{n:"Reed Bird",k:"葦鳥",pr:null,v:600,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "+RBO":{n:"Running Boar",k:"奔猪",pr:null,v:520,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [1, -1, 1], [1, 0, 1], [1, 1, 1]]},
+  "+RDG":{n:"Right Dog",k:"右犬",pr:null,v:320,fl:[],m:[[-1, 0, "F"], [1, -1, "F"], [1, 0, 1]]},
+  "+RDM":{n:"Rain Demon",k:"雨鬼",pr:null,v:540,fl:[],m:[[1, 0, "F"], [-1, 0, 2], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 1, 2]]},
+  "+RDR":{n:"Running Dragon",k:"走龍",pr:null,v:780,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, 2]]},
+  "+RHK":{n:"Raiding Hawk",k:"雷鷹",pr:null,v:300,fl:[],m:[[-1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1]]},
+  "+RIC":{n:"Right Iron Chariot",k:"右鉄車",pr:null,v:460,fl:[],m:[[-1, -1, "F"], [1, -1, "F"], [1, 1, "F"], [0, 1, 1]]},
+  "+RLE":{n:"Running Leopard",k:"走豹",pr:null,v:380,fl:[],m:[[-1, 0, "F"], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
+  "+ROX":{n:"Running Ox",k:"走牛",pr:null,v:780,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, 2]]},
+  "+RTI":{n:"Running Tile",k:"走瓦",pr:null,v:440,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [0, -1, 2], [0, 1, 2]]},
+  "+RUB":{n:"Rushing Boar",k:"突猪",pr:null,v:200,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1]]},
+  "+SBR":{n:"Strong Bear",k:"強熊",pr:null,v:780,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, 2]]},
+  "+SCH":{n:"Strong Chariot",k:"強車",pr:null,v:840,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"]]},
+  "+SEA":{n:"Strong Eagle",k:"強鷲",pr:null,v:1120,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"]]},
+  "+SPE":{n:"Stone Peng",k:"石鵬",pr:null,v:720,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [0, -1, 2], [0, 1, 2]]},
+  "+SPG":{n:"Spear General",k:"槍将",pr:null,v:380,fl:[],m:[[-1, 0, "F"], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
+  "+SPT":{n:"Spirit Turtle",k:"霊亀",pr:null,v:1440,fl:[],m:[[-1, 0, 1], [-1, 1, 1], [0, 1, 1], [1, 1, 1], [1, 0, 1], [1, -1, 1], [0, -1, 1], [-1, -1, 1], [2, -2, "J"], [2, -1, "J"], [1, 2, "J"], [2, 2, "J"], [-2, -1, "J"], [-2, -2, "J"], [-1, -2, "J"], [2, 1, "J"], [-2, 1, "J"], [2, 0, "J"], [1, -2, "J"], [-2, 0, "J"], [0, 2, "J"], [-1, 2, "J"], [-2, 2, "J"], [0, -2, "J"]]},
+  "+SWG":{n:"Sword General",k:"剣将",pr:null,v:280,fl:[],m:[[-1, -1, 2], [-1, 0, 2], [-1, 1, 2], [1, 0, 1]]},
+  "+THR":{n:"Thunder Runner",k:"雷走",pr:null,v:660,fl:[],m:[[-1, -1, "F"], [-1, 0, "F"], [-1, 1, "F"], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
+  "+TRT":{n:"Treasure Turtle",k:"宝亀",pr:null,v:1400,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, -1, "F"], [1, 0, "F"], [1, 1, "F"], [-2, 0, "J"], [0, 2, "J"], [0, -2, "J"], [2, 0, "J"]]},
+  "+TSO":{n:"Tiger Soldier",k:"虎兵",pr:null,v:400,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [-1, 0, 2], [1, 0, 1]]},
+  "+WHR":{n:"Walking Heron",k:"歩鷺",pr:null,v:600,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [-1, -1, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2]]},
+  "+WST":{n:"Wizard Stork",k:"妖鸛",pr:null,v:700,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"]]},
+  "+WST2":{n:"Wind Snapping Turtle",k:"風亀",pr:null,v:440,fl:[],m:[[-1, 0, "F"], [1, 0, "F"], [-1, -1, 2], [-1, 1, 2]]},
+  "+FBI":{n:"Free Bird",k:"奔鳥",pr:null,v:720,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [1, -1, 2], [1, 1, 2]]},
+};
+const TBASE=["AB", "B", "BA", "BB", "BC", "BD", "BE", "BG", "BI", "BL", "BM", "BN", "BO", "BS", "BT", "C", "CA", "CC", "CD", "CE", "CG", "CH", "CI", "CK", "CL", "CM", "CN", "CO", "CP", "CR", "CS", "CT", "D", "DE", "DH", "DK", "DL", "DM", "DO", "DR", "DS", "DV", "EA", "EB", "EC", "ED", "EG", "EL", "ES", "EW", "F", "FC", "FD", "FE", "FG", "FH", "FI", "FL", "FO", "FP", "FR", "FS", "FT", "FY", "G", "GB", "GC", "GD", "GE", "GG", "GL", "GN", "GO", "GR", "GS", "GT", "GU", "H", "HE", "HF", "HM", "HO", "HR", "HS", "I", "K", "KM", "KR", "L", "LB", "LC", "LD", "LE", "LG", "LI", "LL", "LN", "LO", "LP", "LS", "LT", "M", "MF", "MK", "ML", "MR", "MS", "MT", "N", "NB", "NK", "NT", "O", "OC", "OK", "OM", "OR", "OS", "OW", "OX", "P", "PC", "PE", "PG", "PH", "PI", "PM", "PR", "PS", "Q", "R", "RA", "RB", "RC", "RD", "RE", "RG", "RH", "RI", "RN", "RO", "RP", "RR", "RS", "RT", "RU", "RV", "RW", "S", "SA", "SC", "SD", "SE", "SF", "SG", "SI", "SL", "SM", "SN", "SO", "SP", "SQ", "SR", "SS", "ST", "SU", "SV", "SW", "SX", "T", "TC", "TD", "TF", "TG", "TS", "TT", "VB", "VD", "VE", "VG", "VH", "VI", "VL", "VM", "VO", "VP", "VR", "VS", "VT", "VW", "W", "WA", "WB", "WC", "WD", "WE", "WF", "WG", "WH", "WI", "WL", "WN", "WO", "WR", "WS", "WT", "YA"];
+const TPROM=["+ADR", "+BBR", "+BEY", "+BSP", "+CBG", "+CCH", "+CDR", "+CEL", "+CNG", "+CVL", "+DDR", "+DSP", "+DTI", "+DTU", "+EKI", "+FBR", "+FB", "+FCK", "+FCR", "+FDG", "+FDR", "+FFI", "+FFR", "+FHK", "+FHO", "+FLE", "+FOW", "+FOX", "+FOI", "+FPI", "+FSE", "+FSG", "+FST", "+FTI", "+FWI", "+FWO", "+GBR", "+GDE", "+GEA", "+GEL", "+GFO", "+GHK", "+GSH", "+GSW", "+GTI", "+GLE", "+GWH", "+GWI", "+HHO", "+HRI", "+HT", "+HTK", "+KTE", "+LAR", "+LBG", "+LDG", "+LIC", "+LKI", "+MBI", "+MCR", "+MTA", "+MUG", "+MWI", "+POX", "+PPR", "+PWO", "+RAR", "+RBI", "+RBO", "+RDG", "+RDM", "+RDR", "+RHK", "+RIC", "+RLE", "+ROX", "+RTI", "+RUB", "+SBR", "+SCH", "+SEA", "+SPE", "+SPG", "+SPT", "+SWG", "+THR", "+TRT", "+TSO", "+WHR", "+WST", "+WST2", "+FBI"];
+
+// ===== チェス駒（c接頭辞）。動きは個別。ポーン/キングは特殊処理あり =====
+TP['cK']={n:'King(chess)',k:'K\u2654',pr:null,v:99999,fl:['chess','royal'],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[0,-1,1],[0,1,1],[1,-1,1],[1,0,1],[1,1,1]]};
+TP['cQ']={n:'Queen',k:'Q\u2655',pr:null,v:1500,fl:['chess'],m:[[-1,-1,'F'],[-1,0,'F'],[-1,1,'F'],[0,-1,'F'],[0,1,'F'],[1,-1,'F'],[1,0,'F'],[1,1,'F']]};
+TP['cR']={n:'Rook(chess)',k:'R\u2656',pr:null,v:780,fl:['chess','crook'],m:[[-1,0,'F'],[1,0,'F'],[0,-1,'F'],[0,1,'F']]};
+TP['cB']={n:'Bishop',k:'B\u2657',pr:null,v:680,fl:['chess'],m:[[-1,-1,'F'],[-1,1,'F'],[1,-1,'F'],[1,1,'F']]};
+TP['cN']={n:'Knight(chess)',k:'N\u2658',pr:null,v:600,fl:['chess'],m:[[-2,-1,'jump'],[-2,1,'jump'],[2,-1,'jump'],[2,1,'jump'],[-1,-2,'jump'],[-1,2,'jump'],[1,-2,'jump'],[1,2,'jump']]};
+TP['cP']={n:'Pawn(chess)',k:'P\u2659',pr:null,v:100,fl:['chess','cpawn'],m:[[-1,0,1]]};
+// 格が定義されない駒（チェスの非キング駒・本将棋の駒・はさみ駒など、大局将棋に無い駒）
+function hasRank(t){
+  if(t==='cK'||t==='hK') return true;        // キング・本将棋の王は王の格
+  if(t.charAt(0)==='c') return false;        // 他のチェス駒は格なし
+  if(t.charAt(0)==='h') return false;        // 本将棋の基本駒は格なし
+  if(/^\+[A-Z]+_hon$/.test(t)) return false; // 本将棋成駒（と金等）は格なし
+  if(t==='HASA') return false;               // はさみ駒は格なし
+  return true;                               // 大局将棋の駒
+}
+// 駒の格（小さいほど高位）。範囲攻撃の判定にも使う。
+// 格なし駒は通常 Infinity（飛び越え対象だが取れない）。ただしルール ranklessAsGeneral がONなら格5の一般駒扱い。
+function pieceRank(t){
+  if(t==='K'||t==='CP'||t==='cK'||t==='hK') return 1; // 玉将・太子・キング・本将棋の王
+  if(!hasRank(t)) return (typeof RULES!=='undefined' && RULES.ranklessAsGeneral) ? 5 : Infinity;
+  if(t==='GG') return 2;                           // 大将
+  if(t==='VG') return 3;                           // 副将
+  if(t==='BG'||t==='RO'||t==='VD'||t==='+FCR') return 4; // 角将・飛将・猛龍・飛鰐
+  return 5;                                        // その他の大局駒
+}
+// 範囲攻撃における「実効的な格なし」判定。ルール ranklessAsGeneral がONなら、格なし駒も一般駒として扱う（取れる対象）。
+function isRankless(t){
+  if(typeof RULES!=='undefined' && RULES.ranklessAsGeneral) return false; // ONなら格なし扱いしない
+  return !hasRank(t);
+}
+// 範囲攻撃を持つ駒か
+function hasRangeAttack(t){ return ['GG','VG','BG','RO','VD','+FCR'].includes(t); }
+// 範囲攻撃の方向（あなた基準）。大将=8方向、副将/角将/猛龍=斜め、飛将/飛鰐=縦横
+function rangeAttackDirs(t){
+  const DIAG=[[-1,-1],[-1,1],[1,-1],[1,1]];
+  const ORTH=[[-1,0],[1,0],[0,-1],[0,1]];
+  const ALL=DIAG.concat(ORTH);
+  if(t==='GG') return ALL;
+  if(t==='VG'||t==='BG'||t==='VD') return DIAG;
+  if(t==='RO'||t==='+FCR') return ORTH;
+  return [];
+}
+
+const CHESS_LIST=['cK','cQ','cR','cB','cN','cP'];
+
+// はさみ将棋の駒（略称「は」）：縦横に走り、移動後に自軍の駒との間に挟んだ敵駒を取る
+TP['HASA']={n:'Hasami',k:'は',pr:null,v:300,fl:['hasami'],m:[[-1,0,'F'],[1,0,'F'],[0,-1,'F'],[0,1,'F']]};
+const HASAMI_LIST=['HASA'];
+
+// オセロの駒：動けない。打った瞬間、8方向で自軍オセロ駒と挟んだ相手駒（種類問わず）を裏返して自軍に。
+TP['OTH']={n:'Othello',k:'●',pr:null,v:200,fl:['othello'],m:[]};
+const OTHELLO_LIST=['OTH'];
+
+// 本将棋の成駒。と・成香・成桂・成銀は金の動き、馬・龍。
+(function addHonProm(){
+  const GOLD=[[-1,-1,1],[-1,0,1],[-1,1,1],[0,-1,1],[0,1,1],[1,0,1]];
+  TP['+P_hon']={n:'Tokin',k:'と',pr:null,v:520,fl:[],m:GOLD};
+  TP['+L_hon']={n:'Prom.Lance',k:'成香',pr:null,v:500,fl:[],m:GOLD};
+  TP['+N_hon']={n:'Prom.Knight',k:'成桂',pr:null,v:500,fl:[],m:GOLD};
+  TP['+S_hon']={n:'Prom.Silver',k:'成銀',pr:null,v:520,fl:[],m:GOLD};
+  TP['+B_hon']={n:'Horse',k:'馬',pr:null,v:1050,fl:[],m:[[-1,-1,'F'],[-1,1,'F'],[1,-1,'F'],[1,1,'F'],[-1,0,1],[1,0,1],[0,-1,1],[0,1,1]]};
+  TP['+R_hon']={n:'Dragon',k:'龍',pr:null,v:1150,fl:[],m:[[-1,0,'F'],[1,0,'F'],[0,-1,'F'],[0,1,'F'],[-1,-1,1],[-1,1,1],[1,-1,1],[1,1,1]]};
+})();
+
+// ===== 本将棋の駒（大局将棋の同名駒とは別分類）。動き・成りは本将棋ルールを内蔵。表示名は接尾辞なし。 =====
+(function addHonBase(){
+  const GOLD=[[-1,-1,1],[-1,0,1],[-1,1,1],[0,-1,1],[0,1,1],[1,0,1]];
+  TP['hP']={n:'Pawn',k:'歩兵',pr:'+P_hon',v:60,fl:[],m:[[-1,0,1]]};
+  TP['hL']={n:'Lance',k:'香車',pr:'+L_hon',v:140,fl:[],m:[[-1,0,'F']]};
+  TP['hN']={n:'Knight',k:'桂馬',pr:'+N_hon',v:140,fl:[],m:[[-2,1,'J'],[-2,-1,'J']]};
+  TP['hS']={n:'Silver',k:'銀将',pr:'+S_hon',v:200,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[1,-1,1],[1,1,1]]};
+  TP['hG']={n:'Gold',k:'金将',pr:null,v:240,fl:[],m:GOLD};
+  TP['hK']={n:'King',k:'玉将',pr:null,v:99999,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[0,-1,1],[0,1,1],[1,-1,1],[1,0,1],[1,1,1]]};
+  TP['hB']={n:'Bishop',k:'角行',pr:'+B_hon',v:560,fl:[],m:[[-1,-1,'F'],[-1,1,'F'],[1,-1,'F'],[1,1,'F']]};
+  TP['hR']={n:'Rook',k:'飛車',pr:'+R_hon',v:560,fl:[],m:[[-1,0,'F'],[0,-1,'F'],[0,1,'F'],[1,0,'F']]};
+})();
+// 本将棋の基本駒コード一覧
+const HON_BASE=['hP','hL','hN','hS','hG','hK','hB','hR'];
+// 本将棋の駒か（基本駒＋本将棋成駒）
+function isHonPiece(t){ return HON_BASE.includes(t) || /^\+[A-Z]+_hon$/.test(t); }
+
+// 動きが空だった最上位駒を、強力な飛び駒として補完（原典の正確な再現が困難な最上位クラスのため近似）
+(function fixZeroMovePieces(){
+  const allDir=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+  const runAll=allDir.map(([dr,dc])=>[dr,dc,'F']);
+  const jumps2=[];
+  for(let dr=-2;dr<=2;dr++)for(let dc=-2;dc<=2;dc++){ if(Math.max(Math.abs(dr),Math.abs(dc))===2) jumps2.push([dr,dc,'jump']); }
+  const jumps3=[[-3,-3,'jump'],[-3,0,'jump'],[-3,3,'jump'],[0,-3,'jump'],[0,3,'jump'],[3,-3,'jump'],[3,0,'jump'],[3,3,'jump']];
+  // 飛猫: 斜め2マス飛び＋縦横2マス＋前方への跳び（近似:全方向走り＋2マス飛び）
+  if(TP.FC) TP.FC.m=runAll.concat(jumps2);
+  // 獅鷹: 獅子＋鷹（斜め走り＋周囲2マスエリア＋縦横走り）
+  if(TP.LI) TP.LI.m=runAll.concat(jumps2);
+  // 鵬師・鳳師: 最強格（全方向走り＋2,3マス飛び）
+  if(TP.PE) TP.PE.m=runAll.concat(jumps2).concat(jumps3);
+  if(TP.PM) TP.PM.m=runAll.concat(jumps2).concat(jumps3);
+  // 狡狐: 全方向走り＋2マス飛び
+  if(TP.TF) TP.TF.m=runAll.concat(jumps2);
+  // 鳩槃: 斜め走り＋縦横走り＋2マス飛び
+  if(TP.WO) TP.WO.m=runAll.concat(jumps2);
+  // 大将は移動手段が無い(range専用)と動けないため、1マス8方向移動を付与（範囲攻撃は別途moves側で付与）
+  if(TP.GG) TP.GG.m=allDir.map(([dr,dc])=>[dr,dc,1]);
+})();
+
+// ===== 互換レイヤ：TP から既存システム用テーブルを生成 =====
+// 盤上の駒コードは TP のキー（"P","L","AB",...,"+FB" 等）。
+const KANJI={}, VALUE={}, CAN_PROMOTE={}, DEMOTE={}, ENAME={};
+for(const t in TP){
+  const p=TP[t];
+  KANJI[t]= p.k || p.n;     // 和名優先、無ければ英名
+  ENAME[t]= p.n;
+  VALUE[t]= p.v;
+  if(p.pr){ CAN_PROMOTE[t]=1; }
+}
+// DEMOTE は「成駒コード -> 元駒コード」。成専用(+始まり)または別名でも、元駒のpr先が自分なら登録。
+for(const t in TP){
+  const pr=TP[t].pr;
+  if(pr) DEMOTE[pr]=t;  // pr(成り先) から元駒 t を引ける
+}
+// 本将棋の駒と種類が被る大局将棋の駒コード（これらにだけ「(大局)」を付ける）
+const DAIKYOKU_OVERLAP=new Set(['P','L','N','S','G','K','B','R']);
+// 大局将棋の駒で、本将棋と被る駒か（接尾辞「(大局)」を付ける対象）
+function isDaikyokuPiece(t){
+  return DAIKYOKU_OVERLAP.has(t);
+}
+// 表示名の構成要素を返す：{name:駒名, suffix:'(大局)'またはnull}
+function dispParts(t){
+  const base = KANJI[t] || t;
+  return { name: base, suffix: isDaikyokuPiece(t) ? '(大局)' : null };
+}
+// 表示名（単一文字列。ツールチップ・プレビュー等で使用）
+function dispName(t){
+  const p=dispParts(t);
+  return p.suffix ? p.name+p.suffix : p.name;
+}
+// 表示ラベルを行に分割。
+// 「(大局)」付きの駒は [駒名, '(大局)'] の2行に固定（駒名が4文字以上なら駒名側もバランス分割）。
+// 接尾辞なしは、3文字までは1行、4文字以上は2行（前半・後半をバランス配分）。
+function splitLabel(t){
+  const p=dispParts(t);
+  const nameChars=[...p.name];
+  if(p.suffix){
+    // 駒名を1行目（必要なら分割せず1行のまま）＋「(大局)」を2行目
+    if(nameChars.length<=3) return [p.name, p.suffix];
+    const h=Math.ceil(nameChars.length/2);
+    return [nameChars.slice(0,h).join(''), nameChars.slice(h).join(''), p.suffix];
+  }
+  if(nameChars.length<=3) return [p.name];
+  const half=Math.ceil(nameChars.length/2);
+  return [nameChars.slice(0,half).join(''), nameChars.slice(half).join('')];
+}
+// 駒要素にラベルを描画（盤上・持ち駒で共通）。
+// 駒名は縦書き。3文字までは1列、4文字以上は2列（前半・後半に分割し、各列を縦書き）。
+// 縦書きは右→左に読むため、駒名列を右側に、「(大局)」接尾辞をその左に配置する。
+function fillKoma(el, t){
+  const p=dispParts(t);
+  const nameChars=[...p.name];
+  const nameLen=nameChars.length;
+  // 駒名を列に分割（3文字までは1列、4文字以上は2列でバランス配分）
+  let cols;
+  if(nameLen<=3) cols=[p.name];
+  else { const h=Math.ceil(nameLen/2); cols=[nameChars.slice(0,h).join(''), nameChars.slice(h).join('')]; }
+  // サイズ：1列に積む最大文字数で決定
+  const maxPerCol=Math.max(...cols.map(c=>[...c].length));
+  el.classList.remove('small','tiny','xtiny','daikyoku');
+  if(maxPerCol>=3) el.classList.add('tiny');
+  else if(maxPerCol===2) el.classList.add('small');
+  if(p.suffix||cols.length>=2) el.classList.add('daikyoku'); // 複数列ぶん横幅を使う
+  el.innerHTML='';
+  // 読み順（右→左）に並べるため flex-direction:row-reverse を使い、append は右の列から行う。
+  // 右端＝駒名の1列目、その左＝2列目、さらに左＝接尾辞。
+  for(const c of cols){
+    const col=document.createElement('span');
+    col.className='koma-name';
+    col.textContent=c;
+    el.appendChild(col);
+  }
+  if(p.suffix){
+    const sufCol=document.createElement('span');
+    sufCol.className='koma-suffix';
+    // 縦書きで自然に見えるよう、括弧を縦組み用の括弧字形（︵ ︶）に置換して表示
+    sufCol.textContent=p.suffix.replace(/\(/g,'︵').replace(/\)/g,'︶');
+    el.appendChild(sufCol);
+  }
+}
+// 動きベクトル取得：TPの[dr,dc,r]を{dr,dc,r}へ。r:'F'->Infinity,'J'->'jump',数値はそのまま
+function moveVecs(t){
+  const p=TP[t]; if(!p) return [];
+  return p.m.map(v=>{
+    let r=v[2];
+    if(r==='F') r=Infinity;
+    else if(r==='J') r='jump';
+    return {dr:v[0],dc:v[1],r};
+  });
+}
+// 駒tの成り先コード。各駒のpr（本将棋駒は本将棋成り、大局駒は大局成り）をそのまま使う。
+function promoteCode(t){
+  return TP[t] && TP[t].pr ? TP[t].pr : null;
+}
+// 成れる駒か
+function canPromoteNow(t){
+  return !!(TP[t] && TP[t].pr);
+}
+// 成り可能な最遠ランク強制成り対象（前進のみの駒）。本将棋準拠でhP,hL,hNに加え該当大局駒。
+const FORCE_PROMO=new Set(['hP','hL','hN','SG','I','D','GN','OC','TG']);
+// 編集メニュー用：本将棋セット（本将棋専用コード）
+const BASIC_LIST=['hP','hL','hN','hS','hG','hB','hR','hK'];
+
+// 駒のひとこと補足（任意・自動説明を補強）
+const DESC={
+  P:'最も基本の駒。前に1マス。',
+  L:'前方にどこまでも直進。',
+  N:'前2・横1へ飛び越して跳ねる。',
+  S:'前3方向と斜め後ろ。攻めの駒。',
+  G:'前と横と後ろ。守りの要。',
+  B:'斜め4方向に走る大駒。',
+  R:'縦横に走る最強格の大駒。',
+  K:'周囲8マスに1つずつ。取られたら負け。',
+  奔王:'縦横斜めすべてに走る、盤上最強級の駒。',
+  獅子:'周囲2マスまで自在に動く（飛び越え可）。大局将棋の花形。',
+  鳳凰:'斜め2マスと縦横2マスを飛び越える。麒麟と対をなす。',
+  麒麟:'縦横2マス飛び越え＋斜め1マス。鳳凰と対をなす。',
+  飛鷲:'飛車を強化した大駒。斜め前にも飛べる。',
+  角鷹:'角を強化した大駒。前にも飛べる。',
+  大将:'全方向に走り、間の駒を飛び越える豪傑（簡略化）。',
+  四天王:'全方向へ走る強駒（飛び越えは簡略化）。',
+  飛牛:'角の動きに縦の走りを加えた駒。',
+  鯨鯢:'前と後ろ3方向に走る、海の駒。',
+  白駒:'前3方向と後ろに走る快速の駒。',
+  水牛:'斜めに走り、縦は2マスまで。',
+  白象:'全方向に最大2マス。どっしりした駒。',
+  醉象:'玉に近い動き。成ると太子（玉と同等）。',
+  太子:'玉とまったく同じ動き。玉の予備。',
+  竪行:'縦に走り、横は1マス。',
+  横行:'横に走り、縦は1マス。',
+  横飛:'横に走り、斜め前と縦1マス。',
+  反車:'前後に走るが横には動けない。',
+  奔猪:'前方向に幅広く走る猪突の駒。',
+  近王:'玉に近いが斜め後ろの片方が欠ける。',
+  熊眼:'周囲8マスへ1つずつ（玉に近い）。',
+  盲虎:'前以外の周囲へ1マスずつ。',
+  猛豹:'後ろの横以外の周囲へ1マスずつ。',
+  猛鹿:'前3方向と斜め後ろへ1マス。',
+  悪狼:'前3方向と横へ1マス。',
+  銅将:'前3方向と真後ろへ1マス。',
+  鉄将:'前3方向のみへ1マス。',
+  石将:'斜め前2方向のみへ1マス。',
+  仲人:'前と後ろに1マスずつ。軽い駒。',
+  龍王:'飛車が成った姿。縦横走り＋斜め1マス。',
+  龍馬:'角が成った姿。斜め走り＋縦横1マス。',
+};
+
+// 方向名（あなた基準：前=上）
+function dirName(dr,dc){
+  const v = dr<0?'前': dr>0?'後ろ':'';
+  const h = dc<0?'左': dc>0?'右':'';
+  if(dr===0&&dc===0)return '';
+  if(dr!==0&&dc!==0) return v+(h==='左'?'斜め左':'斜め右'); // 前斜め左 等
+  if(dr!==0) return v; // 前/後ろ（真っ直ぐ）
+  return h; // 左/右
+}
+// 動きベクトルから説明文を組み立て
+function moveSummary(t){
+  const vecs=moveVecs(t);
+  // 走り(F) / 限定歩数 / 1マス / 飛び の4分類でまとめる
+  const runs=[], steps1=[], stepsN={}, jumps=[];
+  for(const v of vecs){
+    const d=dirName(v.dr,v.dc);
+    if(v.r===Infinity) runs.push(d);
+    else if(v.r==='jump') jumps.push(d);
+    else if(v.r===1) steps1.push(d);
+    else { (stepsN[v.r]=stepsN[v.r]||[]).push(d); }
+  }
+  const uniq=a=>[...new Set(a)];
+  const parts=[];
+  if(runs.length) parts.push(uniq(runs).join('・')+'へどこまでも走る');
+  for(const n in stepsN) parts.push(uniq(stepsN[n]).join('・')+'へ最大'+n+'マス');
+  if(steps1.length) parts.push(uniq(steps1).join('・')+'へ1マス');
+  if(jumps.length) parts.push(uniq(jumps).join('・')+'へ飛び越えて移動');
+  return parts.join('、');
+}
+
+// 駒の強さ＝空盤の中央(4,4)に置いたときの到達可能マス数。走りは実際に伸ばして数える。
+const POWER_CACHE={}, BASEPOW_CACHE={};
+function POWER_CACHE_clear(){ for(const k in POWER_CACHE) delete POWER_CACHE[k]; for(const k in BASEPOW_CACHE) delete BASEPOW_CACHE[k]; }
+// 素の強さ：移動の種類で評価（マス数でなく種別で圧縮）。走り=3,飛び=2,限定N=min(N,3)+1,1マス=1
+function basePower(t){
+  if(BASEPOW_CACHE[t]!=null) return BASEPOW_CACHE[t];
+  let s=0;
+  for(const v of moveVecs(t)){
+    if(v.r===Infinity) s+=3;
+    else if(v.r==='jump') s+=2;
+    else if(typeof v.r==='number') s += (v.r>=2? Math.min(v.r,3)+1 : 1);
+  }
+  // 範囲攻撃は方向ごとに加点
+  if(hasRangeAttack(t)) s += rangeAttackDirs(t).length*2;
+  BASEPOW_CACHE[t]=s; return s;
+}
+// 表示用の強さ：素の強さ＋格ボーナス。royalは最大級。
+function piecePower(t){
+  if(POWER_CACHE[t]!=null) return POWER_CACHE[t];
+  let n=basePower(t);
+  const rank=pieceRank(t);
+  if(rank<=4) n += (5-rank)*8;     // 大将+24, 副将+16, 格4+8（圧縮スケールに合わせる）
+  if(t==='K'||t==='CP'||t==='cK') n=999;
+  POWER_CACHE[t]=n; return n;
+}
+// 履歴
+let pickHistory=[];   // 選択（実際に置いた）順、最近が先頭
+let viewHistory=[];   // プレビューで見た順、最近が先頭
+function pushHist(arr,t){ const i=arr.indexOf(t); if(i>=0)arr.splice(i,1); arr.unshift(t); }
+
+// 与えられた駒リストをモードでソート。履歴モードでは該当駒のみに絞る。
+function sortList(list, mode){
+  const kana=t=>KANJI[t]||ENAME[t]||t;
+  list=list.slice();
+  switch(mode){
+    case 'kana_asc': list.sort((a,b)=>kana(a).localeCompare(kana(b),'ja')); break;
+    case 'kana_desc': list.sort((a,b)=>kana(b).localeCompare(kana(a),'ja')); break;
+    case 'power_desc': list.sort((a,b)=>piecePower(b)-piecePower(a)); break;
+    case 'power_asc': list.sort((a,b)=>piecePower(a)-piecePower(b)); break;
+    case 'hist_pick': {
+      const set=new Set(pickHistory);
+      list=list.filter(t=>set.has(t)).sort((a,b)=>pickHistory.indexOf(a)-pickHistory.indexOf(b));
+      break;
+    }
+    case 'hist_view': {
+      const set=new Set(viewHistory);
+      list=list.filter(t=>set.has(t)).sort((a,b)=>viewHistory.indexOf(a)-viewHistory.indexOf(b));
+      break;
+    }
+    default: break;
+  }
+  return list;
+}
+function currentSortMode(){ const s=document.getElementById('sortSel'); return s?s.value:'default'; }
+function histRank(arr,t){ const i=arr.indexOf(t); return i<0?9999:i; }
+
+
+let board, capYou, capEnemy, sel, history, gameOver, pendingPromo, turn;
+
+function setupStartBoard(){
+  board=Array.from({length:9},()=>Array(9).fill(null));
+  const back=['hL','hN','hS','hG','hK','hG','hS','hN','hL'];
+  for(let c=0;c<9;c++){
+    board[0][c]={t:back[c],p:-1};
+    board[2][c]={t:'hP',p:-1};
+    board[8][c]={t:back[c],p:1};
+    board[6][c]={t:'hP',p:1};
+  }
+  board[1][1]={t:'hB',p:-1}; board[1][7]={t:'hR',p:-1};
+  board[7][7]={t:'hB',p:1};  board[7][1]={t:'hR',p:1};
+}
+// keepBoard=true なら現在の盤配置を維持し、対局の進行状態だけリセット
+function initState(keepBoard){
+  if(!keepBoard) setupStartBoard();
+  capYou=[]; capEnemy=[]; sel=null; history=[]; gameOver=false; pendingPromo=null;
+  turn=1; // 1=あなた(先手), -1=相手
+  kifu=[]; gameStartSnap=null; // 棋譜とリプレイ起点
+  posCount={};
+}
+// 棋譜・リプレイ・自動モード状態
+let kifu=[], gameStartSnap=null;
+let replaying=false, replayTimer=null, replayIdx=0, replaySpeed=1;
+// 自動モード設定（リセットでは保持）
+let autoYou=false, autoEnemy=true, speedIdx=1;
+let editing=false, editCell=null;
+let multiSel=[]; // 複数選択中のマス [{r,c},...]
+// ルール設定
+const RULES={
+  drops:true,        // 持ち駒を使う
+  keepPromoted:false,// 取った駒が成ったまま持ち駒に入る
+  nifu:true,         // 二歩禁止
+  sennichite:true,   // 千日手（同一局面4回）で引き分け
+  ranklessAsGeneral:true, // 格なし駒（チェス駒・本将棋成駒・はさみ駒）を通常の一般駒（格5）として扱う。範囲攻撃で取れる対象になる。
+  randomIncludeSpecial:true // ランダム置換（完全・強さ近い・同じ格）の候補に、はさみ駒・オセロ駒を含める。
+};
+let posCount={};     // 局面出現回数（千日手判定用）
+const SPEEDS=[
+  {n:'低速',ms:700,depth:3},
+  {n:'標準',ms:250,depth:3},
+  {n:'高速',ms:40,depth:2},
+  {n:'超高速',ms:0,depth:1,turbo:true}
+];
+
+/* ===== 利き生成 ===== */
+// アンパッサン対象：直前手が相手cPの2マス進み なら、その相手ポーンの位置を返す
+function enPassantTarget(b, p){
+  if(typeof kifu==='undefined' || !kifu.length) return null;
+  const last=kifu[kifu.length-1];
+  if(!last || last.drop || last.code!=='cP' || !last.from || !last.to) return null;
+  if(last.side===p) return null; // 相手の手であること
+  const fr=last.from[0], tr=last.to[0], tc=last.to[1];
+  if(Math.abs(tr-fr)!==2) return null; // 2マス進みのみ
+  // その相手ポーンが今 (tr,tc) に居て、盤上一致するか
+  const q=b[tr][tc];
+  if(!q || q.t!=='cP' || q.p!==-p) return null;
+  return { row:tr, col:tc };
+}
+function moves(b,r,c){
+  const pc=b[r][c]; if(!pc)return[];
+  const p=pc.p;
+  // はさみ駒：縦横に走るが空マスのみ（移動先の駒は直接取らない・飛び越えない）
+  if(pc.t==='HASA'){
+    const res=[];
+    for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){
+      let nr=r+dr, nc=c+dc;
+      while(nr>=0&&nr<9&&nc>=0&&nc<9){
+        if(b[nr][nc]) break;   // 駒があれば止まる
+        res.push([nr,nc]);
+        nr+=dr; nc+=dc;
+      }
+    }
+    return res;
+  }
+  // チェスポーンの特殊処理
+  if(pc.t==='cP'){
+    const res=[];
+    const dir = p===1? -1 : 1; // あなたは上(-1)、相手は下(+1)
+    const one=r+dir;
+    if(one>=0&&one<9 && !b[one][c]){
+      res.push([one,c]);
+      // 初期段なら2マス（両方空）
+      const startRow = p===1? 6 : 2;
+      const two=r+dir*2;
+      if(r===startRow && two>=0&&two<9 && !b[two][c]) res.push([two,c]);
+    }
+    // 斜め取り（通常）
+    for(const dc of [-1,1]){
+      const nr=r+dir, nc=c+dc;
+      if(nr<0||nr>8||nc<0||nc>8)continue;
+      const tg=b[nr][nc];
+      if(tg && tg.p!==p) res.push([nr,nc]);
+    }
+    // アンパッサン：直前に相手ポーンが2マス進んで真横に並んだ場合
+    const ep=enPassantTarget(b,p);
+    if(ep && ep.row===r){
+      for(const dc of [-1,1]){
+        if(ep.col===c+dc){
+          const nr=r+dir, nc=c+dc;
+          if(nr>=0&&nr<9&&nc>=0&&nc<9 && !b[nr][nc]) res.push([nr,nc]);
+        }
+      }
+    }
+    return res;
+  }
+  // p=1(あなた)は前=上(dr<0)のまま。p=-1(相手)は前後を反転（dr,dcを反転）
+  const flip = p===-1;
+  const res=[];
+  const vecs=moveVecs(pc.t);
+  for(const v of vecs){
+    let dr=v.dr, dc=v.dc;
+    if(flip){ dr=-dr; dc=-dc; }
+    if(v.r==='jump'){
+      const nr=r+dr, nc=c+dc;
+      if(nr<0||nr>8||nc<0||nc>8)continue;
+      const tg=b[nr][nc];
+      if(tg&&tg.p===p)continue;
+      res.push([nr,nc]);
+    } else {
+      const max = v.r===F? 99 : v.r;
+      let nr=r+dr, nc=c+dc, cnt=0;
+      while(nr>=0&&nr<9&&nc>=0&&nc<9&&cnt<max){
+        const tg=b[nr][nc];
+        if(tg&&tg.p===p)break;
+        res.push([nr,nc]);
+        if(tg)break; // 相手駒で止まる
+        nr+=dr; nc+=dc; cnt++;
+      }
+    }
+  }
+  // 範囲攻撃（大将・副将・角将・飛将・猛龍・飛鰐）：格下駒を飛び越えて進める
+  if(hasRangeAttack(pc.t)){
+    const myRank=pieceRank(pc.t);
+    for(const [ddr,ddc] of rangeAttackDirs(pc.t)){
+      let dr=ddr, dc=ddc;
+      if(flip){ dr=-dr; dc=-dc; }
+      let nr=r+dr, nc=c+dc;
+      while(nr>=0&&nr<9&&nc>=0&&nc<9){
+        const tg=b[nr][nc];
+        if(tg){
+          const tr2=pieceRank(tg.t);
+          if(isRankless(tg.t)){
+            // 格なし駒：飛び越えられるが取れない。素通りして先へ。（ranklessAsGeneral ON時はこの分岐に入らない）
+          } else if(tr2 > myRank){
+            res.push([nr,nc]); // 格下：飛び越え＆取れる
+          } else {
+            break; // 同格以上で止まる
+          }
+        } else { res.push([nr,nc]); }
+        nr+=dr; nc+=dc;
+      }
+    }
+  }
+  return res;
+}
+
+/* ===== 持ち駒を打てるマス ===== */
+function dropTargets(b,t,p){
+  const res=[];
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    if(b[r][c])continue;
+    // 行き所のない駒の禁止
+    const last = p===1?0:8, last2 = p===1?[0,1]:[7,8];
+    if(t==='hP'||t==='hL'||t==='P'||t==='L'){ if(r===last)continue; }
+    if(t==='hN'||t==='N'){ if(last2.includes(r))continue; }
+    // 二歩（ルールで有効時のみ）。本将棋の歩 hP は hP同士、大局の歩 P は P同士で判定。
+    if((t==='hP'||t==='P') && RULES.nifu){
+      let dbl=false;
+      for(let rr=0;rr<9;rr++){const q=b[rr][c]; if(q&&q.p===p&&q.t===t){dbl=true;break;}}
+      if(dbl)continue;
+    }
+    // オセロ駒：最低1枚裏返せる場所にしか置けない
+    if(t==='OTH' && othelloFlipCount(r,c,p,b)===0) continue;
+    res.push([r,c]);
+  }
+  return res;
+}
+// 着手mが手番pにとって合法か（手動・CPU共通の唯一の判定）。盤bを指定可（既定は実盤）。
+function isLegalMove(m, p, b){
+  const bd = b || board;
+  if(m.drop){
+    return dropTargets(bd, m.drop, p).some(([r,c])=>r===m.tr&&c===m.tc);
+  }
+  const pc = bd[m.fr] && bd[m.fr][m.fc];
+  if(!pc || pc.p!==p) return false;
+  return moves(bd, m.fr, m.fc).some(([r,c])=>r===m.tr&&c===m.tc);
+}
+
+/* ===== 成り判定 ===== */
+function inPromoZone(r,p){ return p===1? r<=2 : r>=6; }
+function mustPromote(t,r,p){
+  // 前進のみで最遠段だと動けなくなる駒は強制成り
+  if(t==='hP'||t==='hL'||t==='P'||t==='L'||t==='SG'||t==='I'||t==='D'||t==='GN'||t==='TG') return p===1? r===0 : r===8;
+  if(t==='hN'||t==='N') return p===1? r<=1 : r>=7;
+  return false;
+}
+// 成駒かどうか（TPの成専用コードは'+'始まり。base→成りで名前が変わる駒も成駒扱い）
+const PROM_CODES = (typeof TPROM!=='undefined') ? new Set(TPROM) : new Set();
+function isPromoted(t){ return t.charAt(0)==='+' || PROM_CODES.has(t); }
+// 取った駒を不成に戻す。成駒のときだけ元の駒へ。非成駒はそのまま。
+function demoteOf(t){ return (isPromoted(t) && DEMOTE[t]) ? DEMOTE[t] : t; }
+// 取られたら負けの駒（玉将 or 太子）。
+function isRoyal(t){ return t==='hK'||t==='K'||t==='CP'||t==='cK'; }
+// 指定プレイヤーのroyal駒（玉・太子）が盤上または持ち駒に残っているか
+function hasRoyal(p){
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) return true;
+  }
+  const cap = p===1?capYou:capEnemy;
+  if(cap.some(isRoyal)) return true;
+  return false;
+}
+// プレイヤー p が王手をかけられているか（pのroyalが相手の利きに入る）。royal位置も返す。
+function checkInfo(p){
+  const royals=[];
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) royals.push([r,c]);
+  }
+  if(!royals.length) return {check:false,cells:[]};
+  const key=new Set(royals.map(([r,c])=>r+'_'+c));
+  const hit=new Set();
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    const pc=board[r][c];
+    if(pc&&pc.p===-p){
+      for(const [tr,tc] of moves(board,r,c)){ if(key.has(tr+'_'+tc)) hit.add(tr+'_'+tc); }
+    }
+  }
+  return {check:hit.size>0, cells:[...hit]};
+}
+
+/* ===== 描画 ===== */
+function render(){
+  const bd=document.getElementById('board'); bd.innerHTML='';
+  let movable=new Set();
+  if(sel){
+    if(sel.drop){ dropTargets(board,sel.t,sel.p||turn).forEach(([r,c])=>movable.add(r+'_'+c)); }
+    else {
+      moves(board,sel.r,sel.c).forEach(([r,c])=>movable.add(r+'_'+c));
+      // キャスリング候補
+      const k=board[sel.r][sel.c];
+      if(k&&k.t==='cK'&&!k.moved){
+        for(const tc of [sel.c-2, sel.c+2]){
+          if(tc>=0&&tc<9 && castlingMove(sel.r,sel.c,sel.r,tc)) movable.add(sel.r+'_'+tc);
+        }
+      }
+    }
+  }
+  // 王手マス（超高速・リプレイ中はスキップ）。両者分チェック。
+  let checkCells=new Set();
+  const turbo = SPEEDS[speedIdx]&&SPEEDS[speedIdx].turbo;
+  if(!turbo && !gameOver){
+    for(const pl of [1,-1]){
+      const ci=checkInfo(pl);
+      if(ci.check) ci.cells.forEach(k=>checkCells.add(k));
+    }
+  }
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    const cell=document.createElement('div'); cell.className='cell';
+    const pc=board[r][c];
+    if(movable.has(r+'_'+c)){ cell.classList.add('movable'); if(pc)cell.classList.add('has-koma'); }
+    if(checkCells.has(r+'_'+c)) cell.classList.add('check');
+    if(sel&&!sel.drop&&sel.r===r&&sel.c===c)cell.classList.add('sel');
+    if(history.length){const lm=history[history.length-1].to; if(lm&&lm[0]===r&&lm[1]===c)cell.classList.add('last');}
+    const msIdx = multiSel.length? multiSel.findIndex(s=>s.r===r&&s.c===c) : -1;
+    if(msIdx>=0){
+      cell.classList.add('multisel');
+      const badge=document.createElement('div');
+      badge.className='ms-badge'; badge.textContent=msIdx+1;
+      cell.appendChild(badge);
+    }
+    if(pc){
+      if(pc.t==='OTH'){
+        // オセロ駒：丸い白黒ディスク（先手=黒、後手=白）
+        const disc=document.createElement('div');
+        disc.className='othello-disc '+(pc.p===1?'black':'white');
+        cell.appendChild(disc);
+        cell.onclick=()=>onCell(r,c);
+        bd.appendChild(cell);
+        continue;
+      }
+      const k=document.createElement('div');
+      const promoted = isPromoted(pc.t) || !!pc.o;
+      k.className='koma'+(pc.p===-1?' enemy':'')+(promoted?' promoted':'');
+      if(pc.o){ k.title='元：'+(KANJI[pc.o]||pc.o); }
+      fillKoma(k, pc.t);
+      if(pc.o){ const mk=document.createElement('div'); mk.className='orig-mark'; mk.textContent='成'; k.appendChild(mk); }
+      cell.appendChild(k);
+    }
+    cell.onclick=()=>onCell(r,c);
+    bd.appendChild(cell);
+  }
+  renderCap('capYou',capYou,1);
+  renderCap('capEnemy',capEnemy,-1);
+}
+function renderCap(id,arr,p){
+  const el=document.getElementById(id);
+  el.innerHTML='<span class="lbl">'+(p===1?'あなた':'相手')+'</span>';
+  const counts={};
+  arr.forEach(t=>counts[t]=(counts[t]||0)+1);
+  Object.keys(counts).forEach(t=>{
+    const d=document.createElement('div');
+    d.className='cap-koma'+(p===-1?' enemy':'');
+    if(sel&&sel.drop&&sel.t===t&&sel.p===p)d.classList.add('sel');
+    fillKoma(d, t);
+    if(counts[t]>1){const b=document.createElement('span');b.className='ct';b.textContent=counts[t];d.appendChild(b);}
+    if(editing){
+      // 編集中：タップで1枚減らす
+      d.title='タップで1枚減らす';
+      d.onclick=()=>{ const i=arr.indexOf(t); if(i>=0)arr.splice(i,1); render(); setStatus('持ち駒を1枚減らしました'); };
+    } else {
+      d.onclick=()=>{ if(gameOver||replaying||isAuto(p)||turn!==p)return;
+        sel=(sel&&sel.drop&&sel.t===t)?null:{drop:true,t,p}; render(); };
+    }
+    el.appendChild(d);
+  });
+  if(editing){
+    // 編集中：＋ボタンで持ち駒を追加
+    const add=document.createElement('div');
+    add.className='cap-koma cap-add'; add.textContent='＋';
+    add.title='持ち駒を追加';
+    add.onclick=()=>openCapPick(p);
+    el.appendChild(add);
+  }
+}
+
+/* ===== クリック処理 ===== */
+function onCell(r,c){
+  if(gameOver||pendingPromo)return;
+  if(editing){
+    if(multiSel.length>0){ toggleMultiSel(r,c); return; } // 複数選択中はトグル
+    openEditMenu(r,c); return;
+  }
+  if(isAuto(turn))return; // 手番側が自動なら操作不可
+  const me=turn; // 現在の手番のプレイヤー
+  const pc=board[r][c];
+  if(sel){
+    if(sel.drop){
+      if(dropTargets(board,sel.t,me).some(([a,b])=>a===r&&b===c)){
+        doDrop(sel.t,r,c,me); sel=null; afterPlayer(); return;
+      }
+    } else {
+      // キャスリング（キングを横2マス）
+      const cast=castlingMove(sel.r,sel.c,r,c);
+      if(cast){ doCastling(sel.r,sel.c,r,c,cast,me); sel=null; afterPlayer(); return; }
+      if(moves(board,sel.r,sel.c).some(([a,b])=>a===r&&b===c)){
+        attemptMove(sel.r,sel.c,r,c); return;
+      }
+    }
+    if(pc&&pc.p===me){ sel={r,c}; render(); return; }
+    sel=null; render(); return;
+  }
+  if(pc&&pc.p===me){ sel={r,c}; render(); }
+}
+
+function attemptMove(fr,fc,tr,tc){
+  const me=turn;
+  const pc=board[fr][fc];
+  // チェスポーンの昇格（最奥でクイーンに）
+  if(pc.t==='cP'){
+    // アンパッサン：斜め移動で移動先が空 → 横の相手ポーンを取る
+    if(fc!==tc && !board[tr][tc]){
+      const epPawn=board[fr][tc];
+      if(epPawn && epPawn.t==='cP' && epPawn.p!==me){
+        pushHistory();
+        recordKifu({side:me,from:[fr,fc],to:[tr,tc],code:'cP',cap:'cP',enpassant:true});
+        if(RULES.drops) (me===1?capYou:capEnemy).push('cP');
+        board[fr][tc]=null;            // 取られる相手ポーン
+        board[tr][tc]={t:'cP',p:me};
+        board[fr][fc]=null;
+        history[history.length-1].to=[tr,tc];
+        checkSennichite();
+        sel=null; afterPlayer(); return;
+      }
+    }
+    const lastRow = me===1? 0 : 8;
+    if(tr===lastRow){ doMoveChessPromo(fr,fc,tr,tc,'cQ',me); sel=null; afterPlayer(); return; }
+    doMove(fr,fc,tr,tc,false,me); sel=null; afterPlayer(); return;
+  }
+  const canP=canPromoteNow(pc.t)&&(inPromoZone(fr,me)||inPromoZone(tr,me));
+  if(canP){
+    if(mustPromote(pc.t,tr,me)){ doMove(fr,fc,tr,tc,true,me); sel=null; afterPlayer(); return; }
+    pendingPromo={fr,fc,tr,tc};
+    document.getElementById('promoModal').classList.add('show');
+    return;
+  }
+  doMove(fr,fc,tr,tc,false,me); sel=null; afterPlayer();
+}
+// チェスポーンを指定駒に昇格させて着手
+function doMoveChessPromo(fr,fc,tr,tc,toCode,p){
+  pushHistory();
+  const tg=board[tr][tc];
+  recordKifu({side:p,from:[fr,fc],to:[tr,tc],code:'cP',promoTo:toCode,cap:tg?tg.t:null});
+  const tookRoyal = tg && isRoyal(tg.t);
+  if(tg && RULES.drops){ (p===1?capYou:capEnemy).push(capturedCode(tg.t)); }
+  board[tr][tc]={t:toCode,p};
+  board[fr][fc]=null;
+  history[history.length-1].to=[tr,tc];
+  if(tookRoyal && !hasRoyal(-p)){ endGame(p); return; }
+  checkSennichite();
+}
+// キャスリング：cKが横に2マス動く手を検出。可能なら{rookFrom,rookTo}を返す。
+function castlingMove(fr,fc,tr,tc){
+  const k=board[fr][fc];
+  if(!k||k.t!=='cK'||k.moved) return null;
+  if(fr!==tr) return null;            // 同じ段
+  if(Math.abs(tc-fc)!==2) return null;// 横2マス
+  const dir = tc>fc? 1 : -1;
+  // ルークを探す（キングから dir 方向の端）
+  let rc = dir>0? 8 : 0;
+  const rook=board[fr][rc];
+  if(!rook||rook.t!=='cR'||rook.p!==k.p||rook.moved) return null;
+  // 間が空いているか（キングとルークの間）
+  let a=Math.min(fc,rc)+1, b=Math.max(fc,rc)-1;
+  for(let cc=a;cc<=b;cc++){ if(board[fr][cc]) return null; }
+  return { rookFrom:[fr,rc], rookTo:[fr, fc+dir] };
+}
+function doCastling(fr,fc,tr,tc,cast,p){
+  pushHistory();
+  recordKifu({side:p,from:[fr,fc],to:[tr,tc],code:'cK',castle:cast});
+  const k=board[fr][fc];
+  board[tr][tc]={...k,moved:true};
+  board[fr][fc]=null;
+  const rook=board[cast.rookFrom[0]][cast.rookFrom[1]];
+  board[cast.rookTo[0]][cast.rookTo[1]]={...rook,moved:true};
+  board[cast.rookFrom[0]][cast.rookFrom[1]]=null;
+  history[history.length-1].to=[tr,tc];
+  checkSennichite();
+}
+
+function capturedCode(piece){
+  // piece は駒オブジェクト {t, o?} またはコード文字列（後方互換）
+  const tCode = (typeof piece==='string')? piece : piece.t;
+  const orig  = (typeof piece==='object' && piece.o)? piece.o : null;
+  if(isRoyal(tCode)) return tCode;
+  if(RULES.keepPromoted) return tCode;     // 成ったまま持ち駒に
+  // 成る前(o)があればそれに、なければ成駒を元に戻す
+  return orig ? orig : demoteOf(tCode);
+}
+// 手動の移動も唯一の着手実体 applyMoveSilent を通す（CPUと共通化）。
+function doMove(fr,fc,tr,tc,promo,p){
+  applyMoveSilent(p, {fr,fc,tr,tc,promo:!!promo}, false);
+}
+// (r,c)に居る側pのはさみ駒が、4方向で自軍の駒との間に挟んだ敵駒を取る
+function hasamiCapture(r,c,p){
+  const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
+  for(const [dr,dc] of dirs){
+    const line=[];
+    let rr=r+dr, cc=c+dc;
+    let closed=false;
+    while(rr>=0&&rr<9&&cc>=0&&cc<9){
+      const q=board[rr][cc];
+      if(!q){ break; }            // 空マス → 挟めない
+      if(q.p===p){ closed=true; break; } // 自軍駒で閉じた → 挟み成立
+      line.push([rr,cc]);          // 敵駒
+      rr+=dr; cc+=dc;
+    }
+    if(closed && line.length>0){
+      for(const [er,ec] of line){
+        const cap=board[er][ec];
+        if(RULES.drops && !isRoyal(cap.t)) (p===1?capYou:capEnemy).push(capturedCode(cap));
+        board[er][ec]=null;
+      }
+    }
+  }
+}
+// 手動の打ちも唯一の着手実体 applyMoveSilent を通す（CPUと共通化）。
+function doDrop(t,r,c,p){
+  applyMoveSilent(p, {drop:t,tr:r,tc:c}, false);
+}
+// (r,c)に置いた側pのオセロ駒が、8方向で自軍オセロ駒との間に挟んだ相手駒を裏返す（自軍に）
+// 裏返し：成駒は成る前に戻し、未成は成り駒にする。成りが無い駒はそのまま。
+function flipPiece(pc, newP){
+  let nt=pc.t, no=pc.o;
+  if(pc.o){
+    // 成駒 → 成る前に戻す
+    nt=pc.o; no=undefined;
+  } else {
+    // 未成 → 成り駒に（成りがあれば）
+    const pr=promoteCode(pc.t);
+    if(pr){ no=pc.t; nt=pr; }
+  }
+  const np={t:nt, p:newP};
+  if(no) np.o=no;
+  return np;
+}
+// 裏返せる枚数を試算（実際には裏返さない）。打てるか判定用。
+function othelloFlipCount(r,c,p,bd){
+  const b=bd||board;
+  const dirs=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+  let total=0;
+  for(const [dr,dc] of dirs){
+    let n=0, rr=r+dr, cc=c+dc, closed=false;
+    while(rr>=0&&rr<9&&cc>=0&&cc<9){
+      const q=b[rr][cc];
+      if(!q) break;
+      if(q.p===p){ closed=true; break; } // 自軍の駒なら何でも閉じる
+      n++; rr+=dr; cc+=dc;
+    }
+    if(closed) total+=n;
+  }
+  return total;
+}
+function othelloFlip(r,c,p){
+  const dirs=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+  let flipped=0;
+  for(const [dr,dc] of dirs){
+    const line=[];
+    let rr=r+dr, cc=c+dc;
+    let closed=false;
+    while(rr>=0&&rr<9&&cc>=0&&cc<9){
+      const q=board[rr][cc];
+      if(!q){ break; }                    // 空マス → 挟めない
+      if(q.p===p){ closed=true; break; }  // 自軍の駒なら何でも挟み成立
+      line.push([rr,cc]);                  // 相手駒（種類問わず）
+      rr+=dr; cc+=dc;
+    }
+    if(closed && line.length>0){
+      for(const [er,ec] of line){
+        board[er][ec]=flipPiece(board[er][ec], p); // 裏返して自軍に
+        flipped++;
+      }
+    }
+  }
+  return flipped;
+}
+function pushHistory(){
+  if(gameStartSnap===null){
+    // 最初の着手の直前 = リプレイ起点
+    gameStartSnap={
+      board:board.map(row=>row.map(x=>x?{...x}:null)),
+      capYou:[...capYou], capEnemy:[...capEnemy], turn:turn
+    };
+  }
+  history.push({
+    board:board.map(row=>row.map(x=>x?{...x}:null)),
+    capYou:[...capYou], capEnemy:[...capEnemy], to:null
+  });
+}
+function recordKifu(rec){ kifu.push(rec); if(!(SPEEDS[speedIdx]&&SPEEDS[speedIdx].turbo)) updateReplayUI(); }
+
+/* ===== 成り選択 ===== */
+document.getElementById('promoYes').onclick=()=>resolvePromo(true);
+document.getElementById('promoNo').onclick=()=>resolvePromo(false);
+function resolvePromo(yes){
+  const {fr,fc,tr,tc}=pendingPromo;
+  document.getElementById('promoModal').classList.remove('show');
+  pendingPromo=null;
+  doMove(fr,fc,tr,tc,yes,1); sel=null; afterPlayer();
+}
+
+/* ===== 進行 ===== */
+function isAuto(side){ return side===1? autoYou : autoEnemy; }
+let autoTimer=null;
+function stopAutoLoop(){ if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; } }
+
+// 手番側へ進む。自動なら考えて指し、再帰的に次の手番へ。手動なら入力待ち。
+function nextTurn(){
+  stopAutoLoop();
+  render();
+  if(gameOver||replaying||editing)return;
+  if(isAuto(turn)){
+    const sp=SPEEDS[speedIdx];
+    if(!sp.turbo) setStatus((turn===1?'あなた(CPU)':'相手(CPU)')+'が考えています…','think');
+    else setStatus('超高速対局中… ⚡','think');
+    scheduleAutoStep();
+  } else {
+    const ck = checkInfo(turn).check;
+    const who = turn===1?'あなた':'相手';
+    if(ck) setStatus('⚠ '+who+'に王手！',  'lose');
+    else setStatus(who+'の番です');
+  }
+}
+function scheduleAutoStep(){
+  stopAutoLoop();
+  const sp=SPEEDS[speedIdx];
+  // 超高速は setTimeout(0) で詰めつつ、各手の間にイベントループを挟む（ボタン応答確保）
+  autoTimer=setTimeout(runAutoStep, sp.turbo?0:sp.ms);
+}
+let turboBatch=0;
+function runAutoStep(){
+  autoTimer=null;
+  if(gameOver||replaying||editing) return;
+  if(!isAuto(turn)) { nextTurn(); return; }
+  const sp=SPEEDS[speedIdx];
+  let m=cpuPickMove(turn);
+  if(!m){ endGame(-turn); return; }
+  // 手動と同一の合法判定を実盤で必ず通す。万一不正なら合法手から選び直す。
+  if(!isLegalMove(m, turn)){
+    const legal=genMoves(board,turn,capYou,capEnemy).filter(mm=>isLegalMove(mm,turn));
+    if(!legal.length){ endGame(-turn); return; }
+    m=legal[Math.floor(Math.random()*legal.length)];
+  }
+  applyMoveSilent(turn,m, sp.turbo); // 超高速は描画を間引く
+  if(gameOver){ render(); return; }
+  turn=-turn;
+  if(sp.turbo){
+    // 数手ごとに描画して体感速度を上げる
+    turboBatch++;
+    if(turboBatch%6===0) render();
+    scheduleAutoStep();
+  } else {
+    nextTurn();
+  }
+}
+// バックグラウンド復帰時に自動対局が止まっていたら再開
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden && !gameOver && !replaying && !editing && isAuto(turn) && !autoTimer){
+    scheduleAutoStep();
+  }
+});
+
+// 手動着手が完了したあとの共通処理
+function afterPlayer(){
+  if(gameOver){render();return;}
+  turn=-turn;
+  nextTurn();
+}
+
+/* ===== 相手AI：αβ探索 ===== */
+// 玉の位置を探す
+function findKing(b,p){
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){const pc=b[r][c];if(pc&&pc.p===p&&isRoyal(pc.t))return[r,c];}
+  return null;
+}
+function evaluate(b,cy,ce){ // 相手(-1)視点で大きいほど良い
+  let s=0;
+  const ek=findKing(b,-1), yk=findKing(b,1);
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    const pc=b[r][c]; if(!pc)continue;
+    let v=VALUE[pc.t];
+    if(pc.t!=='K'){
+      const adv = pc.p===-1? r : (8-r);       // 前進ボーナス
+      v += adv*7;
+      // 敵玉への接近ボーナス（攻撃性）
+      const tk = pc.p===-1? yk : ek;
+      if(tk){ const d=Math.abs(r-tk[0])+Math.abs(c-tk[1]); v += Math.max(0,16-d)*4; }
+    }
+    s += pc.p===-1? v : -v;
+  }
+  // 持ち駒（打てる駒は価値やや高め）
+  ce.forEach(t=>s += VALUE[t]*1.05);
+  cy.forEach(t=>s -= VALUE[t]*1.05);
+  // 玉の安全度：玉が盤端・囲いから出ているとペナルティ的に評価
+  return s;
+}
+function dropTargetsRaw(b,t,p){ return dropTargets(b,t,p); } // 後方互換のため残置（中身はdropTargetsに統合）
+function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻り値 {nb,ncy,nce,king}
+  const nb=b.map(row=>row.map(x=>x?{...x}:null));
+  const ncy=[...cy], nce=[...ce];
+  const myCap = p===-1? nce : ncy;
+  let king=false;
+  // コピー盤nb上でオセロ裏返しを行う（8方向・全種類を自軍に裏返す。royalを裏返したらking扱い）
+  function simOthelloFlip(r,c,side){
+    const dirs=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+    for(const [dr,dc] of dirs){
+      const line=[]; let rr=r+dr, cc=c+dc, closed=false;
+      while(rr>=0&&rr<9&&cc>=0&&cc<9){
+        const q=nb[rr][cc];
+        if(!q) break;
+        if(q.p===side){ closed=true; break; }
+        line.push([rr,cc]); rr+=dr; cc+=dc;
+      }
+      if(closed && line.length>0){
+        for(const [er,ec] of line){
+          if(isRoyal(nb[er][ec].t)) king=true; // 相手royalを裏返し＝勝ち筋
+          nb[er][ec]=flipPiece(nb[er][ec], side);
+        }
+      }
+    }
+  }
+  // コピー盤nb上ではさみ取りを行う（4方向・挟んだ敵駒を取る。royalを取ったらking扱い）
+  function simHasamiCapture(r,c,side){
+    const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
+    for(const [dr,dc] of dirs){
+      const line=[]; let rr=r+dr, cc=c+dc, closed=false;
+      while(rr>=0&&rr<9&&cc>=0&&cc<9){
+        const q=nb[rr][cc];
+        if(!q) break;
+        if(q.p===side){ closed=true; break; }
+        line.push([rr,cc]); rr+=dr; cc+=dc;
+      }
+      if(closed && line.length>0){
+        for(const [er,ec] of line){
+          const cap=nb[er][ec];
+          if(isRoyal(cap.t)) king=true;
+          else if(RULES.drops) myCap.push(capturedCode(cap));
+          nb[er][ec]=null;
+        }
+      }
+    }
+  }
+  if(m.drop){
+    nb[m.tr][m.tc]={t:m.drop,p};
+    const i=myCap.indexOf(m.drop); if(i>=0)myCap.splice(i,1);
+    if(m.drop==='OTH') simOthelloFlip(m.tr,m.tc,p); // 打ったオセロの裏返しを読みに反映
+  } else {
+    const pc=nb[m.fr][m.fc]; const tg=nb[m.tr][m.tc];
+    if(tg){
+      if(isRoyal(tg.t)) king=true;
+      else { myCap.push(demoteOf(tg.t)); }
+    }
+    const promo = m.promo!==undefined ? m.promo
+      : (canPromoteNow(pc.t) && (inPromoZone(m.fr,p)||inPromoZone(m.tr,p)));
+    nb[m.tr][m.tc]={t:promo?(promoteCode(pc.t)||pc.t):pc.t,p};
+    nb[m.fr][m.fc]=null;
+    if(pc.t==='HASA') simHasamiCapture(m.tr,m.tc,p); // はさみ取りを読みに反映
+  }
+  return {nb,ncy,nce,king};
+}
+
+// 着手生成（成り/不成を別手として展開、持ち駒打ちも含む）
+function genMoves(b,p,cy,ce){
+  const list=[];
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    const pc=b[r][c];
+    if(pc&&pc.p===p){
+      moves(b,r,c).forEach(([tr,tc])=>{
+        const canP=canPromoteNow(pc.t)&&(inPromoZone(r,p)||inPromoZone(tr,p));
+        if(canP){
+          list.push({fr:r,fc:c,tr,tc,promo:true});
+          if(!mustPromote(pc.t,tr,p)) list.push({fr:r,fc:c,tr,tc,promo:false});
+        } else {
+          list.push({fr:r,fc:c,tr,tc,promo:false});
+        }
+      });
+    }
+  }
+  const cap = p===-1? ce : cy;
+  if(RULES.drops){
+    [...new Set(cap)].forEach(t=>{
+      dropTargets(b,t,p).forEach(([tr,tc])=>list.push({drop:t,tr,tc}));
+    });
+  }
+  return list;
+}
+
+// αβ探索：手番sideから見て、相手(-1)視点の評価を返す
+const MATE=1e7;
+function search(b,cy,ce,depth,side,alpha,beta){
+  if(depth===0) return evaluate(b,cy,ce);
+  const list=genMoves(b,side,cy,ce);
+  if(!list.length){ // 手詰まり＝玉を取られる前提でその側の負け
+    return side===-1? -MATE : MATE;
+  }
+  if(side===-1){ // 相手＝最大化
+    let val=-Infinity;
+    for(const m of list){
+      const s=simulate(b,m,-1,cy,ce);
+      if(s.king){ return MATE+depth; } // あなたの玉を取れる→即勝ち（早いほど高評価）
+      val=Math.max(val,search(s.nb,s.ncy,s.nce,depth-1,1,alpha,beta));
+      alpha=Math.max(alpha,val);
+      if(alpha>=beta)break;
+    }
+    return val;
+  } else { // あなた＝最小化
+    let val=Infinity;
+    for(const m of list){
+      const s=simulate(b,m,1,cy,ce);
+      if(s.king){ return -MATE-depth; } // 相手の玉を取れる→相手にとって即負け
+      val=Math.min(val,search(s.nb,s.ncy,s.nce,depth-1,-1,alpha,beta));
+      beta=Math.min(beta,val);
+      if(alpha>=beta)break;
+    }
+    return val;
+  }
+}
+
+// side=-1(相手) or 1(あなた) の最善手を選ぶ。評価は常に相手(-1)視点なので
+// side=-1は最大化、side=1は最小化したい手を選ぶ。
+function cpuPickMove(side, depth){
+  const list=genMoves(board,side,capYou,capEnemy);
+  if(!list.length) return null;
+  const DEPTH = depth!=null ? depth : (SPEEDS[speedIdx].depth||3);
+  // 取りの大きい手を先に（αβ効率化）
+  list.sort((a,b2)=>{
+    const ca=board[a.tr]&&board[a.tr][a.tc]?VALUE[board[a.tr][a.tc].t]:0;
+    const cb=board[b2.tr]&&board[b2.tr][b2.tc]?VALUE[board[b2.tr][b2.tc].t]:0;
+    return cb-ca;
+  });
+  // 超高速(depth<=1)では枝刈り前にトップNだけ評価して時間短縮
+  const cand = DEPTH<=1 ? list.slice(0, Math.min(list.length, 24)) : list;
+  let best=null, bestScore = side===-1? -Infinity : Infinity;
+  for(const m of cand){
+    const s=simulate(board,m,side,capYou,capEnemy);
+    if(s.king){ return m; } // 玉が取れる手は即採用
+    const raw = DEPTH<=0 ? evaluate(s.nb,s.ncy,s.nce)
+                         : search(s.nb,s.ncy,s.nce,DEPTH,-side,-Infinity,Infinity);
+    const sc=raw + (Math.random()*8-4);
+    if(side===-1){ if(sc>bestScore){bestScore=sc;best=m;} }
+    else { if(sc<bestScore){bestScore=sc;best=m;} }
+  }
+  return best||cand[0]||list[0];
+}
+
+// side の手を盤に反映。玉を取ったらその場で勝敗確定。silent=trueで描画抑制。
+function applyMove(side,m){ applyMoveSilent(side,m,false); }
+function applyMoveSilent(side,m,silent){
+  pushHistory();
+  const cap = side===-1? capEnemy : capYou;
+  if(m.drop){
+    recordKifu({side,drop:m.drop,to:[m.tr,m.tc]});
+    board[m.tr][m.tc]={t:m.drop,p:side};
+    cap.splice(cap.indexOf(m.drop),1);
+    if(m.drop==='OTH'){ othelloFlip(m.tr,m.tc,side); } // 打ったオセロで挟んだ相手駒を裏返す
+  }else{
+    const pc=board[m.fr][m.fc];
+    const tg=board[m.tr][m.tc];
+    // チェスポーン昇格判定
+    const cpawnPromo = pc.t==='cP' && (m.tr===(side===1?0:8));
+    const promo0 = cpawnPromo ? false : (m.promo!==undefined ? m.promo
+      : (canPromoteNow(pc.t)&&(inPromoZone(m.fr,side)||inPromoZone(m.tr,side))));
+    recordKifu({side,from:[m.fr,m.fc],to:[m.tr,m.tc],code:pc.t,promo:!!promo0,promoTo:cpawnPromo?'cQ':undefined,cap:tg?tg.t:null});
+    const tookRoyal = tg && isRoyal(tg.t);
+    if(tg && RULES.drops){ cap.push(capturedCode(tg)); }
+    const willPromo = !cpawnPromo && promo0 && promoteCode(pc.t);
+    const newCode = cpawnPromo ? 'cQ' : (willPromo?promoteCode(pc.t):pc.t);
+    const np={t:newCode,p:side};
+    if(willPromo) np.o = pc.o || pc.t;
+    else if(pc.o) np.o = pc.o;
+    if(pc.t==='cK'||pc.t==='cR') np.moved=true;
+    // 範囲攻撃：間の格下駒を一掃
+    if(hasRangeAttack(pc.t) && (m.fr===m.tr||m.fc===m.tc||Math.abs(m.tr-m.fr)===Math.abs(m.tc-m.fc))){
+      const sr=Math.sign(m.tr-m.fr), sc=Math.sign(m.tc-m.fc);
+      let rr=m.fr+sr, cc=m.fc+sc;
+      while(rr!==m.tr||cc!==m.tc){
+        const mid=board[rr][cc];
+        if(mid && !isRankless(mid.t) && pieceRank(mid.t)>pieceRank(pc.t)){
+          if(RULES.drops && mid.p!==side && !isRoyal(mid.t)) cap.push(capturedCode(mid));
+          board[rr][cc]=null;
+        }
+        rr+=sr; cc+=sc;
+      }
+    }
+    board[m.tr][m.tc]=np;
+    board[m.fr][m.fc]=null;
+    if(pc.t==='HASA'){ hasamiCapture(m.tr,m.tc,side); }
+    if(tookRoyal && !hasRoyal(-side)){
+      history[history.length-1].to=[m.tr,m.tc]; render(); endGame(side); return;
+    }
+    if(!hasRoyal(-side)){ history[history.length-1].to=[m.tr,m.tc]; render(); endGame(side); return; }
+  }
+  history[history.length-1].to=[m.tr,m.tc];
+  if(!silent) render();
+  checkSennichite();
+}
+
+/* ===== 終了 ===== */
+function endGame(winner){
+  gameOver=true; render(); updateReplayUI();
+  if(winner===1)setStatus('▲ あなたの勝ち！相手の王を攻め取りました','win');
+  else setStatus('△ あなたの負け…王を取られました','lose');
+}
+function setStatus(t,cls){
+  const s=document.getElementById('status');
+  s.textContent=t; s.className='status'+(cls?' '+cls:'');
+}
+// 局面ハッシュ（盤＋手番＋持ち駒）
+function boardHash(){
+  let s='';
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){const pc=board[r][c]; s+= pc?(pc.t+(pc.p>0?'+':'-')):'.'; s+=',';}
+  s+='|'+turn+'|'+[...capYou].sort().join('')+'|'+[...capEnemy].sort().join('');
+  return s;
+}
+function checkSennichite(){
+  if(!RULES.sennichite || gameOver) return;
+  const h=boardHash();
+  posCount[h]=(posCount[h]||0)+1;
+  if(posCount[h]>=4){
+    gameOver=true; render(); updateReplayUI();
+    setStatus('千日手：引き分け','think');
+  }
+}
+
+/* ===== 棋譜リプレイ ===== */
+function snapRestore(snap){
+  board=snap.board.map(row=>row.map(x=>x?{...x}:null));
+  capYou=[...snap.capYou]; capEnemy=[...snap.capEnemy];
+}
+// kifu[i] を現在の盤へ適用（表示専用。勝敗判定なし）
+function applyKifuStep(rec){
+  if(rec.drop){
+    board[rec.to[0]][rec.to[1]]={t:rec.drop,p:rec.side};
+    const cap=rec.side===1?capYou:capEnemy;
+    const idx=cap.indexOf(rec.drop); if(idx>=0)cap.splice(idx,1);
+  } else if(rec.castle){
+    // キャスリング
+    const [fr,fc]=rec.from, [tr,tc]=rec.to;
+    const k=board[fr][fc];
+    board[tr][tc]={...k,moved:true}; board[fr][fc]=null;
+    const rook=board[rec.castle.rookFrom[0]][rec.castle.rookFrom[1]];
+    if(rook){ board[rec.castle.rookTo[0]][rec.castle.rookTo[1]]={...rook,moved:true}; board[rec.castle.rookFrom[0]][rec.castle.rookFrom[1]]=null; }
+  } else if(rec.enpassant){
+    const [fr,fc]=rec.from, [tr,tc]=rec.to;
+    if(RULES.drops)(rec.side===1?capYou:capEnemy).push('cP');
+    board[fr][tc]=null; board[tr][tc]={t:'cP',p:rec.side}; board[fr][fc]=null;
+  } else {
+    const [fr,fc]=rec.from, [tr,tc]=rec.to;
+    if(rec.cap && RULES.drops){
+      (rec.side===1?capYou:capEnemy).push(capturedCode(rec.cap));
+    }
+    const newCode = rec.promoTo ? rec.promoTo : (rec.promo?(promoteCode(rec.code)||rec.code):rec.code);
+    board[tr][tc]={t:newCode, p:rec.side};
+    board[fr][fc]=null;
+  }
+}
+// 起点から n 手目まで適用して描画
+function gotoStep(n){
+  if(!gameStartSnap) return;
+  n=Math.max(0,Math.min(n,kifu.length));
+  snapRestore(gameStartSnap);
+  let lastTo=null;
+  for(let i=0;i<n;i++){ applyKifuStep(kifu[i]); lastTo=kifu[i].to; }
+  replayIdx=n;
+  // 直前手ハイライト用にhistoryを偽装
+  history=lastTo?[{to:lastTo}]:[];
+  sel=null; render();
+  updateReplayUI();
+}
+let savedLive=null;
+function enterReplay(){
+  if(!kifu.length){ setStatus('まだ棋譜がありません'); return; }
+  if(!replaying){
+    // 現在の対局状態を退避
+    savedLive={
+      board:board.map(row=>row.map(x=>x?{...x}:null)),
+      capYou:[...capYou], capEnemy:[...capEnemy],
+      history:history.map(h=>({...h})), turn:turn, gameOver:gameOver
+    };
+  }
+  replaying=true;
+  stopAutoLoop();
+  document.body.classList.add('replay-active');
+  gotoStep(kifu.length); // まず最終局面
+  setStatus('リプレイモード：再生・コマ送りで観戦');
+}
+function exitReplay(){
+  if(replaying && savedLive){
+    board=savedLive.board.map(row=>row.map(x=>x?{...x}:null));
+    capYou=[...savedLive.capYou]; capEnemy=[...savedLive.capEnemy];
+    history=savedLive.history.map(h=>({...h})); turn=savedLive.turn; gameOver=savedLive.gameOver;
+    savedLive=null;
+  }
+  replaying=false; pauseReplay();
+  document.body.classList.remove('replay-active');
+  updateReplayUI();
+}
+function playReplay(){
+  if(!kifu.length) return;
+  if(replayIdx>=kifu.length) gotoStep(0); // 最後なら頭出し
+  pauseReplay();
+  document.getElementById('rpPlay').textContent='⏸ 停止';
+  const tick=()=>{
+    if(replayIdx>=kifu.length){ pauseReplay(); return; }
+    gotoStep(replayIdx+1);
+  };
+  const base=650; // 1倍速で1手650ms
+  replayTimer=setInterval(tick, Math.max(40, base/replaySpeed));
+}
+function pauseReplay(){
+  if(replayTimer){ clearInterval(replayTimer); replayTimer=null; }
+  const b=document.getElementById('rpPlay'); if(b) b.textContent='▶ 再生';
+}
+function updateReplayUI(){
+  const cnt=document.getElementById('replayCount');
+  const seek=document.getElementById('rpSeek');
+  if(cnt) cnt.textContent = (replaying? replayIdx+'/'+kifu.length : kifu.length)+'手';
+  if(seek){ seek.max=kifu.length; seek.value=replaying?replayIdx:kifu.length; }
+}
+// リプレイUI配線
+(function wireReplay(){
+  const sp=document.getElementById('rpSpeed'), spv=document.getElementById('rpSpeedVal');
+  if(sp){
+    sp.oninput=()=>{ replaySpeed=+sp.value; spv.textContent=replaySpeed+'倍';
+      if(replayTimer){ playReplay(); } };
+  }
+  const seek=document.getElementById('rpSeek');
+  if(seek){ seek.oninput=()=>{ if(!replaying)enterReplay(); pauseReplay(); gotoStep(+seek.value); }; }
+  const bind=(id,fn)=>{const e=document.getElementById(id); if(e)e.onclick=fn;};
+  bind('rpPlay',()=>{ if(!replaying)enterReplay();
+    if(replayTimer) pauseReplay(); else playReplay(); });
+  bind('rpPrev',()=>{ if(!replaying)enterReplay(); pauseReplay(); gotoStep(replayIdx-1); });
+  bind('rpNext',()=>{ if(!replaying)enterReplay(); pauseReplay(); gotoStep(replayIdx+1); });
+  bind('rpStart',()=>{ if(!replaying)enterReplay(); pauseReplay(); gotoStep(0); });
+  bind('rpEnd',()=>{ if(!replaying)enterReplay(); pauseReplay(); gotoStep(kifu.length); });
+  bind('rpExit',()=>{ exitReplay(); render();
+    if(!gameOver&&!editing&&isAuto(turn)) nextTurn();
+    else setStatus(gameOver?'':'対局に戻りました'); });
+})();
+
+
+/* ===== ボタン ===== */
+function refreshAutoLabels(){
+  const by=document.getElementById('autoYou');
+  const be=document.getElementById('autoEnemy');
+  const sp=document.getElementById('speed');
+  by.textContent='あなた：'+(autoYou?'CPU':'手動');
+  by.classList.toggle('on',autoYou);
+  be.textContent='相手：'+(autoEnemy?'CPU':'手動');
+  be.classList.toggle('on',autoEnemy);
+  sp.textContent='速度：'+SPEEDS[speedIdx].n;
+}
+
+// keepBoard未指定(初回)は本将棋配置。新規対局ボタンは盤維持で呼ぶ。
+function newGame(keepBoard){
+  exitReplay(); stopAutoLoop();
+  editing=false; multiSel=[];
+  initState(keepBoard); refreshAutoLabels(); refreshEditLabel(); updateMultiBar(); updateEditBar(); updateReplayUI(); nextTurn();
+}
+// 新規対局：今の駒配置を維持して指し直し
+document.getElementById('reset').onclick=()=>newGame(true);
+// 初期配置（本将棋）に戻す
+document.getElementById('resetBoard').onclick=()=>{
+  if(replaying) exitReplay();
+  newGame(false);
+  setStatus('本将棋の初期配置に戻しました');
+};
+
+document.getElementById('autoYou').onclick=()=>{
+  if(replaying)return;
+  autoYou=!autoYou; refreshAutoLabels(); stopAutoLoop();
+  if(!gameOver&&!editing){ sel=null; nextTurn(); } else render();
+};
+document.getElementById('autoEnemy').onclick=()=>{
+  if(replaying)return;
+  autoEnemy=!autoEnemy; refreshAutoLabels(); stopAutoLoop();
+  if(!gameOver&&!editing){ nextTurn(); } else render();
+};
+document.getElementById('speed').onclick=()=>{
+  speedIdx=(speedIdx+1)%SPEEDS.length; refreshAutoLabels();
+  if(autoTimer){ scheduleAutoStep(); } // 待機中なら新速度で再スケジュール
+};
+
+/* ===== 編集モード ===== */
+function refreshEditLabel(){
+  const b=document.getElementById('editMode');
+  b.textContent='編集モード：'+(editing?'ON':'OFF');
+  b.classList.toggle('on',editing);
+}
+document.getElementById('editMode').onclick=()=>{
+  if(replaying) exitReplay();
+  editing=!editing; refreshEditLabel(); sel=null; multiSel=[]; updateMultiBar(); stopAutoLoop();
+  updateEditBar();
+  if(editing){ render(); setStatus('編集中：駒をタップ（説明／変更／複数選択）'); }
+  else {
+    // 編集後の配置をカスタム初期配置として保存
+    customStart = {
+      board: board.map(row=>row.map(x=>x?{...x}:null)),
+      capYou: [...capYou], capEnemy: [...capEnemy]
+    };
+    setStatus('編集を終了しました（この配置を記憶しました）'); nextTurn();
+  }
+};
+let customStart=null; // 編集で作った任意配置
+
+// 駒選択モーダルのグリッドを一度だけ生成
+// 格ごとの色（明るい色, 濃いめの色）。一覧の駒色と説明タグで共通使用。
+function rankColorPair(t){
+  const map={
+    1:['#ffd1e0','#ff6b9d'], // 玉将格 ピンク
+    2:['#ffe0b8','#ff9a2e'], // 大将 オレンジ
+    3:['#fff0c2','#f0b400'], // 副将 金
+    4:['#c8f5e0','#2ec988'], // 角将級 緑
+    5:['#d8e2ff','#5b82e8'], // 一般 青
+  };
+  return map[pieceRank(t)] || ['#e4dcf0','#9a86c4']; // 格なし 紫
+}
+function rankColor(t){ return rankColorPair(t)[1]; }
+function mkPickBtn(t,container){
+  const lines=splitLabel(t);
+  const maxLen=Math.max(...lines.map(s=>[...s].length));
+  const d=document.createElement('div');
+  d.className='pick-koma'+(maxLen>=3||lines.length>=3?' k3':(maxLen===2||lines.length>=2)?' k2':'');
+  for(const ln of lines){
+    const row=document.createElement('span');
+    row.style.flex='0 0 100%'; row.style.textAlign='center';
+    row.textContent=ln; d.appendChild(row);
+  }
+  // 格ごとに駒の色を変える（明るくはっきり）
+  const [c1,c2]=rankColorPair(t);
+  d.style.background='linear-gradient(158deg,'+c1+','+c2+')';
+  d.style.borderColor=c2;
+  d.style.color='#1a1330';
+  d.onclick=()=>showPreview(t);
+  d.dataset.code=t;
+  container.appendChild(d);
+}
+function buildPickGrid(){
+  const gb=document.getElementById('pickBasic');
+  const gd=document.getElementById('pickDaikyoku');
+  const gc=document.getElementById('pickChess');
+  const gh=document.getElementById('pickHasami');
+  const go=document.getElementById('pickOthello');
+  const lblB=document.getElementById('lblBasic');
+  const lblD=document.getElementById('lblDaikyoku');
+  const lblC=document.getElementById('lblChess');
+  const lblH=document.getElementById('lblHasami');
+  const lblO=document.getElementById('lblOthello');
+  gb.innerHTML=''; gd.innerHTML=''; if(gc)gc.innerHTML=''; if(gh)gh.innerHTML=''; if(go)go.innerHTML='';
+  const mode=currentSortMode();
+  const basicSet=new Set(BASIC_LIST);
+  let daikyoku=TBASE.filter(t=>!basicSet.has(t));
+  if(typeof TPROM!=='undefined') daikyoku=daikyoku.concat(TPROM);
+  const chess = (typeof CHESS_LIST!=='undefined')? CHESS_LIST.slice() : [];
+  const hasami = (typeof HASAMI_LIST!=='undefined')? HASAMI_LIST.slice() : [];
+  const othello = (typeof OTHELLO_LIST!=='undefined')? OTHELLO_LIST.slice() : [];
+  const setDisp=(lbl,show)=>{ if(lbl&&lbl.parentElement) lbl.parentElement.style.display=show?'':'none'; };
+
+  if(mode==='hist_pick'||mode==='hist_view'){
+    const all=BASIC_LIST.concat(daikyoku).concat(chess).concat(hasami).concat(othello);
+    const sorted=sortList(all, mode);
+    if(lblB) lblB.textContent = (mode==='hist_pick'?'選択した順':'見た順');
+    setDisp(lblD,false); setDisp(lblC,false); setDisp(lblH,false); setDisp(lblO,false);
+    if(sorted.length===0){
+      const p=document.createElement('div'); p.style.cssText='color:#b3a8d8;font-size:.8rem;padding:6px;';
+      p.textContent = (mode==='hist_pick'?'まだ駒を選んでいません':'まだ駒を見ていません');
+      gb.appendChild(p);
+    } else {
+      sorted.forEach(t=>mkPickBtn(t,gb));
+    }
+  } else {
+    if(lblB) lblB.textContent='本将棋';
+    setDisp(lblD,true); setDisp(lblC,true); setDisp(lblH,true); setDisp(lblO,true);
+    sortList(BASIC_LIST, mode).forEach(t=>mkPickBtn(t,gb));
+    sortList(daikyoku, mode).forEach(t=>mkPickBtn(t,gd));
+    if(gc) sortList(chess, mode).forEach(t=>mkPickBtn(t,gc));
+    if(gh) sortList(hasami, mode).forEach(t=>mkPickBtn(t,gh));
+    if(go) sortList(othello, mode).forEach(t=>mkPickBtn(t,go));
+  }
+}
+// ソート選択で再構築（スクロールは先頭へ）
+(function(){ const s=document.getElementById('sortSel'); if(s) s.onchange=()=>{ buildPickGrid(); const sc=document.getElementById('pickScroll'); if(sc)sc.scrollTop=0; }; })();
+
+// 編集メニュー（説明 / 変更 / 複数選択追加）
+let menuCell=null;
+function openEditMenu(r,c){
+  const pc=board[r][c];
+  menuCell={r,c};
+  document.getElementById('editMenuTitle').textContent =
+    pc ? (KANJI[pc.t]+'（'+(pc.p===1?'あなた':'相手')+'）') : '空きマス';
+  document.getElementById('emInfo').style.display = pc?'':'none';
+  document.getElementById('editMenuModal').classList.add('show');
+}
+function closeEditMenu(){ document.getElementById('editMenuModal').classList.remove('show'); menuCell=null; }
+document.getElementById('emCancel').onclick=closeEditMenu;
+document.getElementById('editMenuModal').onclick=(e)=>{ if(e.target.id==='editMenuModal') closeEditMenu(); };
+document.getElementById('emInfo').onclick=()=>{
+  const pc=menuCell&&board[menuCell.r][menuCell.c]; closeEditMenu();
+  if(pc){ infoOnly=true; editCell=null; openPickList(); showPreview(pc.t); }
+};
+document.getElementById('emChange').onclick=()=>{
+  if(!menuCell){closeEditMenu();return;}
+  editCell={...menuCell}; infoOnly=false; closeEditMenu(); openPickList();
+};
+document.getElementById('emSelectAdd').onclick=()=>{
+  if(menuCell){ toggleMultiSel(menuCell.r,menuCell.c); } closeEditMenu();
+};
+
+// 複数選択
+function toggleMultiSel(r,c){
+  const i=multiSel.findIndex(s=>s.r===r&&s.c===c);
+  if(i>=0) multiSel.splice(i,1); else multiSel.push({r,c});
+  render();
+  if(multiSel.length>0) setStatus('複数選択中：'+multiSel.length+'マス／別マスをタップで追加、下のボタンで変更');
+  else setStatus('編集中：駒をタップ');
+  updateMultiBar();
+}
+function clearMultiSel(){ multiSel=[]; updateMultiBar(); render(); }
+
+// 駒選択リストを開く（editCell or multiSel 対象）
+let infoOnly=false, previewType=null;
+let capPickSide=0; // 持ち駒追加モード（0=オフ, 1/-1=対象陣営）
+function openCapPick(p){
+  capPickSide=p; editCell=null; multiSel=[]; infoOnly=false;
+  document.getElementById('pickTitle').textContent=(p===1?'あなた':'相手')+'の持ち駒に追加';
+  showList();
+  document.getElementById('pickModal').classList.add('show');
+}
+function openPickList(){
+  capPickSide=0;
+  const target = multiSel.length>0 ? ('選択した'+multiSel.length+'マスを変更')
+    : (editCell ? ((board[editCell.r][editCell.c]?'駒を変更':'空マスに駒を置く')) : '駒の図鑑');
+  document.getElementById('pickTitle').textContent = infoOnly?'駒の説明':target;
+  showList();
+  document.getElementById('pickModal').classList.add('show');
+}
+function openPick(r,c){ editCell={r,c}; infoOnly=false; openPickList(); }
+
+function showList(){
+  document.getElementById('pickList').style.display='';
+  document.getElementById('pickPreview').style.display='none';
+}
+function showPreview(t){
+  previewType=t;
+  pushHist(viewHistory,t); // 見た順
+  // スクロール位置を保持
+  const sc=document.getElementById('pickScroll'); if(sc) lastScroll=sc.scrollTop;
+  document.getElementById('pickList').style.display='none';
+  document.getElementById('pickPreview').style.display='flex';
+  const pr = promoteCode(t);
+  const ename = ENAME[t] ? '　'+ENAME[t] : '';
+  document.getElementById('pvName').textContent = dispName(t) + ename
+    + (pr ? '（成ると'+KANJI[pr]+'）' : '');
+  const rankNames={1:'第1位（玉将・太子格）',2:'第2位（大将）',3:'第3位（副将）',4:'第4位（角将・飛将級）',5:'一般',Infinity:'格なし（範囲攻撃で取れない）'};
+  const rk=pieceRank(t);
+  const pm=document.getElementById('pvMove');
+  pm.innerHTML='強さ '+piecePower(t)+'｜格 <span class="rank-tag" style="background:'+rankColor(t)+'">'+(rankNames[rk]||'一般')+'</span>｜'+moveSummary(t).replace(/</g,'&lt;');
+  let extra = (typeof DESC!=='undefined' && DESC[t]) ? DESC[t] : '';
+  const fl = (TP[t] && TP[t].fl) || [];
+  const notes=[];
+  if(hasRangeAttack(t)) notes.push('範囲攻撃：自分より格下の駒なら何枚でも飛び越えて、その先の味方駒も含めまとめて取れる');
+  else if(fl.some(f=>f.startsWith('range'))) notes.push('範囲攻撃：格下の駒を飛び越えてまとめて取れる');
+  if(fl.includes('hook')) notes.push('鉤行：直進後に直角に曲がって進める（近似実装）');
+  if(fl.includes('area2')) notes.push('獅子型：1手で最大2マス動ける（近似実装）');
+  if(fl.includes('igui')) notes.push('居喰い：動かずに隣の駒を取れる（近似実装）');
+  if(isRoyal(t)) notes.push('王の格：取られて味方の玉・太子・キングが全ていなくなると負け');
+  document.getElementById('pvDesc').textContent = [extra, ...notes].filter(Boolean).join(' / ');
+  drawMiniMoves(t);
+  // 成り先ボタン（成りがある駒のみ）
+  const pb=document.getElementById('pvPromo');
+  if(pr){ pb.style.display=''; pb.textContent='成り後（'+KANJI[pr]+'）を見る ⤵'; pb.onclick=()=>showPreview(pr); }
+  else pb.style.display='none';
+  // 説明のみモード or 配置モードで確定ボタンの出し方を変える
+  const conf=document.getElementById('pvConfirm');
+  conf.style.display = infoOnly ? 'none' : '';
+  // 持ち駒追加モードなら枚数選択を表示
+  const qtyRow=document.getElementById('pvQtyRow');
+  if(capPickSide!==0){
+    pvQty=1; document.getElementById('pvQty').textContent='1';
+    qtyRow.style.display='flex';
+    conf.textContent='持ち駒に追加';
+  } else {
+    qtyRow.style.display='none';
+    conf.textContent='この駒にする';
+  }
+}
+let pvQty=1;
+let lastScroll=0;
+
+function drawMiniMoves(t){
+  const N=7, C=3;
+  const grid=Array.from({length:N},()=>Array(N).fill(''));
+  for(const v of moveVecs(t)){
+    if(v.r==='jump'){
+      const rr=C+v.dr, cc=C+v.dc;
+      if(rr>=0&&rr<N&&cc>=0&&cc<N) grid[rr][cc]='jump';
+    } else {
+      const max = v.r===Infinity? 3 : Math.min(v.r,3);
+      for(let k=1;k<=max;k++){
+        const rr=C+v.dr*k, cc=C+v.dc*k;
+        if(rr<0||rr>=N||cc<0||cc>=N)break;
+        grid[rr][cc] = (v.r===Infinity)?'run':(grid[rr][cc]||'move');
+      }
+    }
+  }
+  const mini=document.getElementById('pvMini');
+  mini.innerHTML='';
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    const d=document.createElement('div');
+    d.className='pv-cell';
+    if(r===C&&c===C){ d.classList.add('center');
+      const dot=document.createElement('div'); dot.className='dot'; dot.textContent=KANJI[t].length<=2?KANJI[t]:KANJI[t][0]; d.appendChild(dot); }
+    else if(grid[r][c]) d.classList.add(grid[r][c]);
+    mini.appendChild(d);
+  }
+}
+
+document.getElementById('pvBack').onclick=()=>{
+  showList();
+  const sc=document.getElementById('pickScroll'); if(sc) sc.scrollTop=lastScroll; // 見ていた位置へ戻す
+};
+document.getElementById('pvConfirm').onclick=()=>{ if(previewType)applyPick(previewType); };
+document.getElementById('pvQtyMinus').onclick=()=>{ pvQty=Math.max(1,pvQty-1); document.getElementById('pvQty').textContent=pvQty; };
+document.getElementById('pvQtyPlus').onclick=()=>{ pvQty=Math.min(18,pvQty+1); document.getElementById('pvQty').textContent=pvQty; };
+
+let editSide=1; // 編集で空マスに置く側（1=あなた, -1=相手）
+function applyPick(t){
+  pushHist(pickHistory,t); // 選択順
+  if(capPickSide!==0){
+    // 持ち駒に枚数ぶん追加
+    const arr=(capPickSide===1?capYou:capEnemy);
+    for(let i=0;i<pvQty;i++) arr.push(t);
+    const n=pvQty; capPickSide=0; closePick(); render(); setStatus('持ち駒に'+KANJI[t]+'を'+n+'枚追加しました');
+    return;
+  }
+  if(multiSel.length>0){
+    multiSel.forEach(({r,c})=>{
+      const cur=board[r][c]; const owner=cur?cur.p:editSide;
+      board[r][c]={t,p:owner};
+    });
+    clearMultiSel();
+  } else if(editCell){
+    const {r,c}=editCell; const cur=board[r][c];
+    board[r][c]={t, p: cur?cur.p:editSide};
+  }
+  closePick(); render();
+}
+function closePick(){
+  document.getElementById('pickModal').classList.remove('show');
+  editCell=null; previewType=null; infoOnly=false; capPickSide=0; showList();
+}
+document.getElementById('pickEmpty').onclick=()=>{
+  if(multiSel.length>0){ multiSel.forEach(({r,c})=>board[r][c]=null); clearMultiSel(); }
+  else if(editCell){ board[editCell.r][editCell.c]=null; }
+  closePick(); render();
+};
+document.getElementById('pickCancel').onclick=closePick;
+document.getElementById('pickModal').onclick=(e)=>{ if(e.target.id==='pickModal') closePick(); };
+buildPickGrid();
+
+// 複数選択バー
+function updateMultiBar(){
+  const bar=document.getElementById('multiBar');
+  const cnt=document.getElementById('multiCount');
+  if(!bar)return;
+  if(editing && multiSel.length>0){ bar.style.display='flex'; cnt.textContent=multiSel.length+'マス選択中'; }
+  else bar.style.display='none';
+}
+document.getElementById('multiChange').onclick=()=>{ if(multiSel.length>0){ infoOnly=false; openPickList(); } };
+document.getElementById('multiClear').onclick=()=>{ clearMultiSel(); setStatus('選択を解除しました'); };
+
+// 編集ツールバー
+function updateEditBar(){
+  const bar=document.getElementById('editBar');
+  if(bar) bar.style.display = editing? 'block':'none';
+}
+// 自陣（あなたの駒）の配置を、上下対称に敵側へコピー
+document.getElementById('copyToEnemy').onclick=()=>{
+  if(!editing)return;
+  // まず敵駒を全消去
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){ if(board[r][c]&&board[r][c].p===-1) board[r][c]=null; }
+  // あなたの駒を点対称(180°回転)位置に相手駒として配置
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    const pc=board[r][c];
+    if(pc&&pc.p===1){
+      const nr=8-r, nc=8-c;
+      board[nr][nc]={...pc,p:-1};
+    }
+  }
+  // 持ち駒もコピー（あなたの持ち駒 → 相手の持ち駒）
+  capEnemy=[...capYou];
+  render(); setStatus('自陣の配置と持ち駒を敵側にコピーしました');
+};
+// ランダム置換：強さが近い別駒に
+const ROYAL_LIST=['K','CP','cK']; // 玉将・太子・キング
+function randomReplace(mode){
+  if(!editing)return;
+  let pool = BASIC_LIST.concat(TBASE.filter(t=>!BASIC_LIST.includes(t)), (typeof TPROM!=='undefined'?TPROM:[]), (typeof CHESS_LIST!=='undefined'?CHESS_LIST:[]));
+  // ルールON時、ランダム置換の候補にはさみ駒・オセロ駒を含める（全モード共通）
+  if(RULES.randomIncludeSpecial){
+    if(typeof HASAMI_LIST!=='undefined') pool=pool.concat(HASAMI_LIST);
+    if(typeof OTHELLO_LIST!=='undefined') pool=pool.concat(OTHELLO_LIST);
+  }
+  const nonRoyal = pool.filter(t=>!isRoyal(t));
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    const pc=board[r][c];
+    if(!pc) continue;
+    let cands;
+    if(mode==='full'){
+      // 完全ランダム：royalも含め全駒から選ぶ（royal保証は後処理で行う）
+      cands=pool;
+    } else if(isRoyal(pc.t)){
+      // 王・玉・太子・キングは、他のroyal駒へランダム置換
+      cands=ROYAL_LIST.filter(t=>t!==pc.t);
+    } else if(mode==='power'){
+      const base=basePower(pc.t);
+      // 範囲を狭める（±2）。候補が少なければ広げて確保
+      for(const w of [2,3,5]){
+        cands=nonRoyal.filter(t=>Math.abs(basePower(t)-base)<=w);
+        if(cands.length>=3) break;
+      }
+    } else { // rank
+      const base=pieceRank(pc.t);
+      cands=nonRoyal.filter(t=>pieceRank(t)===base);
+    }
+    if(cands&&cands.length){
+      const nt=cands[Math.floor(Math.random()*cands.length)];
+      board[r][c]={t:nt,p:pc.p};
+    }
+  }
+  if(mode==='full') ensureRoyalEachSide();
+  render();
+  setStatus(mode==='power'?'強さが近い駒にランダム置換しました'
+           :mode==='rank'?'同じ格の駒にランダム置換しました'
+           :'完全ランダムに置換しました');
+}
+// 各陣営に最低1つのroyalを保証。royalが居なければ、その陣営の駒を1つ玉将に置換。
+function ensureRoyalEachSide(){
+  for(const side of [1,-1]){
+    const own=[];
+    let hasR=false;
+    for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+      const pc=board[r][c];
+      if(pc&&pc.p===side){ own.push([r,c]); if(isRoyal(pc.t)) hasR=true; }
+    }
+    if(!hasR && own.length){
+      const [r,c]=own[Math.floor(Math.random()*own.length)];
+      board[r][c]={t:'K',p:side}; // 玉将を配置
+    }
+  }
+}
+document.getElementById('randomPower').onclick=()=>randomReplace('power');
+document.getElementById('randomRank').onclick=()=>randomReplace('rank');
+document.getElementById('randomFull').onclick=()=>randomReplace('full');
+document.getElementById('restoreCustom').onclick=()=>{
+  if(customStart){
+    board=customStart.board.map(row=>row.map(x=>x?{...x}:null));
+    capYou=[...customStart.capYou]; capEnemy=[...customStart.capEnemy];
+    render(); setStatus('記憶した配置に戻しました');
+  } else setStatus('記憶した配置がありません（編集を終了すると記憶されます）');
+};
+
+// ルール設定
+function openRuleModal(){
+  document.getElementById('rDrops').checked=RULES.drops;
+  document.getElementById('rKeep').checked=RULES.keepPromoted;
+  document.getElementById('rNifu').checked=RULES.nifu;
+  document.getElementById('rSennichite').checked=RULES.sennichite;
+  document.getElementById('rRankless').checked=RULES.ranklessAsGeneral;
+  document.getElementById('rRandSpecial').checked=RULES.randomIncludeSpecial;
+  document.getElementById('ruleModal').classList.add('show');
+}
+document.getElementById('ruleBtn').onclick=openRuleModal;
+document.getElementById('ruleClose').onclick=()=>{ document.getElementById('ruleModal').classList.remove('show'); };
+document.getElementById('ruleModal').onclick=(e)=>{ if(e.target.id==='ruleModal') document.getElementById('ruleModal').classList.remove('show'); };
+document.getElementById('rDrops').onchange=e=>RULES.drops=e.target.checked;
+document.getElementById('rKeep').onchange=e=>RULES.keepPromoted=e.target.checked;
+document.getElementById('rNifu').onchange=e=>RULES.nifu=e.target.checked;
+document.getElementById('rSennichite').onchange=e=>RULES.sennichite=e.target.checked;
+document.getElementById('rRankless').onchange=e=>{ RULES.ranklessAsGeneral=e.target.checked; POWER_CACHE_clear(); render(); };
+document.getElementById('rRandSpecial').onchange=e=>{ RULES.randomIncludeSpecial=e.target.checked; };
+// 置く側トグル
+(function(){ const b=document.getElementById('sideToggle'); if(b) b.onclick=()=>{
+  editSide=-editSide;
+  b.textContent= editSide===1?'あなたの駒':'相手の駒';
+  b.classList.toggle('on', editSide===-1);
+}; })();
+
+document.getElementById('undo').onclick=()=>{
+  if(gameOver||replaying) return;
+  stopAutoLoop();
+  // 直近2手（自分＋相手）を戻す。手番は呼び出し元に依らず元へ戻す
+  if(history.length>=2){
+    const st=history[history.length-2];
+    board=st.board.map(row=>row.map(x=>x?{...x}:null));
+    capYou=[...st.capYou]; capEnemy=[...st.capEnemy];
+    history.splice(history.length-2,2);
+    kifu.splice(Math.max(0,kifu.length-2)); updateReplayUI();
+    sel=null; turn=1; render(); setStatus('二手戻しました');
+  }else if(history.length===1){
+    const st=history[0];
+    board=st.board.map(row=>row.map(x=>x?{...x}:null));
+    capYou=[...st.capYou]; capEnemy=[...st.capEnemy];
+    history=[]; kifu=[]; updateReplayUI(); sel=null; turn=1; render(); setStatus('あなたの番です');
+  }
+};
+
+newGame();
+
+</script>
+</body>
+</html>
