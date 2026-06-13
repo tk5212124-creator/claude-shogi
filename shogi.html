@@ -1981,7 +1981,7 @@ function applyMoveSilent(side,m,silent){
     recordKifu({side,drop:m.drop,to:[m.tr,m.tc]});
     board[m.tr][m.tc]={t:m.drop,p:side};
     cap.splice(cap.indexOf(m.drop),1);
-    if(m.drop==='OTH'){ const fc=othelloFlip(m.tr,m.tc,side); setStatus('オセロ：'+fc+'枚 裏返しました'); } // 裏返し枚数を表示（診断用）
+    if(m.drop==='OTH'){ othelloFlip(m.tr,m.tc,side); } // 打ったオセロで挟んだ相手駒を裏返す
   }else{
     const pc=board[m.fr][m.fc];
     const tg=board[m.tr][m.tc];
