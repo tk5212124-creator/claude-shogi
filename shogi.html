@@ -169,6 +169,12 @@
     border:1px solid #000;}
   .othello-disc.white{background:radial-gradient(circle at 35% 30%, #ffffff, #d0d0dc 70%);
     border:1px solid #aaa;}
+  /* 囲碁の駒：オセロより一回り小さく、光の反射で凹凸を感じる艶のある碁石 */
+  .go-disc{width:62%;height:62%;border-radius:50%;
+    box-shadow:inset -2px -3px 5px rgba(0,0,0,.45), inset 2px 3px 5px rgba(255,255,255,.55), 0 2px 3px rgba(0,0,0,.45);}
+  .go-disc.black{background:radial-gradient(circle at 32% 27%, #7a7a88 0%, #2c2c36 42%, #07070d 100%);}
+  .go-disc.white{background:radial-gradient(circle at 32% 27%, #ffffff 0%, #eef0f4 40%, #b3b6c2 100%);}
+  .cap-koma .go-disc{width:74%;height:74%;}
   .koma.enemy{transform:rotate(180deg);
     background:linear-gradient(158deg,#b7a6cf,#8d7ab0 55%,#6a5790);
     color:#1a1330;border-color:#4a3a6e;}
@@ -487,6 +493,7 @@
           <div class="pick-section"><span class="pick-lbl" id="lblChess">チェス</span><div class="pick-grid" id="pickChess"></div></div>
           <div class="pick-section"><span class="pick-lbl" id="lblHasami">はさみ将棋（特殊駒）</span><div class="pick-grid" id="pickHasami"></div></div>
           <div class="pick-section"><span class="pick-lbl" id="lblOthello">オセロ（特殊駒）</span><div class="pick-grid" id="pickOthello"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblGo">囲碁（特殊駒）</span><div class="pick-grid" id="pickGo"></div></div>
         </div>
         <div class="pick-actions">
           <button id="pickEmpty">空マスにする</button>
@@ -851,6 +858,7 @@ function hasRank(t){
   if(t.charAt(0)==='h') return false;        // 本将棋の基本駒は格なし
   if(/^\+[A-Z]+_hon$/.test(t)) return false; // 本将棋成駒（と金等）は格なし
   if(t==='HASA') return false;               // はさみ駒は格なし
+  if(isGo(t)) return false;                  // 囲碁の駒は格なし
   return true;                               // 大局将棋の駒
 }
 // 駒の格（小さいほど高位）。範囲攻撃の判定にも使う。
@@ -890,6 +898,15 @@ const HASAMI_LIST=['HASA'];
 // オセロの駒：動けない。打った瞬間、8方向で自軍オセロ駒と挟んだ相手駒（種類問わず）を裏返して自軍に。
 TP['OTH']={n:'Othello',k:'●',pr:null,v:200,fl:['othello'],m:[]};
 const OTHELLO_LIST=['OTH'];
+
+// 囲碁の駒：動けない。どこにでも打てる。縦横4方を敵（または盤端）で囲まれると取られる。
+// 取っても色（所有者）は変わらず、持ち駒から打つと元の色＝相手の駒として盤に出る。
+// GOB=黒(所有者=先手p:1)、GOW=白(所有者=後手p:-1)。色は固有でコードに紐づく。
+TP['GOB']={n:'Go(black)',k:'碁黒',pr:null,v:60,fl:['go'],m:[]};
+TP['GOW']={n:'Go(white)',k:'碁白',pr:null,v:60,fl:['go'],m:[]};
+const GO_LIST=['GOB','GOW'];
+function isGo(t){ return t==='GOB'||t==='GOW'; }
+function goOwner(t){ return t==='GOB'?1 : t==='GOW'? -1 : 0; } // 碁石の固有の色（所有者）
 
 // 本将棋の成駒。と・成香・成桂・成銀は金の動き、馬・龍。
 (function addHonProm(){
@@ -1563,6 +1580,15 @@ function render(){
         bd.appendChild(cell);
         continue;
       }
+      if(isGo(pc.t)){
+        // 囲碁の駒：艶のある碁石（GOB=黒、GOW=白。色は固有）
+        const disc=document.createElement('div');
+        disc.className='go-disc '+(pc.t==='GOB'?'black':'white');
+        cell.appendChild(disc);
+        cell.onclick=()=>onCell(r,c);
+        bd.appendChild(cell);
+        continue;
+      }
       const k=document.createElement('div');
       const promoted = isPromoted(pc.t) || !!pc.o;
       k.className='koma'+(pc.p===-1?' enemy':'')+(promoted?' promoted':'');
@@ -1586,7 +1612,8 @@ function renderCap(id,arr,p){
     const d=document.createElement('div');
     d.className='cap-koma'+(p===-1?' enemy':'');
     if(sel&&sel.drop&&sel.t===t&&sel.p===p)d.classList.add('sel');
-    fillKoma(d, t);
+    if(isGo(t)){ const g=document.createElement('div'); g.className='go-disc '+(t==='GOB'?'black':'white'); d.appendChild(g); }
+    else fillKoma(d, t);
     if(counts[t]>1){const b=document.createElement('span');b.className='ct';b.textContent=counts[t];d.appendChild(b);}
     if(editing){
       // 編集中：タップで1枚減らす
@@ -1766,6 +1793,28 @@ function fireBurn(r,c,p){
       board[rr][cc]=null;
     }
   }
+}
+// 囲碁の囲み取り：縦横4方を敵(または盤端)で囲まれた碁石を、囲んだ側の持ち駒へ。
+// 碁石はコード(GOB/GOW)のまま持ち駒に入り色を保持する。各着手後に呼ぶ。
+function goCaptureScan(){
+  const orth=[[-1,0],[1,0],[0,-1],[0,1]];
+  const caps=[];
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    const q=board[r][c]; if(!q||!isGo(q.t))continue;
+    const enemy=-q.p; let surrounded=true;
+    for(const [dr,dc] of orth){
+      const nr=r+dr,nc=c+dc;
+      if(nr<0||nr>8||nc<0||nc>8) continue;          // 盤端は壁＝囲み成立側
+      const n=board[nr][nc];
+      if(!n || n.p!==enemy){ surrounded=false; break; } // 空 or 敵でない(味方含む)＝囲まれていない
+    }
+    if(surrounded) caps.push([r,c,enemy,q.t]);
+  }
+  for(const [r,c,enemy,t] of caps){
+    board[r][c]=null;
+    if(RULES.drops) (enemy===1?capYou:capEnemy).push(t); // コード保持＝色そのまま
+  }
+  return caps.length;
 }
 // 手動の打ちも唯一の着手実体 applyMoveSilent を通す（CPUと共通化）。
 function doDrop(t,r,c,p){
@@ -2002,8 +2051,18 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
       if(q && q.p!==side){ if(isRoyal(q.t)) king=true; else if(RULES.drops) myCap.push(capturedCode(q)); nb[rr][cc]=null; }
     }
   }
+  // コピー盤nb上で囲碁の囲み取り（縦横4方を囲まれた碁石を取る。色保持で各陣営の持ち駒へ）
+  function simGoCapture(){
+    const orth=[[-1,0],[1,0],[0,-1],[0,1]];
+    for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+      const q=nb[r][c]; if(!q||!isGo(q.t))continue;
+      const enemy=-q.p; let surr=true;
+      for(const [dr,dc] of orth){ const nr=r+dr,nc=c+dc; if(nr<0||nr>8||nc<0||nc>8)continue; const n=nb[nr][nc]; if(!n||n.p!==enemy){surr=false;break;} }
+      if(surr){ nb[r][c]=null; if(RULES.drops) (enemy===1?ncy:nce).push(q.t); }
+    }
+  }
   if(m.drop){
-    nb[m.tr][m.tc]={t:m.drop,p};
+    nb[m.tr][m.tc]={t:m.drop,p:isGo(m.drop)?goOwner(m.drop):p};
     const i=myCap.indexOf(m.drop); if(i>=0)myCap.splice(i,1);
     if(m.drop==='OTH') simOthelloFlip(m.tr,m.tc,p); // 打ったオセロの裏返しを読みに反映
   } else {
@@ -2025,6 +2084,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     if(pc.t==='HASA') simHasamiCapture(m.tr,m.tc,p); // はさみ取りを読みに反映
     if(hasFire(pc.t)) simFireBurn(m.tr,m.tc,p);      // 火鬼の焼き取りを読みに反映
   }
+  simGoCapture(); // 囲碁の囲み取りを読みに反映
   return {nb,ncy,nce,king};
 }
 
@@ -2123,7 +2183,8 @@ function applyMoveSilent(side,m,silent){
   const cap = side===-1? capEnemy : capYou;
   if(m.drop){
     recordKifu({side,drop:m.drop,to:[m.tr,m.tc]});
-    board[m.tr][m.tc]={t:m.drop,p:side};
+    // 囲碁の駒は固有の色（所有者）で盤に出る＝相手の碁石を打つと相手の駒になる
+    board[m.tr][m.tc]={t:m.drop,p:isGo(m.drop)?goOwner(m.drop):side};
     cap.splice(cap.indexOf(m.drop),1);
     if(m.drop==='OTH'){
       const fc=othelloFlip(m.tr,m.tc,side); // 打ったオセロで挟んだ相手駒を裏返す
@@ -2178,6 +2239,7 @@ function applyMoveSilent(side,m,silent){
     }
     if(!hasRoyal(-side)){ history[history.length-1].to=[m.tr,m.tc]; render(); endGame(side); return; }
   }
+  goCaptureScan(); // 囲碁：縦横4方を囲まれた碁石を取る（色は保持して持ち駒へ）
   history[history.length-1].to=[m.tr,m.tc];
   if(!silent) render();
   checkSennichite();
@@ -2218,7 +2280,7 @@ function snapRestore(snap){
 // kifu[i] を現在の盤へ適用（表示専用。勝敗判定なし）
 function applyKifuStep(rec){
   if(rec.drop){
-    board[rec.to[0]][rec.to[1]]={t:rec.drop,p:rec.side};
+    board[rec.to[0]][rec.to[1]]={t:rec.drop,p:isGo(rec.drop)?goOwner(rec.drop):rec.side};
     const cap=rec.side===1?capYou:capEnemy;
     const idx=cap.indexOf(rec.drop); if(idx>=0)cap.splice(idx,1);
     if(rec.drop==='OTH') othelloFlip(rec.to[0],rec.to[1],rec.side); // 打ったオセロの裏返しを再現
@@ -2263,6 +2325,7 @@ function applyKifuStep(rec){
     if(rec.code==='HASA') hasamiCapture(tr,tc,rec.side); // はさみ取りを再現
     if(hasFire(rec.code)) fireBurn(tr,tc,rec.side);      // 火鬼の焼き取りを再現
   }
+  goCaptureScan(); // 囲碁の囲み取りを再現
 }
 // 起点から n 手目まで適用して描画
 function gotoStep(n){
@@ -2451,12 +2514,14 @@ function buildPickGrid(){
   const gc=document.getElementById('pickChess');
   const gh=document.getElementById('pickHasami');
   const go=document.getElementById('pickOthello');
+  const ggo=document.getElementById('pickGo');
   const lblB=document.getElementById('lblBasic');
   const lblD=document.getElementById('lblDaikyoku');
   const lblC=document.getElementById('lblChess');
   const lblH=document.getElementById('lblHasami');
   const lblO=document.getElementById('lblOthello');
-  gb.innerHTML=''; gd.innerHTML=''; if(gc)gc.innerHTML=''; if(gh)gh.innerHTML=''; if(go)go.innerHTML='';
+  const lblGo=document.getElementById('lblGo');
+  gb.innerHTML=''; gd.innerHTML=''; if(gc)gc.innerHTML=''; if(gh)gh.innerHTML=''; if(go)go.innerHTML=''; if(ggo)ggo.innerHTML='';
   const mode=currentSortMode();
   const basicSet=new Set(BASIC_LIST);
   let daikyoku=TBASE.filter(t=>!basicSet.has(t));
@@ -2464,13 +2529,14 @@ function buildPickGrid(){
   const chess = (typeof CHESS_LIST!=='undefined')? CHESS_LIST.slice() : [];
   const hasami = (typeof HASAMI_LIST!=='undefined')? HASAMI_LIST.slice() : [];
   const othello = (typeof OTHELLO_LIST!=='undefined')? OTHELLO_LIST.slice() : [];
+  const goList = (typeof GO_LIST!=='undefined')? GO_LIST.slice() : [];
   const setDisp=(lbl,show)=>{ if(lbl&&lbl.parentElement) lbl.parentElement.style.display=show?'':'none'; };
 
   if(mode==='hist_pick'||mode==='hist_view'){
-    const all=BASIC_LIST.concat(daikyoku).concat(chess).concat(hasami).concat(othello);
+    const all=BASIC_LIST.concat(daikyoku).concat(chess).concat(hasami).concat(othello).concat(goList);
     const sorted=sortList(all, mode);
     if(lblB) lblB.textContent = (mode==='hist_pick'?'選択した順':'見た順');
-    setDisp(lblD,false); setDisp(lblC,false); setDisp(lblH,false); setDisp(lblO,false);
+    setDisp(lblD,false); setDisp(lblC,false); setDisp(lblH,false); setDisp(lblO,false); setDisp(lblGo,false);
     if(sorted.length===0){
       const p=document.createElement('div'); p.style.cssText='color:#b3a8d8;font-size:.8rem;padding:6px;';
       p.textContent = (mode==='hist_pick'?'まだ駒を選んでいません':'まだ駒を見ていません');
@@ -2480,12 +2546,13 @@ function buildPickGrid(){
     }
   } else {
     if(lblB) lblB.textContent='本将棋';
-    setDisp(lblD,true); setDisp(lblC,true); setDisp(lblH,true); setDisp(lblO,true);
+    setDisp(lblD,true); setDisp(lblC,true); setDisp(lblH,true); setDisp(lblO,true); setDisp(lblGo,true);
     sortList(BASIC_LIST, mode).forEach(t=>mkPickBtn(t,gb));
     sortList(daikyoku, mode).forEach(t=>mkPickBtn(t,gd));
     if(gc) sortList(chess, mode).forEach(t=>mkPickBtn(t,gc));
     if(gh) sortList(hasami, mode).forEach(t=>mkPickBtn(t,gh));
     if(go) sortList(othello, mode).forEach(t=>mkPickBtn(t,go));
+    if(ggo) sortList(goList, mode).forEach(t=>mkPickBtn(t,ggo));
   }
 }
 // ソート選択で再構築（スクロールは先頭へ）
