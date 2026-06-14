@@ -1981,7 +1981,15 @@ function applyMoveSilent(side,m,silent){
     recordKifu({side,drop:m.drop,to:[m.tr,m.tc]});
     board[m.tr][m.tc]={t:m.drop,p:side};
     cap.splice(cap.indexOf(m.drop),1);
-    if(m.drop==='OTH'){ othelloFlip(m.tr,m.tc,side); } // 打ったオセロで挟んだ相手駒を裏返す
+    if(m.drop==='OTH'){
+      const fc=othelloFlip(m.tr,m.tc,side); // 打ったオセロで挟んだ相手駒を裏返す
+      if(fc===0){ // 実機診断：1枚も裏返らない＝本来打てないはずの不正配置。着手は弾かず（パス防止）、現場保全のため停止して座標表示
+        console.error('[ILLEGAL OTH DROP]',{side,tr:m.tr,tc:m.tc,move:kifu.length});
+        (window.__illegalOth=window.__illegalOth||[]).push({side,tr:m.tr,tc:m.tc,move:kifu.length});
+        autoYou=false; autoEnemy=false; stopAutoLoop();
+        setStatus('⚠不正オセロ配置を検出 '+(side===1?'あなた':'相手')+' ('+m.tr+','+m.tc+')・自動対局を停止','lose');
+      }
+    }
   }else{
     const pc=board[m.fr][m.fc];
     const tg=board[m.tr][m.tc];
