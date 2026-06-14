@@ -2062,6 +2062,7 @@ function applyKifuStep(rec){
     board[rec.to[0]][rec.to[1]]={t:rec.drop,p:rec.side};
     const cap=rec.side===1?capYou:capEnemy;
     const idx=cap.indexOf(rec.drop); if(idx>=0)cap.splice(idx,1);
+    if(rec.drop==='OTH') othelloFlip(rec.to[0],rec.to[1],rec.side); // 打ったオセロの裏返しを再現
   } else if(rec.castle){
     // キャスリング
     const [fr,fc]=rec.from, [tr,tc]=rec.to;
@@ -2078,9 +2079,23 @@ function applyKifuStep(rec){
     if(rec.cap && RULES.drops){
       (rec.side===1?capYou:capEnemy).push(capturedCode(rec.cap));
     }
+    // 範囲攻撃：間の格下駒を一掃（applyMoveSilent と同一処理を再現）
+    if(hasRangeAttack(rec.code) && (fr===tr||fc===tc||Math.abs(tr-fr)===Math.abs(tc-fc))){
+      const sr=Math.sign(tr-fr), sc=Math.sign(tc-fc);
+      let rr=fr+sr, cc=fc+sc;
+      while(rr!==tr||cc!==tc){
+        const mid=board[rr][cc];
+        if(mid && !isRankless(mid.t) && pieceRank(mid.t)>pieceRank(rec.code)){
+          if(RULES.drops && mid.p!==rec.side && !isRoyal(mid.t)) (rec.side===1?capYou:capEnemy).push(capturedCode(mid));
+          board[rr][cc]=null;
+        }
+        rr+=sr; cc+=sc;
+      }
+    }
     const newCode = rec.promoTo ? rec.promoTo : (rec.promo?(promoteCode(rec.code)||rec.code):rec.code);
     board[tr][tc]={t:newCode, p:rec.side};
     board[fr][fc]=null;
+    if(rec.code==='HASA') hasamiCapture(tr,tc,rec.side); // はさみ取りを再現
   }
 }
 // 起点から n 手目まで適用して描画
