@@ -1332,6 +1332,8 @@ function moves(b,r,c){
       }
     }
   }
+  // 鉤行型：直進後に直角に曲がって走る到達先を追加
+  if(isHook(pc.t)) hookMoves(b,r,c).forEach(([a,bb])=>res.push([a,bb]));
   return res;
 }
 
@@ -1396,6 +1398,37 @@ function lionMoveTo(b,r,c,tr,tc){
     }
   }
   return best;
+}
+
+/* ===== 鉤行型（hook mover）の動き =====
+   摩羯・鉤行・天狗・孔雀：自分の走り(F)方向に直進し、途中の空マスで一度だけ
+   直角(90°)に曲がってさらに走れる。曲がりは任意。取りは各脚の終端で1枚。 */
+function isHook(t){ return ((TP[t]&&TP[t].fl)||[]).includes('hook'); }
+function hookDirs(t){ return ((TP[t]&&TP[t].m)||[]).filter(v=>v[2]==='F').map(v=>[v[0],v[1]]); }
+function hookMoves(b,r,c){
+  const pc=b[r][c]; if(!pc||!isHook(pc.t)) return [];
+  const p=pc.p, inb=(x,y)=>x>=0&&x<9&&y>=0&&y<9;
+  const res=[], seen=new Set();
+  const addq=(x,y)=>{ const k=x+'_'+y; if(!seen.has(k)){seen.add(k);res.push([x,y]);} };
+  const perp=d=>[[-d[1],d[0]],[d[1],-d[0]]]; // 90°回転（直交/斜めとも対応）
+  for(const d1 of hookDirs(pc.t)){
+    let nr=r+d1[0], nc=c+d1[1];
+    while(inb(nr,nc)){
+      const q=b[nr][nc];
+      if(q){ if(q.p!==p) addq(nr,nc); break; } // 敵で終端取り／自軍で停止
+      addq(nr,nc);                              // 空マス：到達可＆曲がり角
+      for(const d2 of perp(d1)){                // ここで直角に曲がって走る
+        let mr=nr+d2[0], mc=nc+d2[1];
+        while(inb(mr,mc)){
+          const q2=b[mr][mc];
+          if(q2){ if(q2.p!==p) addq(mr,mc); break; }
+          addq(mr,mc); mr+=d2[0]; mc+=d2[1];
+        }
+      }
+      nr+=d1[0]; nc+=d1[1];
+    }
+  }
+  return res;
 }
 
 /* ===== 持ち駒を打てるマス ===== */
@@ -1721,6 +1754,19 @@ function hasamiCapture(r,c,p){
     }
   }
 }
+// 火鬼・奔火：移動後、(r,c)に隣接する敵駒を8方向すべて焼く（取る）。大局将棋の火鬼ルール。
+function hasFire(t){ return t==='DM'||t==='+FFR'; }
+function fireBurn(r,c,p){
+  for(const [dr,dc] of ALL8){
+    const rr=r+dr, cc=c+dc;
+    if(rr<0||rr>8||cc<0||cc>8) continue;
+    const q=board[rr][cc];
+    if(q && q.p!==p){
+      if(RULES.drops && !isRoyal(q.t)) (p===1?capYou:capEnemy).push(capturedCode(q));
+      board[rr][cc]=null;
+    }
+  }
+}
 // 手動の打ちも唯一の着手実体 applyMoveSilent を通す（CPUと共通化）。
 function doDrop(t,r,c,p){
   applyMoveSilent(p, {drop:t,tr:r,tc:c}, false);
@@ -1948,6 +1994,14 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
       }
     }
   }
+  // コピー盤nb上で火鬼の焼き取り（隣接8方向の敵を焼く。royalを焼いたらking扱い）
+  function simFireBurn(r,c,side){
+    for(const [dr,dc] of ALL8){
+      const rr=r+dr, cc=c+dc; if(rr<0||rr>8||cc<0||cc>8)continue;
+      const q=nb[rr][cc];
+      if(q && q.p!==side){ if(isRoyal(q.t)) king=true; else if(RULES.drops) myCap.push(capturedCode(q)); nb[rr][cc]=null; }
+    }
+  }
   if(m.drop){
     nb[m.tr][m.tc]={t:m.drop,p};
     const i=myCap.indexOf(m.drop); if(i>=0)myCap.splice(i,1);
@@ -1969,6 +2023,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     nb[m.tr][m.tc]={t:promo?(promoteCode(pc.t)||pc.t):pc.t,p};
     if(!igui) nb[m.fr][m.fc]=null;
     if(pc.t==='HASA') simHasamiCapture(m.tr,m.tc,p); // はさみ取りを読みに反映
+    if(hasFire(pc.t)) simFireBurn(m.tr,m.tc,p);      // 火鬼の焼き取りを読みに反映
   }
   return {nb,ncy,nce,king};
 }
@@ -2117,6 +2172,7 @@ function applyMoveSilent(side,m,silent){
     board[m.tr][m.tc]=np;
     if(!igui) board[m.fr][m.fc]=null;
     if(pc.t==='HASA'){ hasamiCapture(m.tr,m.tc,side); }
+    if(hasFire(pc.t)){ fireBurn(m.tr,m.tc,side); }   // 火鬼：移動後に隣接敵を焼く
     if(tookRoyal && !hasRoyal(-side)){
       history[history.length-1].to=[m.tr,m.tc]; render(); endGame(side); return;
     }
@@ -2205,6 +2261,7 @@ function applyKifuStep(rec){
     board[tr][tc]={t:newCode, p:rec.side};
     if(!igui) board[fr][fc]=null;
     if(rec.code==='HASA') hasamiCapture(tr,tc,rec.side); // はさみ取りを再現
+    if(hasFire(rec.code)) fireBurn(tr,tc,rec.side);      // 火鬼の焼き取りを再現
   }
 }
 // 起点から n 手目まで適用して描画
@@ -2513,10 +2570,11 @@ function showPreview(t){
   const notes=[];
   if(hasRangeAttack(t)) notes.push('範囲攻撃：自分より格下の駒なら何枚でも飛び越えて、その先の味方駒も含めまとめて取れる');
   else if(fl.some(f=>f.startsWith('range'))) notes.push('範囲攻撃：格下の駒を飛び越えてまとめて取れる');
-  if(fl.includes('hook')) notes.push('鉤行：直進後に直角に曲がって進める（近似実装）');
+  if(fl.includes('hook')) notes.push('鉤行：走った後に一度だけ直角に曲がってさらに走れる');
   if(fl.includes('area2')) notes.push('獅子型：1手で2マス動ける・途中と着地で最大2枚取り・居喰い可');
   else if(t==='EL'||t==='HF') notes.push('限定獅子：前方へ2マス動き・途中と着地で2枚取り・居喰い可');
   if(fl.includes('igui')) notes.push('居喰い：動かずに隣の駒を取れる');
+  if(hasFire(t)) notes.push('火鬼：移動後、隣接する敵駒をまとめて焼く（取る）');
   if(isRoyal(t)) notes.push('王の格：取られて味方の玉・太子・キングが全ていなくなると負け');
   document.getElementById('pvDesc').textContent = [extra, ...notes].filter(Boolean).join(' / ');
   drawMiniMoves(t);
