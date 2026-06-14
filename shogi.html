@@ -1335,6 +1335,69 @@ function moves(b,r,c){
   return res;
 }
 
+/* ===== 獅子型の動き（大局将棋ルール） =====
+   フル獅子(area2: 獅子LN/獅鷹LI)＝8方向に「2回動き／2枚取り／居喰い」。
+   限定獅子(飛鷲EL=前方2斜め／角鷹HF=前方直進)＝その方向に1〜2マス＋居喰い。
+   着手は {fr,fc,tr,tc, caps:[[r,c],...]} 形式。caps=途中で取った駒のマス。
+   居喰い(動かず隣を取る)は tr,tc===fr,fc で caps に対象マスを入れる。 */
+const ALL8=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+function hasLion(t){ const fl=(TP[t]&&TP[t].fl)||[]; return fl.includes('area2')||t==='EL'||t==='HF'; }
+function lionStepDirs(t,p){
+  const fl=(TP[t]&&TP[t].fl)||[];
+  if(fl.includes('area2')) return ALL8;          // フル獅子：全方向
+  const fwd = p===1? -1 : 1;                      // 前方のdr
+  if(t==='EL') return [[fwd,-1],[fwd,1]];         // 飛鷲：前方2斜め
+  if(t==='HF') return [[fwd,0]];                  // 角鷹：前方直進
+  return [];
+}
+// 獅子型の合法着手一覧（caps付き）。bは盤、(r,c)は駒位置。
+function lionMoves(b,r,c){
+  const pc=b[r][c]; if(!pc||!hasLion(pc.t)) return [];
+  const p=pc.p, full=((TP[pc.t]&&TP[pc.t].fl)||[]).includes('area2');
+  const dirs=lionStepDirs(pc.t,p);
+  const inb=(x,y)=>x>=0&&x<9&&y>=0&&y<9;
+  const out=[], seen=new Set();
+  const add=(tr,tc,caps)=>{
+    const key=tr+'_'+tc+'|'+caps.map(q=>q[0]+','+q[1]).sort().join(';');
+    if(seen.has(key))return; seen.add(key);
+    out.push({fr:r,fc:c,tr,tc,caps});
+  };
+  for(const [dr,dc] of dirs){
+    const r1=r+dr, c1=c+dc; if(!inb(r1,c1))continue;
+    const q1=b[r1][c1];
+    const s1Friendly = q1 && q1.p===p;
+    if(!s1Friendly){
+      add(r1,c1,[]);                 // 1歩（移動先の駒は通常取り）
+      if(q1) add(r,c,[[r1,c1]]);     // 居喰い：隣の敵を取って原点に留まる
+    }
+    if(full){
+      for(const [er,ec] of ALL8){    // s1の8隣へ（自軍s1も飛び越え可）
+        const r2=r1+er, c2=c1+ec; if(!inb(r2,c2))continue;
+        if(r2===r&&c2===c)continue;  // 原点へ戻るのは居喰い（上で処理）
+        const q2=b[r2][c2]; if(q2&&q2.p===p)continue; // 着地不可
+        add(r2,c2,(q1&&q1.p!==p)?[[r1,c1]]:[]);
+      }
+    } else if(!s1Friendly){          // 限定獅子：同方向にもう1歩（直線2マス）
+      const r2=r1+dr, c2=c1+dc;
+      if(inb(r2,c2) && !(b[r2][c2]&&b[r2][c2].p===p)){
+        add(r2,c2, q1?[[r1,c1]]:[]);
+      }
+    }
+  }
+  return out;
+}
+// (r,c)の獅子が(tr,tc)へ動く着手のうち、最も多く取れるものを返す（手動UI用）。無ければnull。
+function lionMoveTo(b,r,c,tr,tc){
+  let best=null;
+  for(const m of lionMoves(b,r,c)){
+    if(m.tr===tr&&m.tc===tc){
+      const n=m.caps.length + ((b[tr][tc]&&!(tr===r&&tc===c))?1:0);
+      if(!best || n>best._n){ best={...m}; best._n=n; }
+    }
+  }
+  return best;
+}
+
 /* ===== 持ち駒を打てるマス ===== */
 function dropTargets(b,t,p){
   const res=[];
@@ -1364,6 +1427,11 @@ function isLegalMove(m, p, b){
   }
   const pc = bd[m.fr] && bd[m.fr][m.fc];
   if(!pc || pc.p!==p) return false;
+  // 獅子型（caps付き・居喰い含む）は専用生成で検証
+  if(hasLion(pc.t) && (m.caps || (m.fr===m.tr&&m.fc===m.tc))){
+    const sig=cs=>(cs||[]).map(q=>q[0]+','+q[1]).sort().join(';');
+    return lionMoves(bd, m.fr, m.fc).some(x=>x.tr===m.tr&&x.tc===m.tc && sig(x.caps)===sig(m.caps));
+  }
   return moves(bd, m.fr, m.fc).some(([r,c])=>r===m.tr&&c===m.tc);
 }
 
@@ -1417,6 +1485,9 @@ function render(){
     if(sel.drop){ dropTargets(board,sel.t,sel.p||turn).forEach(([r,c])=>movable.add(r+'_'+c)); }
     else {
       moves(board,sel.r,sel.c).forEach(([r,c])=>movable.add(r+'_'+c));
+      // 獅子型：2歩先・取って戻る先なども可動表示
+      const lp=board[sel.r][sel.c];
+      if(lp&&hasLion(lp.t)) lionMoves(board,sel.r,sel.c).forEach(m=>{ if(!(m.tr===sel.r&&m.tc===sel.c)) movable.add(m.tr+'_'+m.tc); });
       // キャスリング候補
       const k=board[sel.r][sel.c];
       if(k&&k.t==='cK'&&!k.moved){
@@ -1520,6 +1591,12 @@ function onCell(r,c){
         doDrop(sel.t,r,c,me); sel=null; afterPlayer(); return;
       }
     } else {
+      // 獅子型：2歩取り・居喰いを含む着手を優先（途中の駒も取る）
+      const selPc=board[sel.r][sel.c];
+      if(selPc && hasLion(selPc.t)){
+        const lm=lionMoveTo(board,sel.r,sel.c,r,c);
+        if(lm){ applyMoveSilent(me, lm, false); sel=null; afterPlayer(); return; }
+      }
       // キャスリング（キングを横2マス）
       const cast=castlingMove(sel.r,sel.c,r,c);
       if(cast){ doCastling(sel.r,sel.c,r,c,cast,me); sel=null; afterPlayer(); return; }
@@ -1877,14 +1954,20 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     if(m.drop==='OTH') simOthelloFlip(m.tr,m.tc,p); // 打ったオセロの裏返しを読みに反映
   } else {
     const pc=nb[m.fr][m.fc]; const tg=nb[m.tr][m.tc];
-    if(tg){
+    const igui = m.fr===m.tr && m.fc===m.tc; // 居喰い：動かない
+    if(tg && tg.p!==p){ // 移動先の敵を取る（居喰いでは自駒なので除外）
       if(isRoyal(tg.t)) king=true;
       else { myCap.push(demoteOf(tg.t)); }
     }
+    // 獅子の途中取り（caps）
+    if(m.caps) for(const [cr,cc] of m.caps){
+      const v=nb[cr][cc];
+      if(v){ if(isRoyal(v.t)) king=true; else myCap.push(demoteOf(v.t)); nb[cr][cc]=null; }
+    }
     const promo = m.promo!==undefined ? m.promo
-      : (canPromoteNow(pc.t) && (inPromoZone(m.fr,p)||inPromoZone(m.tr,p)));
+      : (!igui && canPromoteNow(pc.t) && (inPromoZone(m.fr,p)||inPromoZone(m.tr,p)));
     nb[m.tr][m.tc]={t:promo?(promoteCode(pc.t)||pc.t):pc.t,p};
-    nb[m.fr][m.fc]=null;
+    if(!igui) nb[m.fr][m.fc]=null;
     if(pc.t==='HASA') simHasamiCapture(m.tr,m.tc,p); // はさみ取りを読みに反映
   }
   return {nb,ncy,nce,king};
@@ -1905,6 +1988,10 @@ function genMoves(b,p,cy,ce){
           list.push({fr:r,fc:c,tr,tc,promo:false});
         }
       });
+      // 獅子型：2歩動き・2枚取り・居喰い（caps付き。成りはapply側で自動判定）
+      if(hasLion(pc.t)){
+        lionMoves(b,r,c).forEach(m=>list.push(m));
+      }
     }
   }
   const cap = p===-1? ce : cy;
@@ -1994,14 +2081,20 @@ function applyMoveSilent(side,m,silent){
     }
   }else{
     const pc=board[m.fr][m.fc];
-    const tg=board[m.tr][m.tc];
+    const igui = m.fr===m.tr && m.fc===m.tc; // 獅子の居喰い：動かず隣を取る
+    const tg=igui? null : board[m.tr][m.tc]; // 居喰いは移動先=自駒なので取り対象外
     // チェスポーン昇格判定
     const cpawnPromo = pc.t==='cP' && (m.tr===(side===1?0:8));
-    const promo0 = cpawnPromo ? false : (m.promo!==undefined ? m.promo
+    const promo0 = (cpawnPromo||igui) ? false : (m.promo!==undefined ? m.promo
       : (canPromoteNow(pc.t)&&(inPromoZone(m.fr,side)||inPromoZone(m.tr,side))));
-    recordKifu({side,from:[m.fr,m.fc],to:[m.tr,m.tc],code:pc.t,promo:!!promo0,promoTo:cpawnPromo?'cQ':undefined,cap:tg?tg.t:null});
-    const tookRoyal = tg && isRoyal(tg.t);
+    recordKifu({side,from:[m.fr,m.fc],to:[m.tr,m.tc],code:pc.t,promo:!!promo0,promoTo:cpawnPromo?'cQ':undefined,cap:tg?tg.t:null,caps:m.caps||undefined});
+    let tookRoyal = tg && isRoyal(tg.t);
     if(tg && RULES.drops){ cap.push(capturedCode(tg)); }
+    // 獅子の途中取り（caps：2枚取り・居喰いの対象）
+    if(m.caps) for(const [cr,cc] of m.caps){
+      const v=board[cr][cc];
+      if(v){ if(isRoyal(v.t)) tookRoyal=true; else if(RULES.drops) cap.push(capturedCode(v)); board[cr][cc]=null; }
+    }
     const willPromo = !cpawnPromo && promo0 && promoteCode(pc.t);
     const newCode = cpawnPromo ? 'cQ' : (willPromo?promoteCode(pc.t):pc.t);
     const np={t:newCode,p:side};
@@ -2022,7 +2115,7 @@ function applyMoveSilent(side,m,silent){
       }
     }
     board[m.tr][m.tc]=np;
-    board[m.fr][m.fc]=null;
+    if(!igui) board[m.fr][m.fc]=null;
     if(pc.t==='HASA'){ hasamiCapture(m.tr,m.tc,side); }
     if(tookRoyal && !hasRoyal(-side)){
       history[history.length-1].to=[m.tr,m.tc]; render(); endGame(side); return;
@@ -2102,9 +2195,15 @@ function applyKifuStep(rec){
         rr+=sr; cc+=sc;
       }
     }
+    // 獅子の途中取り（caps：2枚取り・居喰い）を再現
+    if(rec.caps) for(const [cr,cc] of rec.caps){
+      const v=board[cr][cc];
+      if(v){ if(RULES.drops && !isRoyal(v.t)) (rec.side===1?capYou:capEnemy).push(capturedCode(v)); board[cr][cc]=null; }
+    }
+    const igui = fr===tr && fc===tc; // 居喰いは動かない
     const newCode = rec.promoTo ? rec.promoTo : (rec.promo?(promoteCode(rec.code)||rec.code):rec.code);
     board[tr][tc]={t:newCode, p:rec.side};
-    board[fr][fc]=null;
+    if(!igui) board[fr][fc]=null;
     if(rec.code==='HASA') hasamiCapture(tr,tc,rec.side); // はさみ取りを再現
   }
 }
@@ -2415,8 +2514,9 @@ function showPreview(t){
   if(hasRangeAttack(t)) notes.push('範囲攻撃：自分より格下の駒なら何枚でも飛び越えて、その先の味方駒も含めまとめて取れる');
   else if(fl.some(f=>f.startsWith('range'))) notes.push('範囲攻撃：格下の駒を飛び越えてまとめて取れる');
   if(fl.includes('hook')) notes.push('鉤行：直進後に直角に曲がって進める（近似実装）');
-  if(fl.includes('area2')) notes.push('獅子型：1手で最大2マス動ける（近似実装）');
-  if(fl.includes('igui')) notes.push('居喰い：動かずに隣の駒を取れる（近似実装）');
+  if(fl.includes('area2')) notes.push('獅子型：1手で2マス動ける・途中と着地で最大2枚取り・居喰い可');
+  else if(t==='EL'||t==='HF') notes.push('限定獅子：前方へ2マス動き・途中と着地で2枚取り・居喰い可');
+  if(fl.includes('igui')) notes.push('居喰い：動かずに隣の駒を取れる');
   if(isRoyal(t)) notes.push('王の格：取られて味方の玉・太子・キングが全ていなくなると負け');
   document.getElementById('pvDesc').textContent = [extra, ...notes].filter(Boolean).join(' / ');
   drawMiniMoves(t);
