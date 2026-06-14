@@ -1192,8 +1192,9 @@ function setupStartBoard(){
 }
 // keepBoard=true なら現在の盤配置を維持し、対局の進行状態だけリセット
 function initState(keepBoard){
-  if(!keepBoard) setupStartBoard();
-  capYou=[]; capEnemy=[]; sel=null; history=[]; gameOver=false; pendingPromo=null;
+  if(!keepBoard){ setupStartBoard(); capYou=[]; capEnemy=[]; }
+  // keepBoard 時は盤も持ち駒も維持（記憶配置のオセロ等を残して指し直すため）
+  sel=null; history=[]; gameOver=false; pendingPromo=null;
   turn=1; // 1=あなた(先手), -1=相手
   kifu=[]; gameStartSnap=null; // 棋譜とリプレイ起点
   posCount={};
@@ -1650,14 +1651,15 @@ function doDrop(t,r,c,p){
 // (r,c)に置いた側pのオセロ駒が、8方向で自軍オセロ駒との間に挟んだ相手駒を裏返す（自軍に）
 // 裏返し：成駒は成る前に戻し、未成は成り駒にする。成りが無い駒はそのまま。
 function flipPiece(pc, newP){
-  let nt=pc.t, no=pc.o;
-  if(pc.o){
-    // 成駒 → 成る前に戻す
-    nt=pc.o; no=undefined;
+  let nt, no;
+  if(isPromoted(pc.t)){
+    // 成駒 → 成る前に戻す（.o があればそれ、無ければ demoteOf で算出）
+    nt = pc.o || demoteOf(pc.t);
+    no = undefined;
   } else {
-    // 未成 → 成り駒に（成りがあれば）
+    // 未成 → 成り駒に（成りがあれば）。成れない駒はそのまま（元コード .o は保持）
     const pr=promoteCode(pc.t);
-    if(pr){ no=pc.t; nt=pr; }
+    if(pr){ nt=pr; no=pc.t; } else { nt=pc.t; no=pc.o; }
   }
   const np={t:nt, p:newP};
   if(no) np.o=no;
@@ -2606,6 +2608,7 @@ document.getElementById('randomRank').onclick=()=>randomReplace('rank');
 document.getElementById('randomFull').onclick=()=>randomReplace('full');
 document.getElementById('restoreCustom').onclick=()=>{
   if(customStart){
+    if(replaying) exitReplay(); // リプレイ中だと後で savedLive に上書きされるため先に抜ける
     board=customStart.board.map(row=>row.map(x=>x?{...x}:null));
     capYou=[...customStart.capYou]; capEnemy=[...customStart.capEnemy];
     render(); setStatus('記憶した配置に戻しました');
