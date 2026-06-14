@@ -2642,7 +2642,7 @@ document.getElementById('rRandSpecial').onchange=e=>{ RULES.randomIncludeSpecial
 }; })();
 
 document.getElementById('undo').onclick=()=>{
-  if(gameOver||replaying) return;
+  if(replaying) return; // 勝負が決まった後（gameOver）でも待ったは可。リプレイ観戦中のみ不可
   stopAutoLoop();
   // 直近2手（自分＋相手）を戻す。手番は呼び出し元に依らず元へ戻す
   if(history.length>=2){
@@ -2651,12 +2651,15 @@ document.getElementById('undo').onclick=()=>{
     capYou=[...st.capYou]; capEnemy=[...st.capEnemy];
     history.splice(history.length-2,2);
     kifu.splice(Math.max(0,kifu.length-2)); updateReplayUI();
-    sel=null; turn=1; render(); setStatus('二手戻しました');
+    gameOver=false; sel=null; turn=1; render(); setStatus('二手戻しました');
   }else if(history.length===1){
     const st=history[0];
     board=st.board.map(row=>row.map(x=>x?{...x}:null));
     capYou=[...st.capYou]; capEnemy=[...st.capEnemy];
-    history=[]; kifu=[]; updateReplayUI(); sel=null; turn=1; render(); setStatus('あなたの番です');
+    history=[]; kifu=[]; updateReplayUI();
+    gameOver=false; sel=null; turn=1; render(); setStatus('あなたの番です');
+  }else{
+    setStatus('これ以上戻せません');
   }
 };
 
