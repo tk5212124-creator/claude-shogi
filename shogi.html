@@ -494,6 +494,7 @@
           <div class="pick-section"><span class="pick-lbl" id="lblHasami">はさみ将棋（特殊駒）</span><div class="pick-grid" id="pickHasami"></div></div>
           <div class="pick-section"><span class="pick-lbl" id="lblOthello">オセロ（特殊駒）</span><div class="pick-grid" id="pickOthello"></div></div>
           <div class="pick-section"><span class="pick-lbl" id="lblGo">囲碁（特殊駒）</span><div class="pick-grid" id="pickGo"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblOther">その他の将棋駒</span><div class="pick-grid" id="pickOther"></div></div>
         </div>
         <div class="pick-actions">
           <button id="pickEmpty">空マスにする</button>
@@ -864,7 +865,7 @@ function hasRank(t){
 // 駒の格（小さいほど高位）。範囲攻撃の判定にも使う。
 // 格なし駒は通常 Infinity（飛び越え対象だが取れない）。ただしルール ranklessAsGeneral がONなら格5の一般駒扱い。
 function pieceRank(t){
-  if(t==='K'||t==='CP'||t==='cK'||t==='hK') return 1; // 玉将・太子・キング・本将棋の王
+  if(t==='K'||t==='CP'||t==='cK'||t==='hK'||t==='JT') return 1; // 玉将・太子・キング・本将棋の王・自在天王
   if(!hasRank(t)) return (typeof RULES!=='undefined' && RULES.ranklessAsGeneral) ? 5 : Infinity;
   if(t==='GG') return 2;                           // 大将
   if(t==='VG') return 3;                           // 副将
@@ -907,6 +908,14 @@ TP['GOW']={n:'Go(white)',k:'碁白',pr:null,v:60,fl:['go'],m:[]};
 const GO_LIST=['GOB','GOW'];
 function isGo(t){ return t==='GOB'||t==='GOW'; }
 function goOwner(t){ return t==='GOB'?1 : t==='GOW'? -1 : 0; } // 碁石の固有の色（所有者）
+
+// その他の将棋駒（大局将棋以外）：自在天王（摩訶大大将棋・玉将の成駒）。
+// 盤上のどこへでも1手で行ける（いくら駒を飛び越えてもよい）。
+//  ・敵も味方もいない空マスへは自由に移動。
+//  ・敵駒がいて、それが他の敵駒に効かれていない（取り返されない）マスなら取れる。
+// 成りなし。royal（取られたら負け）。
+TP['JT']={n:'Free Heavenly King',k:'自在天王',pr:null,v:15000,fl:['royal','jizai'],m:[]};
+const OTHER_LIST=['JT'];
 
 // 本将棋の成駒。と・成香・成桂・成銀は金の動き、馬・龍。
 (function addHonProm(){
@@ -1257,6 +1266,8 @@ function enPassantTarget(b, p){
 function moves(b,r,c){
   const pc=b[r][c]; if(!pc)return[];
   const p=pc.p;
+  // 自在天王：盤上どこへでも（敵は取り返されないマスのみ）
+  if(pc.t==='JT') return jtMoves(b,r,c);
   // はさみ駒：縦横に走るが空マスのみ（移動先の駒は直接取らない・飛び越えない）
   if(pc.t==='HASA'){
     const res=[];
@@ -1448,6 +1459,40 @@ function hookMoves(b,r,c){
   return res;
 }
 
+/* ===== 自在天王の動き =====
+   盤上のどこへでも行ける（飛び越え自由）。空マスは自由。敵駒は、その駒以外の
+   敵に効かれていない（取り返されない）マスのみ取れる。相手の自在天王は全マスに
+   効くものとして扱う（＝双方に自在天王があると実質取り合えない）。 */
+function jtMoves(b,r,c){
+  const p=b[r][c].p, enemy=-p;
+  let enemyJT=null;
+  for(let er=0;er<9;er++)for(let ec=0;ec<9;ec++){
+    const q=b[er][ec]; if(q&&q.p===enemy&&q.t==='JT') enemyJT=[er,ec];
+  }
+  // (tr,tc)が敵駒(その駒自身を除く)に効かれているか。対象マスを一旦空けて判定するため、
+  // 敵駒で埋まったマスへの「守り」も正しく検出できる。
+  function defendedByEnemy(tr,tc){
+    if(enemyJT && !(enemyJT[0]===tr&&enemyJT[1]===tc)) return true; // 相手自在天王は全マスに効く
+    const saved=b[tr][tc]; b[tr][tc]=null;
+    let def=false;
+    for(let er=0;er<9&&!def;er++)for(let ec=0;ec<9&&!def;ec++){
+      const q=b[er][ec]; if(!q||q.p!==enemy||q.t==='JT')continue;
+      if(moves(b,er,ec).some(([a,bb])=>a===tr&&bb===tc)) def=true;
+    }
+    b[tr][tc]=saved;
+    return def;
+  }
+  const res=[];
+  for(let r2=0;r2<9;r2++)for(let c2=0;c2<9;c2++){
+    if(r2===r&&c2===c)continue;
+    const q=b[r2][c2];
+    if(!q){ res.push([r2,c2]); continue; }   // 空マスへは自由
+    if(q.p===p) continue;                      // 味方は不可
+    if(!defendedByEnemy(r2,c2)) res.push([r2,c2]); // 取り返されない敵のみ取れる
+  }
+  return res;
+}
+
 /* ===== 持ち駒を打てるマス ===== */
 function dropTargets(b,t,p){
   const res=[];
@@ -1499,7 +1544,7 @@ function isPromoted(t){ return t.charAt(0)==='+' || PROM_CODES.has(t); }
 // 取った駒を不成に戻す。成駒のときだけ元の駒へ。非成駒はそのまま。
 function demoteOf(t){ return (isPromoted(t) && DEMOTE[t]) ? DEMOTE[t] : t; }
 // 取られたら負けの駒（玉将 or 太子）。
-function isRoyal(t){ return t==='hK'||t==='K'||t==='CP'||t==='cK'; }
+function isRoyal(t){ return t==='hK'||t==='K'||t==='CP'||t==='cK'||t==='JT'; }
 // 指定プレイヤーのroyal駒（玉・太子）が盤上または持ち駒に残っているか
 function hasRoyal(p){
   for(let r=0;r<9;r++)for(let c=0;c<9;c++){
@@ -2515,13 +2560,15 @@ function buildPickGrid(){
   const gh=document.getElementById('pickHasami');
   const go=document.getElementById('pickOthello');
   const ggo=document.getElementById('pickGo');
+  const gother=document.getElementById('pickOther');
   const lblB=document.getElementById('lblBasic');
   const lblD=document.getElementById('lblDaikyoku');
   const lblC=document.getElementById('lblChess');
   const lblH=document.getElementById('lblHasami');
   const lblO=document.getElementById('lblOthello');
   const lblGo=document.getElementById('lblGo');
-  gb.innerHTML=''; gd.innerHTML=''; if(gc)gc.innerHTML=''; if(gh)gh.innerHTML=''; if(go)go.innerHTML=''; if(ggo)ggo.innerHTML='';
+  const lblOther=document.getElementById('lblOther');
+  gb.innerHTML=''; gd.innerHTML=''; if(gc)gc.innerHTML=''; if(gh)gh.innerHTML=''; if(go)go.innerHTML=''; if(ggo)ggo.innerHTML=''; if(gother)gother.innerHTML='';
   const mode=currentSortMode();
   const basicSet=new Set(BASIC_LIST);
   let daikyoku=TBASE.filter(t=>!basicSet.has(t));
@@ -2530,13 +2577,14 @@ function buildPickGrid(){
   const hasami = (typeof HASAMI_LIST!=='undefined')? HASAMI_LIST.slice() : [];
   const othello = (typeof OTHELLO_LIST!=='undefined')? OTHELLO_LIST.slice() : [];
   const goList = (typeof GO_LIST!=='undefined')? GO_LIST.slice() : [];
+  const otherList = (typeof OTHER_LIST!=='undefined')? OTHER_LIST.slice() : [];
   const setDisp=(lbl,show)=>{ if(lbl&&lbl.parentElement) lbl.parentElement.style.display=show?'':'none'; };
 
   if(mode==='hist_pick'||mode==='hist_view'){
-    const all=BASIC_LIST.concat(daikyoku).concat(chess).concat(hasami).concat(othello).concat(goList);
+    const all=BASIC_LIST.concat(daikyoku).concat(chess).concat(hasami).concat(othello).concat(goList).concat(otherList);
     const sorted=sortList(all, mode);
     if(lblB) lblB.textContent = (mode==='hist_pick'?'選択した順':'見た順');
-    setDisp(lblD,false); setDisp(lblC,false); setDisp(lblH,false); setDisp(lblO,false); setDisp(lblGo,false);
+    setDisp(lblD,false); setDisp(lblC,false); setDisp(lblH,false); setDisp(lblO,false); setDisp(lblGo,false); setDisp(lblOther,false);
     if(sorted.length===0){
       const p=document.createElement('div'); p.style.cssText='color:#b3a8d8;font-size:.8rem;padding:6px;';
       p.textContent = (mode==='hist_pick'?'まだ駒を選んでいません':'まだ駒を見ていません');
@@ -2546,13 +2594,14 @@ function buildPickGrid(){
     }
   } else {
     if(lblB) lblB.textContent='本将棋';
-    setDisp(lblD,true); setDisp(lblC,true); setDisp(lblH,true); setDisp(lblO,true); setDisp(lblGo,true);
+    setDisp(lblD,true); setDisp(lblC,true); setDisp(lblH,true); setDisp(lblO,true); setDisp(lblGo,true); setDisp(lblOther,true);
     sortList(BASIC_LIST, mode).forEach(t=>mkPickBtn(t,gb));
     sortList(daikyoku, mode).forEach(t=>mkPickBtn(t,gd));
     if(gc) sortList(chess, mode).forEach(t=>mkPickBtn(t,gc));
     if(gh) sortList(hasami, mode).forEach(t=>mkPickBtn(t,gh));
     if(go) sortList(othello, mode).forEach(t=>mkPickBtn(t,go));
     if(ggo) sortList(goList, mode).forEach(t=>mkPickBtn(t,ggo));
+    if(gother) sortList(otherList, mode).forEach(t=>mkPickBtn(t,gother));
   }
 }
 // ソート選択で再構築（スクロールは先頭へ）
