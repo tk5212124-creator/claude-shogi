@@ -3039,21 +3039,16 @@ document.getElementById('undo').onclick=()=>{
   if(history.length<1){ setStatus('これ以上戻せません'); return; }
   redoStack.push(captureState()); // やり直し用に現局面を退避
   paused=true;                    // 待った後は自動進行しない
-  // 直近2手（自分＋相手）を戻す。手番は呼び出し元に依らず元へ戻す
-  if(history.length>=2){
-    const st=history[history.length-2];
-    board=st.board.map(row=>row.map(x=>x?{...x}:null));
-    capYou=[...st.capYou]; capEnemy=[...st.capEnemy];
-    history.splice(history.length-2,2);
-    kifu.splice(Math.max(0,kifu.length-2)); updateReplayUI();
-    gameOver=false; sel=null; turn=1; render(); updatePlayPauseLabel(); setStatus('二手戻しました（一時停止中）');
-  }else{
-    const st=history[0];
-    board=st.board.map(row=>row.map(x=>x?{...x}:null));
-    capYou=[...st.capYou]; capEnemy=[...st.capEnemy];
-    history=[]; kifu=[]; updateReplayUI();
-    gameOver=false; sel=null; turn=1; render(); updatePlayPauseLabel(); setStatus('一手戻しました（一時停止中）');
-  }
+  // 直近1手だけ戻す。手番は最後に指した側へ戻す（その側が指し直せる）。
+  const st=history[history.length-1];                 // 最後の着手の直前の局面
+  const lastSide = kifu.length ? kifu[kifu.length-1].side : -turn;
+  board=st.board.map(row=>row.map(x=>x?{...x}:null));
+  capYou=[...st.capYou]; capEnemy=[...st.capEnemy];
+  history.pop();
+  if(kifu.length) kifu.pop();
+  updateReplayUI();
+  gameOver=false; sel=null; turn=lastSide;
+  render(); updatePlayPauseLabel(); setStatus('一手戻しました（一時停止中）');
 };
 // 開始／一時停止／再開
 document.getElementById('playPause').onclick=()=>{
