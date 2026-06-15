@@ -525,6 +525,8 @@
       <label class="rule-row"><input type="checkbox" id="rSennichite"> 千日手（同一局面4回）で引き分け</label>
       <label class="rule-row"><input type="checkbox" id="rRankless"> 格なしの駒（チェス駒・成駒・はさみ駒）を一般駒として扱う（範囲攻撃で取られる）</label>
       <label class="rule-row"><input type="checkbox" id="rRandSpecial"> ランダム置換の候補にはさみ駒・オセロ駒を含める</label>
+      <label class="rule-row"><input type="checkbox" id="rRepromote"> 敵陣に入りなおすともう一度成れる（成駒の成駒に成れる）</label>
+      <label class="rule-row"><input type="checkbox" id="rRandomPromote"> 成り先のない駒は、成るとき全駒からランダムな駒に変化する</label>
       <p class="rule-note">チェスの駒は編集モードの一覧から配置できます（キャスリング対応）。設定変更は次の指し手から反映されます。</p>
       <div class="pick-actions">
         <button class="primary" id="ruleClose">閉じる</button>
@@ -1067,9 +1069,24 @@ function moveVecs(t){
 function promoteCode(t){
   return TP[t] && TP[t].pr ? TP[t].pr : null;
 }
-// 成れる駒か
+// 全駒からランダムな成り先を選ぶ（royal・囲碁・オセロ・自在天王は除く）
+let RANDOM_PROMO_POOL=null;
+function randomPromoCode(){
+  if(!RANDOM_PROMO_POOL) RANDOM_PROMO_POOL=Object.keys(TP).filter(t=>!isRoyal(t)&&t!=='OTH'&&!isGo(t));
+  return RANDOM_PROMO_POOL[Math.floor(Math.random()*RANDOM_PROMO_POOL.length)];
+}
+// 成る時の新コード：定義された成り先があればそれ。無くてランダム成りONなら全駒から無作為。
+function resolvePromoCode(t){
+  if(TP[t]&&TP[t].pr) return TP[t].pr;
+  if(RULES.randomPromote) return randomPromoCode();
+  return t;
+}
+// 成れる駒か（ルールにより成駒の再成り・成り先なしのランダム成りも考慮）
 function canPromoteNow(t){
-  return !!(TP[t] && TP[t].pr);
+  if(isRoyal(t)) return false;
+  if(!isPromoted(t)) return !!(TP[t]&&TP[t].pr) || RULES.randomPromote; // 未成：成り先あり or ランダム成り
+  // 既に成駒：再成りONなら、連鎖成り(pr)かランダム成りで再度成れる
+  return RULES.repromote && (!!(TP[t]&&TP[t].pr) || RULES.randomPromote);
 }
 // 成り可能な最遠ランク強制成り対象（前進のみの駒）。本将棋準拠でhP,hL,hNに加え該当大局駒。
 const FORCE_PROMO=new Set(['hP','hL','hN','SG','I','D','GN','OC','TG']);
@@ -1244,7 +1261,9 @@ const RULES={
   nifu:true,         // 二歩禁止
   sennichite:true,   // 千日手（同一局面4回）で引き分け
   ranklessAsGeneral:true, // 格なし駒（チェス駒・本将棋成駒・はさみ駒）を通常の一般駒（格5）として扱う。範囲攻撃で取れる対象になる。
-  randomIncludeSpecial:true // ランダム置換（完全・強さ近い・同じ格）の候補に、はさみ駒・オセロ駒を含める。
+  randomIncludeSpecial:true, // ランダム置換（完全・強さ近い・同じ格）の候補に、はさみ駒・オセロ駒を含める。
+  repromote:false,   // 敵陣に入りなおすともう一度成れる（成駒の成駒に成れる）
+  randomPromote:false // 成り先のない駒は、成るとき全駒からランダムな駒に変化する
 };
 let posCount={};     // 局面出現回数（千日手判定用）
 const SPEEDS=[
@@ -2253,7 +2272,10 @@ function applyMoveSilent(side,m,silent){
     const cpawnPromo = pc.t==='cP' && (m.tr===(side===1?0:8));
     const promo0 = (cpawnPromo||igui) ? false : (m.promo!==undefined ? m.promo
       : (canPromoteNow(pc.t)&&(inPromoZone(m.fr,side)||inPromoZone(m.tr,side))));
-    recordKifu({side,from:[m.fr,m.fc],to:[m.tr,m.tc],code:pc.t,promo:!!promo0,promoTo:cpawnPromo?'cQ':undefined,cap:tg?tg.t:null,caps:m.caps||undefined});
+    // 成る場合の新コード（連鎖成り・ランダム成りを解決）。乱数なので棋譜に promoTo を記録。
+    const willPromo = !cpawnPromo && promo0 && canPromoteNow(pc.t);
+    const promoNew = willPromo ? (m.promoTo || resolvePromoCode(pc.t)) : null;
+    recordKifu({side,from:[m.fr,m.fc],to:[m.tr,m.tc],code:pc.t,promo:!!promo0,promoTo:cpawnPromo?'cQ':(promoNew||undefined),cap:tg?tg.t:null,caps:m.caps||undefined});
     let tookRoyal = tg && isRoyal(tg.t);
     if(tg && RULES.drops){ cap.push(capturedCode(tg)); }
     // 獅子の途中取り（caps：2枚取り・居喰いの対象）
@@ -2261,10 +2283,9 @@ function applyMoveSilent(side,m,silent){
       const v=board[cr][cc];
       if(v){ if(isRoyal(v.t)) tookRoyal=true; else if(RULES.drops) cap.push(capturedCode(v)); board[cr][cc]=null; }
     }
-    const willPromo = !cpawnPromo && promo0 && promoteCode(pc.t);
-    const newCode = cpawnPromo ? 'cQ' : (willPromo?promoteCode(pc.t):pc.t);
+    const newCode = cpawnPromo ? 'cQ' : (promoNew || pc.t);
     const np={t:newCode,p:side};
-    if(willPromo) np.o = pc.o || pc.t;
+    if(promoNew) np.o = pc.o || pc.t;
     else if(pc.o) np.o = pc.o;
     if(pc.t==='cK'||pc.t==='cR') np.moved=true;
     // 範囲攻撃：間の格下駒を一掃
@@ -2922,6 +2943,8 @@ function openRuleModal(){
   document.getElementById('rSennichite').checked=RULES.sennichite;
   document.getElementById('rRankless').checked=RULES.ranklessAsGeneral;
   document.getElementById('rRandSpecial').checked=RULES.randomIncludeSpecial;
+  document.getElementById('rRepromote').checked=RULES.repromote;
+  document.getElementById('rRandomPromote').checked=RULES.randomPromote;
   document.getElementById('ruleModal').classList.add('show');
 }
 document.getElementById('ruleBtn').onclick=openRuleModal;
@@ -2933,6 +2956,8 @@ document.getElementById('rNifu').onchange=e=>RULES.nifu=e.target.checked;
 document.getElementById('rSennichite').onchange=e=>RULES.sennichite=e.target.checked;
 document.getElementById('rRankless').onchange=e=>{ RULES.ranklessAsGeneral=e.target.checked; POWER_CACHE_clear(); render(); };
 document.getElementById('rRandSpecial').onchange=e=>{ RULES.randomIncludeSpecial=e.target.checked; };
+document.getElementById('rRepromote').onchange=e=>{ RULES.repromote=e.target.checked; };
+document.getElementById('rRandomPromote').onchange=e=>{ RULES.randomPromote=e.target.checked; };
 // 置く側トグル
 (function(){ const b=document.getElementById('sideToggle'); if(b) b.onclick=()=>{
   editSide=-editSide;
