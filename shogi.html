@@ -484,6 +484,11 @@
           <span class="sort-lbl">置く側</span>
           <button id="sideToggle" class="side-toggle">あなたの駒</button>
         </div>
+        <div class="sort-bar">
+          <span class="sort-lbl">検索</span>
+          <input id="pieceSearch" type="text" placeholder="駒名・特徴で検索（例：成香 / 飛 / ライオン / lion）" style="flex:1;min-width:0;padding:5px 8px;border-radius:6px;border:1px solid #6a5790;background:#241a3a;color:#eee;">
+          <button id="pieceSearchClear" style="padding:5px 8px;">×</button>
+        </div>
         <div class="rank-legend">
           <span><i style="background:#ff6b9d"></i>玉将格</span>
           <span><i style="background:#ff9a2e"></i>大将</span>
@@ -499,6 +504,7 @@
           <div class="pick-section"><span class="pick-lbl" id="lblHasami">はさみ将棋（特殊駒）</span><div class="pick-grid" id="pickHasami"></div></div>
           <div class="pick-section"><span class="pick-lbl" id="lblOthello">オセロ（特殊駒）</span><div class="pick-grid" id="pickOthello"></div></div>
           <div class="pick-section"><span class="pick-lbl" id="lblGo">囲碁（特殊駒）</span><div class="pick-grid" id="pickGo"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblDoubutsu">どうぶつしょうぎ</span><div class="pick-grid" id="pickDoubutsu"></div></div>
           <div class="pick-section"><span class="pick-lbl" id="lblOther">その他の将棋駒</span><div class="pick-grid" id="pickOther"></div></div>
         </div>
         <div class="pick-actions">
@@ -876,7 +882,7 @@ function hasRank(t){
 // 駒の格（小さいほど高位）。範囲攻撃の判定にも使う。
 // 格なし駒は通常 Infinity（飛び越え対象だが取れない）。ただしルール ranklessAsGeneral がONなら格5の一般駒扱い。
 function pieceRank(t){
-  if(t==='K'||t==='CP'||t==='cK'||t==='hK'||t==='hKw'||t==='mK'||t==='JT') return 1; // 玉将・太子・キング・本将棋の王・王将・玉将(摩訶)・自在天王
+  if(t==='K'||t==='CP'||t==='cK'||t==='hK'||t==='hKw'||t==='mK'||t==='JT'||t==='zLion') return 1; // 玉将・太子・キング・王将・玉将(摩訶)・自在天王・ライオン
   if(!hasRank(t)) return (typeof RULES!=='undefined' && RULES.ranklessAsGeneral) ? 5 : Infinity;
   if(t==='GG') return 2;                           // 大将
   if(t==='VG') return 3;                           // 副将
@@ -932,6 +938,17 @@ TP['HENK']={n:'Enchanted Fox',k:'変狐',pr:'+HENK',v:200,fl:[],m:[[-1,-1,2],[-1
 // ※既存の大局将棋「夜叉(YA)」とは別駒。今回追加分は「夜刄」(刄)。
 TP['+HENK']={n:'Yaiba',k:'夜刄',pr:null,v:340,fl:[],m:[[-1,-1,1],[-1,1,1],[1,0,1],[0,-1,3],[0,1,3]]};
 const OTHER_LIST=['mK','JT','HENK','+HENK'];
+
+// どうぶつしょうぎの駒。3×4の幼児向け将棋。
+// ライオン=玉(royal)、ぞう=斜め1、きりん=縦横1、ひよこ=前1(成ってにわとり=金の動き)。
+TP['zLion']={n:'Lion(Doubutsu)',k:'ライオン',pr:null,v:99999,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[0,-1,1],[0,1,1],[1,-1,1],[1,0,1],[1,1,1]]};
+TP['zZou']={n:'Elephant(Doubutsu)',k:'ぞう',pr:null,v:280,fl:[],m:[[-1,-1,1],[-1,1,1],[1,-1,1],[1,1,1]]};
+TP['zKirin']={n:'Giraffe(Doubutsu)',k:'きりん',pr:null,v:280,fl:[],m:[[-1,0,1],[1,0,1],[0,-1,1],[0,1,1]]};
+TP['zHiyoko']={n:'Chick(Doubutsu)',k:'ひよこ',pr:'zNiwa',v:100,fl:[],m:[[-1,0,1]]};
+TP['zNiwa']={n:'Hen(Doubutsu)',k:'にわとり',pr:null,v:320,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[0,-1,1],[0,1,1],[1,0,1]]};
+const DOUBUTSU_LIST=['zLion','zKirin','zZou','zHiyoko','zNiwa'];
+// 本将棋の成駒（成り先にしかない駒）も一覧/検索に出す
+const HON_PROMO_LIST=['+P_hon','+L_hon','+N_hon','+S_hon','+B_hon','+R_hon'];
 
 // 本将棋の成駒。と・成香・成桂・成銀は金の動き、馬・龍。
 (function addHonProm(){
@@ -1003,7 +1020,8 @@ for(const t in TP){
   if(pr) DEMOTE[pr]=t;  // pr(成り先) から元駒 t を引ける
 }
 // 本将棋の駒と種類が被る大局将棋の駒コード（これらにだけ「(大局)」を付ける）
-const DAIKYOKU_OVERLAP=new Set(['P','L','N','S','G','K','B','R']);
+// 飛車(R)・角行(B)は本将棋と大局で動き・成り・成り後が同じなので「(大局)」を付けず同一扱い
+const DAIKYOKU_OVERLAP=new Set(['P','L','N','S','G','K']);
 // 大局将棋の駒で、本将棋と被る駒か（接尾辞「(大局)」を付ける対象）
 function isDaikyokuPiece(t){
   return DAIKYOKU_OVERLAP.has(t);
@@ -1601,7 +1619,7 @@ function isPromoted(t){ return t.charAt(0)==='+' || PROM_CODES.has(t); }
 // 取った駒を不成に戻す。成駒のときだけ元の駒へ。非成駒はそのまま。
 function demoteOf(t){ return (isPromoted(t) && DEMOTE[t]) ? DEMOTE[t] : t; }
 // 取られたら負けの駒（玉将 or 太子）。
-function isRoyal(t){ return t==='hK'||t==='hKw'||t==='mK'||t==='K'||t==='CP'||t==='cK'||t==='JT'; }
+function isRoyal(t){ return t==='hK'||t==='hKw'||t==='mK'||t==='K'||t==='CP'||t==='cK'||t==='JT'||t==='zLion'; }
 // 指定プレイヤーのroyal駒（玉・太子）が盤上または持ち駒に残っているか
 function hasRoyal(p){
   for(let r=0;r<9;r++)for(let c=0;c<9;c++){
@@ -1718,9 +1736,15 @@ function renderCap(id,arr,p){
     else fillKoma(d, t);
     if(counts[t]>1){const b=document.createElement('span');b.className='ct';b.textContent=counts[t];d.appendChild(b);}
     if(editing){
-      // 編集中：タップで1枚減らす
-      d.title='タップで1枚減らす';
-      d.onclick=()=>{ const i=arr.indexOf(t); if(i>=0)arr.splice(i,1); render(); setStatus('持ち駒を1枚減らしました'); };
+      // 編集中：タップで説明、「−」で1枚減らす
+      d.title='タップで説明／−で1枚減らす';
+      d.onclick=()=>{ infoOnly=true; editCell=null; openPickList(); showPreview(t); };
+      const minus=document.createElement('span');
+      minus.className='ct'; minus.textContent='−';
+      minus.style.cssText='left:-2px;right:auto;background:#c0392b;cursor:pointer;';
+      minus.title='1枚減らす';
+      minus.onclick=(e)=>{ e.stopPropagation(); const i=arr.indexOf(t); if(i>=0)arr.splice(i,1); render(); setStatus('持ち駒を1枚減らしました'); };
+      d.appendChild(minus);
     } else {
       d.onclick=()=>{ if(gameOver||replaying||isAuto(p)||turn!==p)return;
         sel=(sel&&sel.drop&&sel.t===t)?null:{drop:true,t,p}; render(); };
@@ -2688,57 +2712,68 @@ function mkPickBtn(t,container){
   d.dataset.code=t;
   container.appendChild(d);
 }
+let pieceQuery='';
+// フリーワード検索：駒名(和/英/表示名)・コード・説明に部分一致
+function pieceMatches(t){
+  if(!pieceQuery) return true;
+  const q=pieceQuery.toLowerCase();
+  const desc=(typeof DESC!=='undefined'&&DESC[t])?DESC[t]:'';
+  const s=[t,KANJI[t]||'',ENAME[t]||'',dispName(t)||'',desc].join(' ').toLowerCase();
+  return s.indexOf(q)>=0;
+}
 function buildPickGrid(){
-  const gb=document.getElementById('pickBasic');
-  const gd=document.getElementById('pickDaikyoku');
-  const gc=document.getElementById('pickChess');
-  const gh=document.getElementById('pickHasami');
-  const go=document.getElementById('pickOthello');
-  const ggo=document.getElementById('pickGo');
-  const gother=document.getElementById('pickOther');
-  const lblB=document.getElementById('lblBasic');
-  const lblD=document.getElementById('lblDaikyoku');
-  const lblC=document.getElementById('lblChess');
-  const lblH=document.getElementById('lblHasami');
-  const lblO=document.getElementById('lblOthello');
-  const lblGo=document.getElementById('lblGo');
-  const lblOther=document.getElementById('lblOther');
-  gb.innerHTML=''; gd.innerHTML=''; if(gc)gc.innerHTML=''; if(gh)gh.innerHTML=''; if(go)go.innerHTML=''; if(ggo)ggo.innerHTML=''; if(gother)gother.innerHTML='';
   const mode=currentSortMode();
   const basicSet=new Set(BASIC_LIST);
   let daikyoku=TBASE.filter(t=>!basicSet.has(t));
   if(typeof TPROM!=='undefined') daikyoku=daikyoku.concat(TPROM);
+  const basic = BASIC_LIST.concat(typeof HON_PROMO_LIST!=='undefined'?HON_PROMO_LIST:[]);
   const chess = (typeof CHESS_LIST!=='undefined')? CHESS_LIST.slice() : [];
   const hasami = (typeof HASAMI_LIST!=='undefined')? HASAMI_LIST.slice() : [];
   const othello = (typeof OTHELLO_LIST!=='undefined')? OTHELLO_LIST.slice() : [];
   const goList = (typeof GO_LIST!=='undefined')? GO_LIST.slice() : [];
+  const doubutsu = (typeof DOUBUTSU_LIST!=='undefined')? DOUBUTSU_LIST.slice() : [];
   const otherList = (typeof OTHER_LIST!=='undefined')? OTHER_LIST.slice() : [];
-  const setDisp=(lbl,show)=>{ if(lbl&&lbl.parentElement) lbl.parentElement.style.display=show?'':'none'; };
+  const setDisp=(id,show)=>{ const lbl=document.getElementById(id); if(lbl&&lbl.parentElement) lbl.parentElement.style.display=show?'':'none'; };
+  // セクションを埋める共通処理（検索フィルタ＋空なら非表示）
+  const fill=(gridId,lblId,list,lblText)=>{
+    const g=document.getElementById(gridId); if(!g)return;
+    g.innerHTML='';
+    const filtered=sortList(list, mode).filter(pieceMatches);
+    filtered.forEach(t=>mkPickBtn(t,g));
+    setDisp(lblId, filtered.length>0);
+    const lbl=document.getElementById(lblId); if(lbl&&lblText) lbl.textContent=lblText;
+  };
 
   if(mode==='hist_pick'||mode==='hist_view'){
-    const all=BASIC_LIST.concat(daikyoku).concat(chess).concat(hasami).concat(othello).concat(goList).concat(otherList);
-    const sorted=sortList(all, mode);
-    if(lblB) lblB.textContent = (mode==='hist_pick'?'選択した順':'見た順');
-    setDisp(lblD,false); setDisp(lblC,false); setDisp(lblH,false); setDisp(lblO,false); setDisp(lblGo,false); setDisp(lblOther,false);
+    const all=basic.concat(daikyoku).concat(chess).concat(hasami).concat(othello).concat(goList).concat(doubutsu).concat(otherList);
+    ['pickDaikyoku','pickChess','pickHasami','pickOthello','pickGo','pickDoubutsu','pickOther'].forEach(id=>{const g=document.getElementById(id);if(g)g.innerHTML='';});
+    ['lblDaikyoku','lblChess','lblHasami','lblOthello','lblGo','lblDoubutsu','lblOther'].forEach(id=>setDisp(id,false));
+    const gb=document.getElementById('pickBasic'); gb.innerHTML='';
+    const sorted=sortList(all, mode).filter(pieceMatches);
+    document.getElementById('lblBasic').textContent=(mode==='hist_pick'?'選択した順':'見た順');
     if(sorted.length===0){
       const p=document.createElement('div'); p.style.cssText='color:#b3a8d8;font-size:.8rem;padding:6px;';
-      p.textContent = (mode==='hist_pick'?'まだ駒を選んでいません':'まだ駒を見ていません');
+      p.textContent = pieceQuery? '一致する駒がありません' : (mode==='hist_pick'?'まだ駒を選んでいません':'まだ駒を見ていません');
       gb.appendChild(p);
-    } else {
-      sorted.forEach(t=>mkPickBtn(t,gb));
-    }
+    } else sorted.forEach(t=>mkPickBtn(t,gb));
   } else {
-    if(lblB) lblB.textContent='本将棋';
-    setDisp(lblD,true); setDisp(lblC,true); setDisp(lblH,true); setDisp(lblO,true); setDisp(lblGo,true); setDisp(lblOther,true);
-    sortList(BASIC_LIST, mode).forEach(t=>mkPickBtn(t,gb));
-    sortList(daikyoku, mode).forEach(t=>mkPickBtn(t,gd));
-    if(gc) sortList(chess, mode).forEach(t=>mkPickBtn(t,gc));
-    if(gh) sortList(hasami, mode).forEach(t=>mkPickBtn(t,gh));
-    if(go) sortList(othello, mode).forEach(t=>mkPickBtn(t,go));
-    if(ggo) sortList(goList, mode).forEach(t=>mkPickBtn(t,ggo));
-    if(gother) sortList(otherList, mode).forEach(t=>mkPickBtn(t,gother));
+    fill('pickBasic','lblBasic',basic,'本将棋');
+    fill('pickDaikyoku','lblDaikyoku',daikyoku);
+    fill('pickChess','lblChess',chess);
+    fill('pickHasami','lblHasami',hasami);
+    fill('pickOthello','lblOthello',othello);
+    fill('pickGo','lblGo',goList);
+    fill('pickDoubutsu','lblDoubutsu',doubutsu);
+    fill('pickOther','lblOther',otherList);
   }
 }
+// 検索ボックス配線
+(function(){
+  const inp=document.getElementById('pieceSearch');
+  if(inp) inp.oninput=()=>{ pieceQuery=inp.value.trim(); buildPickGrid(); const sc=document.getElementById('pickScroll'); if(sc)sc.scrollTop=0; };
+  const clr=document.getElementById('pieceSearchClear');
+  if(clr) clr.onclick=()=>{ pieceQuery=''; if(inp)inp.value=''; buildPickGrid(); };
+})();
 // ソート選択で再構築（スクロールは先頭へ）
 (function(){ const s=document.getElementById('sortSel'); if(s) s.onchange=()=>{ buildPickGrid(); const sc=document.getElementById('pickScroll'); if(sc)sc.scrollTop=0; }; })();
 
