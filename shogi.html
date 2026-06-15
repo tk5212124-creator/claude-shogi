@@ -2535,6 +2535,21 @@ function rankColorPair(t){
 }
 function rankColor(t){ return rankColorPair(t)[1]; }
 function mkPickBtn(t,container){
+  if(isGo(t)){
+    // 囲碁の駒：碁石の画像＋「黒=先手 / 白=後手」を明示
+    const d=document.createElement('div');
+    d.className='pick-koma k2';
+    d.style.background='linear-gradient(158deg,#efe9f7,#d7cdeb)';
+    d.style.borderColor='#b9abdb'; d.style.color='#1a1330';
+    const disc=document.createElement('div'); disc.className='go-disc '+(t==='GOB'?'black':'white');
+    disc.style.cssText='width:42%;height:42%;margin:1px auto;';
+    d.appendChild(disc);
+    const lab=document.createElement('span'); lab.style.cssText='flex:0 0 100%;text-align:center;font-size:.6rem;line-height:1.1;';
+    lab.textContent=(t==='GOB'?'黒・先手':'白・後手');
+    d.appendChild(lab);
+    d.onclick=()=>showPreview(t); d.dataset.code=t;
+    container.appendChild(d); return;
+  }
   const lines=splitLabel(t);
   const maxLen=Math.max(...lines.map(s=>[...s].length));
   const d=document.createElement('div');
@@ -2675,8 +2690,9 @@ function showPreview(t){
   document.getElementById('pickPreview').style.display='flex';
   const pr = promoteCode(t);
   const ename = ENAME[t] ? '　'+ENAME[t] : '';
-  document.getElementById('pvName').textContent = dispName(t) + ename
-    + (pr ? '（成ると'+KANJI[pr]+'）' : '');
+  document.getElementById('pvName').textContent = isGo(t)
+    ? (t==='GOB'?'囲碁の駒（黒＝先手）':'囲碁の駒（白＝後手）')
+    : dispName(t) + ename + (pr ? '（成ると'+KANJI[pr]+'）' : '');
   const rankNames={1:'第1位（玉将・太子格）',2:'第2位（大将）',3:'第3位（副将）',4:'第4位（角将・飛将級）',5:'一般',Infinity:'格なし（範囲攻撃で取れない）'};
   const rk=pieceRank(t);
   const pm=document.getElementById('pvMove');
@@ -2691,7 +2707,9 @@ function showPreview(t){
   else if(t==='EL'||t==='HF') notes.push('限定獅子：前方へ2マス動き・途中と着地で2枚取り・居喰い可');
   if(fl.includes('igui')) notes.push('居喰い：動かずに隣の駒を取れる');
   if(hasFire(t)) notes.push('火鬼：移動後、隣接する敵駒をまとめて焼く（取る）');
-  if(isRoyal(t)) notes.push('王の格：取られて味方の玉・太子・キングが全ていなくなると負け');
+  if(isGo(t)) notes.push('囲碁の駒：盤上のどこにでも打てる（動けない）。縦横4方を敵か盤端で囲まれると取られる。色は固有で、黒＝先手・白＝後手の駒として働く。取っても色は変わらず、持ち駒から打つと元の色（黒は先手／白は後手）として盤に出る＝相手の碁石を打つと相手の駒になる');
+  if(t==='JT') notes.push('自在天王：盤上のどこへでも動ける（駒を飛び越え自由）。空きマスは自由、敵駒は他の敵に取り返されないマスだけ取れる。王の格');
+  if(isRoyal(t)&&!isGo(t)) notes.push('王の格：取られて味方の玉・太子・キングが全ていなくなると負け');
   document.getElementById('pvDesc').textContent = [extra, ...notes].filter(Boolean).join(' / ');
   drawMiniMoves(t);
   // 成り先ボタン（成りがある駒のみ）
@@ -2737,7 +2755,9 @@ function drawMiniMoves(t){
     const d=document.createElement('div');
     d.className='pv-cell';
     if(r===C&&c===C){ d.classList.add('center');
-      const dot=document.createElement('div'); dot.className='dot'; dot.textContent=KANJI[t].length<=2?KANJI[t]:KANJI[t][0]; d.appendChild(dot); }
+      if(isGo(t)){ const g=document.createElement('div'); g.className='go-disc '+(t==='GOB'?'black':'white'); g.style.cssText='width:80%;height:80%;'; d.appendChild(g); }
+      else if(t==='OTH'){ const o=document.createElement('div'); o.className='othello-disc '+'black'; o.style.cssText='width:80%;height:80%;'; d.appendChild(o); }
+      else { const dot=document.createElement('div'); dot.className='dot'; dot.textContent=KANJI[t].length<=2?KANJI[t]:KANJI[t][0]; d.appendChild(dot); } }
     else if(grid[r][c]) d.classList.add(grid[r][c]);
     mini.appendChild(d);
   }
