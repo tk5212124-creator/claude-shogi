@@ -387,6 +387,7 @@
   <div class="controls">
     <button id="editMode">編集モード：OFF</button>
     <button id="ruleBtn">ルール設定</button>
+    <button id="swapSides">先後入替（あなた⇄相手）</button>
     <button id="reset">投了・指し直し</button>
     <button id="resetBoard">初期配置に戻す</button>
   </div>
@@ -530,7 +531,11 @@
       <label class="rule-row"><input type="checkbox" id="rRankless"> 格なしの駒（チェス駒・成駒・はさみ駒）を一般駒として扱う（範囲攻撃で取られる）</label>
       <label class="rule-row"><input type="checkbox" id="rRandSpecial"> ランダム置換の候補にはさみ駒・オセロ駒を含める</label>
       <label class="rule-row"><input type="checkbox" id="rRepromote"> 敵陣に入りなおすともう一度成れる（成駒の成駒に成れる）</label>
-      <label class="rule-row"><input type="checkbox" id="rRandomPromote"> 成り先のない駒は、成るとき全駒からランダムな駒に変化する</label>
+      <label class="rule-row"><input type="checkbox" id="rRandomPromote"> 成り先のない駒は、成るとき全駒からランダムな駒に変化する（王将・玉将はroyalな駒へ）</label>
+      <p class="rule-note" style="margin:6px 0 2px;">成る条件（3つとも外すと「成り」が無くなります）</p>
+      <label class="rule-row"><input type="checkbox" id="rPromoZone"> 敵陣に入ったら成れる</label>
+      <label class="rule-row"><input type="checkbox" id="rPromoLast"> 敵陣の一番奥に着いたら成れる</label>
+      <label class="rule-row"><input type="checkbox" id="rPromoCap"> 敵駒を取ったら成れる</label>
       <p class="rule-note">チェスの駒は編集モードの一覧から配置できます（キャスリング対応）。設定変更は次の指し手から反映されます。</p>
       <div class="pick-actions">
         <button class="primary" id="ruleClose">閉じる</button>
@@ -871,7 +876,7 @@ function hasRank(t){
 // 駒の格（小さいほど高位）。範囲攻撃の判定にも使う。
 // 格なし駒は通常 Infinity（飛び越え対象だが取れない）。ただしルール ranklessAsGeneral がONなら格5の一般駒扱い。
 function pieceRank(t){
-  if(t==='K'||t==='CP'||t==='cK'||t==='hK'||t==='JT') return 1; // 玉将・太子・キング・本将棋の王・自在天王
+  if(t==='K'||t==='CP'||t==='cK'||t==='hK'||t==='hKw'||t==='mK'||t==='JT') return 1; // 玉将・太子・キング・本将棋の王・王将・玉将(摩訶)・自在天王
   if(!hasRank(t)) return (typeof RULES!=='undefined' && RULES.ranklessAsGeneral) ? 5 : Infinity;
   if(t==='GG') return 2;                           // 大将
   if(t==='VG') return 3;                           // 副将
@@ -926,7 +931,7 @@ TP['HENK']={n:'Enchanted Fox',k:'変狐',pr:'+HENK',v:200,fl:[],m:[[-1,-1,2],[-1
 // 夜刄(変狐の成駒・Wikipedia版)：斜め前1、後ろ(直進)1、左右に1〜3マス。
 // ※既存の大局将棋「夜叉(YA)」とは別駒。今回追加分は「夜刄」(刄)。
 TP['+HENK']={n:'Yaiba',k:'夜刄',pr:null,v:340,fl:[],m:[[-1,-1,1],[-1,1,1],[1,0,1],[0,-1,3],[0,1,3]]};
-const OTHER_LIST=['JT','HENK','+HENK'];
+const OTHER_LIST=['mK','JT','HENK','+HENK'];
 
 // 本将棋の成駒。と・成香・成桂・成銀は金の動き、馬・龍。
 (function addHonProm(){
@@ -948,6 +953,10 @@ const OTHER_LIST=['JT','HENK','+HENK'];
   TP['hS']={n:'Silver',k:'銀将',pr:'+S_hon',v:200,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[1,-1,1],[1,1,1]]};
   TP['hG']={n:'Gold',k:'金将',pr:null,v:240,fl:[],m:GOLD};
   TP['hK']={n:'King',k:'玉将',pr:null,v:99999,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[0,-1,1],[0,1,1],[1,-1,1],[1,0,1],[1,1,1]]};
+  // 王将（玉将と同じ動き・効果。初期配置では相手側が王将）
+  TP['hKw']={n:'King(Ou)',k:'王将',pr:null,v:99999,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[0,-1,1],[0,1,1],[1,-1,1],[1,0,1],[1,1,1]]};
+  // 玉将(摩訶)：動きは本将棋の玉将と同じ。摩訶大大将棋では玉将の成駒が自在天王なので成り先をJTに。
+  TP['mK']={n:'King(Maka)',k:'玉将',pr:'JT',v:99999,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[0,-1,1],[0,1,1],[1,-1,1],[1,0,1],[1,1,1]]};
   TP['hB']={n:'Bishop',k:'角行',pr:'+B_hon',v:560,fl:[],m:[[-1,-1,'F'],[-1,1,'F'],[1,-1,'F'],[1,1,'F']]};
   TP['hR']={n:'Rook',k:'飛車',pr:'+R_hon',v:560,fl:[],m:[[-1,0,'F'],[0,-1,'F'],[0,1,'F'],[1,0,'F']]};
 })();
@@ -999,10 +1008,11 @@ const DAIKYOKU_OVERLAP=new Set(['P','L','N','S','G','K','B','R']);
 function isDaikyokuPiece(t){
   return DAIKYOKU_OVERLAP.has(t);
 }
-// 表示名の構成要素を返す：{name:駒名, suffix:'(大局)'またはnull}
+// 表示名の構成要素を返す：{name:駒名, suffix:'(大局)'/'(摩訶)'またはnull}
 function dispParts(t){
   const base = KANJI[t] || t;
-  return { name: base, suffix: isDaikyokuPiece(t) ? '(大局)' : null };
+  const suffix = (t==='mK') ? '(摩訶)' : (isDaikyokuPiece(t) ? '(大局)' : null);
+  return { name: base, suffix };
 }
 // 表示名（単一文字列。ツールチップ・プレビュー等で使用）
 function dispName(t){
@@ -1073,29 +1083,43 @@ function moveVecs(t){
 function promoteCode(t){
   return TP[t] && TP[t].pr ? TP[t].pr : null;
 }
-// 全駒からランダムな成り先を選ぶ（royal・囲碁・オセロ・自在天王は除く）
-let RANDOM_PROMO_POOL=null;
-function randomPromoCode(){
-  if(!RANDOM_PROMO_POOL) RANDOM_PROMO_POOL=Object.keys(TP).filter(t=>!isRoyal(t)&&t!=='OTH'&&!isGo(t));
-  return RANDOM_PROMO_POOL[Math.floor(Math.random()*RANDOM_PROMO_POOL.length)];
+// 全駒からランダムな成り先を選ぶ。royal駒が成る場合は royal駒の中から選ぶ（王の資格を保つ）。
+let RANDOM_PROMO_POOL=null, RANDOM_ROYAL_POOL=null;
+function randomPromoCode(royal){
+  if(!RANDOM_PROMO_POOL){
+    RANDOM_PROMO_POOL=Object.keys(TP).filter(t=>!isRoyal(t)&&t!=='OTH'&&!isGo(t));
+    RANDOM_ROYAL_POOL=Object.keys(TP).filter(t=>isRoyal(t));
+  }
+  const pool=(royal && RANDOM_ROYAL_POOL.length)? RANDOM_ROYAL_POOL : RANDOM_PROMO_POOL;
+  return pool[Math.floor(Math.random()*pool.length)];
 }
-// 成る時の新コード：定義された成り先があればそれ。無くてランダム成りONなら全駒から無作為。
+// 成る時の新コード：定義された成り先があればそれ。無くてランダム成りONなら無作為（royalはroyalへ）。
 function resolvePromoCode(t){
   if(TP[t]&&TP[t].pr) return TP[t].pr;
-  if(RULES.randomPromote) return randomPromoCode();
+  if(RULES.randomPromote) return randomPromoCode(isRoyal(t));
   return t;
 }
-// 成れる駒か（ルールにより成駒の再成り・成り先なしのランダム成りも考慮）
+// 駒が成れるか（成り先あり／成駒の再成り／成り先なしのランダム成り）。royalも対象。
 function canPromoteNow(t){
-  if(isRoyal(t)) return false;
-  if(!isPromoted(t)) return !!(TP[t]&&TP[t].pr) || RULES.randomPromote; // 未成：成り先あり or ランダム成り
+  if(!isPromoted(t)) return !!(TP[t]&&TP[t].pr) || RULES.randomPromote;
   // 既に成駒：再成りONなら、連鎖成り(pr)かランダム成りで再度成れる
   return RULES.repromote && (!!(TP[t]&&TP[t].pr) || RULES.randomPromote);
+}
+// 成り条件（3トグルのいずれかを満たすか）。全てOFFなら成り自体が起きない。
+function promoTrigger(fr,tr,side,captured){
+  if(RULES.promoOnZone && (inPromoZone(fr,side)||inPromoZone(tr,side))) return true;
+  if(RULES.promoOnLast && tr===(side===1?0:8)) return true;
+  if(RULES.promoOnCapture && captured) return true;
+  return false;
+}
+// この着手で成れるか（駒が成れる かつ いずれかの成り条件を満たす）
+function canPromoteMove(t,fr,tr,side,captured){
+  return canPromoteNow(t) && promoTrigger(fr,tr,side,captured);
 }
 // 成り可能な最遠ランク強制成り対象（前進のみの駒）。本将棋準拠でhP,hL,hNに加え該当大局駒。
 const FORCE_PROMO=new Set(['hP','hL','hN','SG','I','D','GN','OC','TG']);
 // 編集メニュー用：本将棋セット（本将棋専用コード）
-const BASIC_LIST=['hP','hL','hN','hS','hG','hB','hR','hK'];
+const BASIC_LIST=['hP','hL','hN','hS','hG','hB','hR','hK','hKw'];
 
 // 駒のひとこと補足（任意・自動説明を補強）
 const DESC={
@@ -1232,11 +1256,13 @@ let board, capYou, capEnemy, sel, history, gameOver, pendingPromo, turn;
 
 function setupStartBoard(){
   board=Array.from({length:9},()=>Array(9).fill(null));
-  const back=['hL','hN','hS','hG','hK','hG','hS','hN','hL'];
+  // 中央は王（相手＝後手は王将、あなた＝先手は玉将）
+  const backYou=  ['hL','hN','hS','hG','hK', 'hG','hS','hN','hL'];
+  const backEnemy=['hL','hN','hS','hG','hKw','hG','hS','hN','hL'];
   for(let c=0;c<9;c++){
-    board[0][c]={t:back[c],p:-1};
+    board[0][c]={t:backEnemy[c],p:-1};
     board[2][c]={t:'hP',p:-1};
-    board[8][c]={t:back[c],p:1};
+    board[8][c]={t:backYou[c],p:1};
     board[6][c]={t:'hP',p:1};
   }
   board[1][1]={t:'hB',p:-1}; board[1][7]={t:'hR',p:-1};
@@ -1267,7 +1293,10 @@ const RULES={
   ranklessAsGeneral:true, // 格なし駒（チェス駒・本将棋成駒・はさみ駒）を通常の一般駒（格5）として扱う。範囲攻撃で取れる対象になる。
   randomIncludeSpecial:true, // ランダム置換（完全・強さ近い・同じ格）の候補に、はさみ駒・オセロ駒を含める。
   repromote:false,   // 敵陣に入りなおすともう一度成れる（成駒の成駒に成れる）
-  randomPromote:false // 成り先のない駒は、成るとき全駒からランダムな駒に変化する
+  randomPromote:false, // 成り先のない駒は、成るとき全駒からランダムな駒に変化する
+  promoOnZone:true,  // 敵陣に入ったら成れる（本将棋の標準）
+  promoOnLast:false, // 敵陣の一番奥に着いたら成れる
+  promoOnCapture:false // 敵駒を取ったら成れる（3つとも外すと成り自体が無くなる）
 };
 let posCount={};     // 局面出現回数（千日手判定用）
 const SPEEDS=[
@@ -1572,7 +1601,7 @@ function isPromoted(t){ return t.charAt(0)==='+' || PROM_CODES.has(t); }
 // 取った駒を不成に戻す。成駒のときだけ元の駒へ。非成駒はそのまま。
 function demoteOf(t){ return (isPromoted(t) && DEMOTE[t]) ? DEMOTE[t] : t; }
 // 取られたら負けの駒（玉将 or 太子）。
-function isRoyal(t){ return t==='hK'||t==='K'||t==='CP'||t==='cK'||t==='JT'; }
+function isRoyal(t){ return t==='hK'||t==='hKw'||t==='mK'||t==='K'||t==='CP'||t==='cK'||t==='JT'; }
 // 指定プレイヤーのroyal駒（玉・太子）が盤上または持ち駒に残っているか
 function hasRoyal(p){
   for(let r=0;r<9;r++)for(let c=0;c<9;c++){
@@ -1767,7 +1796,7 @@ function attemptMove(fr,fc,tr,tc){
     if(tr===lastRow){ doMoveChessPromo(fr,fc,tr,tc,'cQ',me); sel=null; afterPlayer(); return; }
     doMove(fr,fc,tr,tc,false,me); sel=null; afterPlayer(); return;
   }
-  const canP=canPromoteNow(pc.t)&&(inPromoZone(fr,me)||inPromoZone(tr,me));
+  const canP=canPromoteMove(pc.t,fr,tr,me,!!(board[tr][tc]&&board[tr][tc].p!==me));
   if(canP){
     if(mustPromote(pc.t,tr,me)){ doMove(fr,fc,tr,tc,true,me); sel=null; afterPlayer(); return; }
     pendingPromo={fr,fc,tr,tc};
@@ -2185,7 +2214,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
       if(v){ if(isRoyal(v.t)) king=true; else myCap.push(demoteOf(v.t)); nb[cr][cc]=null; }
     }
     const promo = m.promo!==undefined ? m.promo
-      : (!igui && canPromoteNow(pc.t) && (inPromoZone(m.fr,p)||inPromoZone(m.tr,p)));
+      : (!igui && canPromoteMove(pc.t,m.fr,m.tr,p, !!(tg&&tg.p!==p)||!!(m.caps&&m.caps.length)));
     nb[m.tr][m.tc]={t:promo?(promoteCode(pc.t)||pc.t):pc.t,p};
     if(!igui) nb[m.fr][m.fc]=null;
     if(pc.t==='HASA') simHasamiCapture(m.tr,m.tc,p); // はさみ取りを読みに反映
@@ -2202,7 +2231,7 @@ function genMoves(b,p,cy,ce){
     const pc=b[r][c];
     if(pc&&pc.p===p){
       moves(b,r,c).forEach(([tr,tc])=>{
-        const canP=canPromoteNow(pc.t)&&(inPromoZone(r,p)||inPromoZone(tr,p));
+        const canP=canPromoteMove(pc.t,r,tr,p,!!(b[tr][tc]&&b[tr][tc].p!==p));
         if(canP){
           list.push({fr:r,fc:c,tr,tc,promo:true});
           if(!mustPromote(pc.t,tr,p)) list.push({fr:r,fc:c,tr,tc,promo:false});
@@ -2310,7 +2339,7 @@ function applyMoveSilent(side,m,silent){
     // チェスポーン昇格判定
     const cpawnPromo = pc.t==='cP' && (m.tr===(side===1?0:8));
     const promo0 = (cpawnPromo||igui) ? false : (m.promo!==undefined ? m.promo
-      : (canPromoteNow(pc.t)&&(inPromoZone(m.fr,side)||inPromoZone(m.tr,side))));
+      : canPromoteMove(pc.t,m.fr,m.tr,side, !!(tg&&tg.p!==side)||!!(m.caps&&m.caps.length)));
     // 成る場合の新コード（連鎖成り・ランダム成りを解決）。乱数なので棋譜に promoTo を記録。
     const willPromo = !cpawnPromo && promo0 && canPromoteNow(pc.t);
     const promoNew = willPromo ? (m.promoTo || resolvePromoCode(pc.t)) : null;
@@ -2547,6 +2576,24 @@ document.getElementById('reset').onclick=()=>{
   newGame(true);
   updatePlayPauseLabel();
   setStatus('指し直します。▶ 開始 で対局開始（あなたが手動なら盤をタップ）');
+};
+// 先手後手（あなた⇄相手）を入れ替える：盤を180°回し全駒の所有者を反転、持ち駒も交換。
+// 一時停止状態で仕切り直す（CPU/手動の設定はそのまま）。
+document.getElementById('swapSides').onclick=()=>{
+  if(editing){ setStatus('編集モード中は入れ替えできません'); return; }
+  if(replaying) exitReplay();
+  stopAutoLoop();
+  const nb=Array.from({length:9},()=>Array(9).fill(null));
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    const pc=board[r][c];
+    if(pc) nb[8-r][8-c]={...pc, p:-pc.p};
+  }
+  board=nb;
+  const h=capYou; capYou=capEnemy; capEnemy=h; // 持ち駒も入れ替え
+  turn=1; gameOver=false; sel=null;
+  history=[]; kifu=[]; gameStartSnap=null; if(typeof redoStack!=='undefined') redoStack.length=0;
+  paused=true; updateReplayUI(); render(); updatePlayPauseLabel();
+  setStatus('先手後手を入れ替えました。▶ 開始 で対局（あなたが手動なら盤をタップ）');
 };
 // 初期配置（本将棋）に戻す（強制開始せず一時停止で待つ）
 document.getElementById('resetBoard').onclick=()=>{
@@ -2992,6 +3039,9 @@ function openRuleModal(){
   document.getElementById('rRandSpecial').checked=RULES.randomIncludeSpecial;
   document.getElementById('rRepromote').checked=RULES.repromote;
   document.getElementById('rRandomPromote').checked=RULES.randomPromote;
+  document.getElementById('rPromoZone').checked=RULES.promoOnZone;
+  document.getElementById('rPromoLast').checked=RULES.promoOnLast;
+  document.getElementById('rPromoCap').checked=RULES.promoOnCapture;
   document.getElementById('ruleModal').classList.add('show');
 }
 document.getElementById('ruleBtn').onclick=openRuleModal;
@@ -3005,6 +3055,9 @@ document.getElementById('rRankless').onchange=e=>{ RULES.ranklessAsGeneral=e.tar
 document.getElementById('rRandSpecial').onchange=e=>{ RULES.randomIncludeSpecial=e.target.checked; };
 document.getElementById('rRepromote').onchange=e=>{ RULES.repromote=e.target.checked; };
 document.getElementById('rRandomPromote').onchange=e=>{ RULES.randomPromote=e.target.checked; };
+document.getElementById('rPromoZone').onchange=e=>{ RULES.promoOnZone=e.target.checked; };
+document.getElementById('rPromoLast').onchange=e=>{ RULES.promoOnLast=e.target.checked; };
+document.getElementById('rPromoCap').onchange=e=>{ RULES.promoOnCapture=e.target.checked; };
 // 置く側トグル
 (function(){ const b=document.getElementById('sideToggle'); if(b) b.onclick=()=>{
   editSide=-editSide;
