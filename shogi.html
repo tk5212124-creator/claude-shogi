@@ -380,9 +380,13 @@
     <button id="speed">速度：標準</button>
   </div>
   <div class="controls">
+    <button class="primary" id="playPause">▶ 開始</button>
+    <button id="stepFwd">▶❘ 1手進める</button>
+    <button class="primary" id="undo">◀ 待った</button>
+  </div>
+  <div class="controls">
     <button id="editMode">編集モード：OFF</button>
     <button id="ruleBtn">ルール設定</button>
-    <button class="primary" id="undo">待った</button>
     <button id="reset">投了・指し直し</button>
     <button id="resetBoard">初期配置に戻す</button>
   </div>
@@ -1974,13 +1978,23 @@ function resolvePromo(yes){
 /* ===== 進行 ===== */
 function isAuto(side){ return side===1? autoYou : autoEnemy; }
 let autoTimer=null;
+let paused=true;        // 一時停止中はCPUが自動で進まない（▶開始/1手進める で進む）
 function stopAutoLoop(){ if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; } }
+function updatePlayPauseLabel(){
+  const b=document.getElementById('playPause'); if(!b)return;
+  b.textContent = paused ? (kifu.length? '▶ 再開':'▶ 開始') : '⏸ 一時停止';
+}
 
-// 手番側へ進む。自動なら考えて指し、再帰的に次の手番へ。手動なら入力待ち。
+// 手番側へ進む。自動かつ非停止なら考えて指し、再帰的に次の手番へ。手動／停止中は入力待ち。
 function nextTurn(){
   stopAutoLoop();
   render();
+  updatePlayPauseLabel();
   if(gameOver||replaying||editing)return;
+  if(isAuto(turn) && paused){
+    setStatus('一時停止中　▶開始 か ▶❘1手進める で進みます','think');
+    return;
+  }
   if(isAuto(turn)){
     const sp=SPEEDS[speedIdx];
     if(!sp.turbo) setStatus((turn===1?'あなた(CPU)':'相手(CPU)')+'が考えています…','think');
@@ -1995,27 +2009,37 @@ function nextTurn(){
 }
 function scheduleAutoStep(){
   stopAutoLoop();
+  if(paused) return; // 一時停止中は自動進行しない
   const sp=SPEEDS[speedIdx];
   // 超高速は setTimeout(0) で詰めつつ、各手の間にイベントループを挟む（ボタン応答確保）
   autoTimer=setTimeout(runAutoStep, sp.turbo?0:sp.ms);
 }
 let turboBatch=0;
-function runAutoStep(){
-  autoTimer=null;
-  if(gameOver||replaying||editing) return;
-  if(!isAuto(turn)) { nextTurn(); return; }
+// CPUに1手だけ指させる（スケジュールはしない）。指せたらtrue。
+function doAutoMove(){
+  if(gameOver||replaying||editing) return false;
+  if(!isAuto(turn)) return false;
   const sp=SPEEDS[speedIdx];
   let m=cpuPickMove(turn);
-  if(!m){ endGame(-turn); return; }
+  if(!m){ endGame(-turn); return false; }
   // 手動と同一の合法判定を実盤で必ず通す。万一不正なら合法手から選び直す。
   if(!isLegalMove(m, turn)){
     const legal=genMoves(board,turn,capYou,capEnemy).filter(mm=>isLegalMove(mm,turn));
-    if(!legal.length){ endGame(-turn); return; }
+    if(!legal.length){ endGame(-turn); return false; }
     m=legal[Math.floor(Math.random()*legal.length)];
   }
   applyMoveSilent(turn,m, sp.turbo); // 超高速は描画を間引く
-  if(gameOver){ render(); return; }
+  if(gameOver){ render(); return true; }
   turn=-turn;
+  return true;
+}
+function runAutoStep(){
+  autoTimer=null;
+  if(paused||gameOver||replaying||editing) return;
+  if(!isAuto(turn)) { nextTurn(); return; }
+  const sp=SPEEDS[speedIdx];
+  if(!doAutoMove()) return;
+  if(gameOver) return;
   if(sp.turbo){
     // 数手ごとに描画して体感速度を上げる
     turboBatch++;
@@ -2023,6 +2047,20 @@ function runAutoStep(){
     scheduleAutoStep();
   } else {
     nextTurn();
+  }
+}
+// ▶❘ 1手進める：待ったの取り消し（やり直し）があればそれ、無ければCPUに1手だけ指させる
+function stepForward(){
+  if(gameOver||replaying||editing) return;
+  stopAutoLoop();
+  if(redoStack.length){ redoOne(); return; }
+  if(!isAuto(turn)){ setStatus('あなたの番です（盤をタップして指してください）'); return; }
+  paused=true;
+  const moved=doAutoMove();
+  render(); updatePlayPauseLabel(); updateReplayUI();
+  if(moved && !gameOver){
+    const who=turn===1?'あなた':'相手';
+    setStatus('1手進めました（次は'+who+(isAuto(turn)?'(CPU)':'')+'・一時停止中）','think');
   }
 }
 // バックグラウンド復帰時に自動対局が止まっていたら再開
@@ -2249,6 +2287,7 @@ function cpuPickMove(side, depth){
 function applyMove(side,m){ applyMoveSilent(side,m,false); }
 function applyMoveSilent(side,m,silent){
   pushHistory();
+  if(typeof redoStack!=='undefined') redoStack.length=0; // 新しい着手でやり直し履歴は無効
   const cap = side===-1? capEnemy : capYou;
   if(m.drop){
     recordKifu({side,drop:m.drop,to:[m.tr,m.tc]});
@@ -2501,13 +2540,21 @@ function newGame(keepBoard){
   editing=false; multiSel=[];
   initState(keepBoard); refreshAutoLabels(); refreshEditLabel(); updateMultiBar(); updateEditBar(); updateReplayUI(); nextTurn();
 }
-// 新規対局：今の駒配置を維持して指し直し
-document.getElementById('reset').onclick=()=>newGame(true);
-// 初期配置（本将棋）に戻す
+// 新規対局：今の駒配置を維持して指し直し（強制開始せず一時停止で待つ）
+document.getElementById('reset').onclick=()=>{
+  if(replaying) exitReplay();
+  paused=true; if(typeof redoStack!=='undefined') redoStack.length=0;
+  newGame(true);
+  updatePlayPauseLabel();
+  setStatus('指し直します。▶ 開始 で対局開始（あなたが手動なら盤をタップ）');
+};
+// 初期配置（本将棋）に戻す（強制開始せず一時停止で待つ）
 document.getElementById('resetBoard').onclick=()=>{
   if(replaying) exitReplay();
+  paused=true; if(typeof redoStack!=='undefined') redoStack.length=0;
   newGame(false);
-  setStatus('本将棋の初期配置に戻しました');
+  updatePlayPauseLabel();
+  setStatus('本将棋の初期配置に戻しました。▶ 開始 で対局開始（あなたが手動なら盤をタップ）');
 };
 
 document.getElementById('autoYou').onclick=()=>{
@@ -2965,9 +3012,33 @@ document.getElementById('rRandomPromote').onchange=e=>{ RULES.randomPromote=e.ta
   b.classList.toggle('on', editSide===-1);
 }; })();
 
+// ===== 待った／やり直し（1手進める）用の状態スタック =====
+let redoStack=[];
+const dcopyBoard=b=>b.map(r=>r.map(x=>x?{...x}:null));
+function captureState(){
+  return {
+    board:dcopyBoard(board), capYou:[...capYou], capEnemy:[...capEnemy],
+    history:history.map(h=>({to:h.to?[...h.to]:null, board:h.board?dcopyBoard(h.board):null, capYou:h.capYou?[...h.capYou]:null, capEnemy:h.capEnemy?[...h.capEnemy]:null})),
+    kifu:kifu.map(k=>({...k})), turn, gameOver, gameStartSnap
+  };
+}
+function restoreState(s){
+  board=dcopyBoard(s.board); capYou=[...s.capYou]; capEnemy=[...s.capEnemy];
+  history=s.history.map(h=>({to:h.to?[...h.to]:null, board:h.board?dcopyBoard(h.board):null, capYou:h.capYou?[...h.capYou]:null, capEnemy:h.capEnemy?[...h.capEnemy]:null}));
+  kifu=s.kifu.map(k=>({...k})); turn=s.turn; gameOver=s.gameOver; gameStartSnap=s.gameStartSnap;
+}
+function redoOne(){
+  if(!redoStack.length){ setStatus('やり直す手がありません'); return; }
+  restoreState(redoStack.pop());
+  paused=true; sel=null; updateReplayUI(); render(); updatePlayPauseLabel();
+  setStatus('1手やり直しました（一時停止中）','think');
+}
 document.getElementById('undo').onclick=()=>{
   if(replaying) return; // 勝負が決まった後（gameOver）でも待ったは可。リプレイ観戦中のみ不可
   stopAutoLoop();
+  if(history.length<1){ setStatus('これ以上戻せません'); return; }
+  redoStack.push(captureState()); // やり直し用に現局面を退避
+  paused=true;                    // 待った後は自動進行しない
   // 直近2手（自分＋相手）を戻す。手番は呼び出し元に依らず元へ戻す
   if(history.length>=2){
     const st=history[history.length-2];
@@ -2975,19 +3046,28 @@ document.getElementById('undo').onclick=()=>{
     capYou=[...st.capYou]; capEnemy=[...st.capEnemy];
     history.splice(history.length-2,2);
     kifu.splice(Math.max(0,kifu.length-2)); updateReplayUI();
-    gameOver=false; sel=null; turn=1; render(); setStatus('二手戻しました');
-  }else if(history.length===1){
+    gameOver=false; sel=null; turn=1; render(); updatePlayPauseLabel(); setStatus('二手戻しました（一時停止中）');
+  }else{
     const st=history[0];
     board=st.board.map(row=>row.map(x=>x?{...x}:null));
     capYou=[...st.capYou]; capEnemy=[...st.capEnemy];
     history=[]; kifu=[]; updateReplayUI();
-    gameOver=false; sel=null; turn=1; render(); setStatus('あなたの番です');
-  }else{
-    setStatus('これ以上戻せません');
+    gameOver=false; sel=null; turn=1; render(); updatePlayPauseLabel(); setStatus('一手戻しました（一時停止中）');
   }
 };
+// 開始／一時停止／再開
+document.getElementById('playPause').onclick=()=>{
+  if(replaying||editing) return;
+  if(gameOver){ setStatus('対局は終了しています'); return; }
+  paused=!paused;
+  if(paused){ stopAutoLoop(); render(); updatePlayPauseLabel(); setStatus('一時停止しました','think'); }
+  else { updatePlayPauseLabel(); nextTurn(); }
+};
+document.getElementById('stepFwd').onclick=stepForward;
 
 newGame();
+paused=true; updatePlayPauseLabel();
+setStatus('▶ 開始 で対局を始めます（あなたが手動なら盤をタップ）');
 
 </script>
 </body>
