@@ -957,6 +957,16 @@ TP['mDO']={n:'Donkey(Maka)',k:'驢馬',pr:'G',v:200,fl:[],m:[[-1,0,1],[1,0,1],[0
 TP['mLC']={n:'Left Chariot(Maka)',k:'左車',pr:'G',v:280,fl:[],m:[[-1,0,'F'],[-1,-1,'F'],[1,1,'F'],[1,0,1]]}; // 前・左斜め前・右斜め後ろ走り＋後1 → 金将
 TP['mRC']={n:'Right Chariot(Maka)',k:'右車',pr:'G',v:280,fl:[],m:[[-1,0,'F'],[-1,1,'F'],[1,-1,'F'],[1,0,1]]}; // 前・右斜め前・左斜め後ろ走り＋後1 → 金将
 const MAKA_LIST=['mK','JT','mRD','mKR','mBB','mOR','mLD','mWR','mKG','mYA','mFD','mVO','mDO','mLC','mRC','HENK','+HENK'];
+/* 摩訶大大将棋の「奔(自在)○将」＝基の将が動く各方向へ無制限に走る駒。多くの将駒の成り先。
+   既存TPに大局系『奔○』は多数あるが、将系(金銀銅鉄石瓦土)の自在は未収録のため追加。 */
+TP['FGD']={n:'Free Gold',k:'奔金',pr:null,v:600,fl:[],m:[[-1,-1,'F'],[-1,0,'F'],[-1,1,'F'],[0,-1,'F'],[0,1,'F'],[1,0,'F']]};
+TP['FSV']={n:'Free Silver',k:'奔銀',pr:null,v:540,fl:[],m:[[-1,-1,'F'],[-1,0,'F'],[-1,1,'F'],[1,-1,'F'],[1,1,'F']]};
+TP['FCU']={n:'Free Copper',k:'奔銅',pr:null,v:480,fl:[],m:[[-1,-1,'F'],[-1,0,'F'],[-1,1,'F'],[1,0,'F']]};
+TP['FFE']={n:'Free Iron',k:'奔鉄',pr:null,v:420,fl:[],m:[[-1,-1,'F'],[-1,0,'F'],[-1,1,'F']]};
+TP['FSN']={n:'Free Stone',k:'奔石',pr:null,v:360,fl:[],m:[[-1,-1,'F'],[-1,1,'F']]};
+TP['FTL']={n:'Free Tile',k:'奔瓦',pr:null,v:360,fl:[],m:[[-1,-1,'F'],[-1,1,'F']]};
+TP['FEA']={n:'Free Earth',k:'奔土',pr:null,v:360,fl:[],m:[[-1,0,'F'],[1,0,'F']]};
+const MAKA_FREE=['FGD','FSV','FCU','FFE','FSN','FTL','FEA'];
 function isMaka(t){ return /^m[A-Z]/.test(t); } // 'm'＋大文字 ＝ 摩訶大大の駒
 
 // どうぶつしょうぎの駒。3×4の幼児向け将棋。
@@ -2773,7 +2783,7 @@ function buildPickGrid(){
   const othello = (typeof OTHELLO_LIST!=='undefined')? OTHELLO_LIST.slice() : [];
   const goList = (typeof GO_LIST!=='undefined')? GO_LIST.slice() : [];
   const doubutsu = (typeof DOUBUTSU_LIST!=='undefined')? DOUBUTSU_LIST.slice() : [];
-  const maka = (typeof MAKA_LIST!=='undefined')? MAKA_LIST.slice() : [];
+  const maka = (typeof MAKA_LIST!=='undefined')? MAKA_LIST.concat(typeof MAKA_FREE!=='undefined'?MAKA_FREE:[]) : [];
   const otherList = (typeof OTHER_LIST!=='undefined')? OTHER_LIST.slice() : [];
   const setDisp=(id,show)=>{ const lbl=document.getElementById(id); if(lbl&&lbl.parentElement) lbl.parentElement.style.display=show?'':'none'; };
   // セクションを埋める共通処理（検索フィルタ＋空なら非表示）
