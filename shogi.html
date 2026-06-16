@@ -938,7 +938,7 @@ TP['HENK']={n:'Enchanted Fox',k:'変狐',pr:'+HENK',v:200,fl:[],m:[[-1,-1,2],[-1
 // 夜刄(変狐の成駒・Wikipedia版)：斜め前1、後ろ(直進)1、左右に1〜3マス。
 // ※既存の大局将棋「夜叉(YA)」とは別駒。今回追加分は「夜刄」(刄)。
 TP['+HENK']={n:'Yaiba',k:'夜刄',pr:null,v:340,fl:[],m:[[-1,-1,1],[-1,1,1],[1,0,1],[0,-1,3],[0,1,3]]};
-const OTHER_LIST=['HENK','+HENK']; // 変狐・夜刄（大大将棋）。摩訶の駒は MAKA_LIST へ
+const OTHER_LIST=[]; // 変狐・夜刄も摩訶大大将棋の駒なので MAKA_LIST へ移動
 
 /* ===== 摩訶大大将棋の駒（大局将棋と動き/成り先が異なる同名駒は別コードで追加） =====
    コードは 'm'＋大局コード相当。表示は同名＋接尾辞「(摩訶)」。p=1基準（前=上,dr<0）。
@@ -956,7 +956,7 @@ TP['mVO']={n:'Fierce Bull(Maka)',k:'猛牛',pr:'G',v:240,fl:[],m:[[-1,0,2],[1,0,
 TP['mDO']={n:'Donkey(Maka)',k:'驢馬',pr:'G',v:200,fl:[],m:[[-1,0,1],[1,0,1],[0,-1,1],[0,1,1],[-2,0,'jump'],[2,0,'jump']]}; // 縦横1／前後2跳び → 金将
 TP['mLC']={n:'Left Chariot(Maka)',k:'左車',pr:'G',v:280,fl:[],m:[[-1,0,'F'],[-1,-1,'F'],[1,1,'F'],[1,0,1]]}; // 前・左斜め前・右斜め後ろ走り＋後1 → 金将
 TP['mRC']={n:'Right Chariot(Maka)',k:'右車',pr:'G',v:280,fl:[],m:[[-1,0,'F'],[-1,1,'F'],[1,-1,'F'],[1,0,1]]}; // 前・右斜め前・左斜め後ろ走り＋後1 → 金将
-const MAKA_LIST=['mK','JT','mRD','mKR','mBB','mOR','mLD','mWR','mKG','mYA','mFD','mVO','mDO','mLC','mRC'];
+const MAKA_LIST=['mK','JT','mRD','mKR','mBB','mOR','mLD','mWR','mKG','mYA','mFD','mVO','mDO','mLC','mRC','HENK','+HENK'];
 function isMaka(t){ return /^m[A-Z]/.test(t); } // 'm'＋大文字 ＝ 摩訶大大の駒
 
 // どうぶつしょうぎの駒。3×4の幼児向け将棋。
@@ -996,6 +996,10 @@ const HON_PROMO_LIST=['+P_hon','+L_hon','+N_hon','+S_hon','+B_hon','+R_hon'];
   TP['mK']={n:'King(Maka)',k:'玉将',pr:'JT',v:99999,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[0,-1,1],[0,1,1],[1,-1,1],[1,0,1],[1,1,1]]};
   TP['hB']={n:'Bishop',k:'角行',pr:'+B_hon',v:560,fl:[],m:[[-1,-1,'F'],[-1,1,'F'],[1,-1,'F'],[1,1,'F']]};
   TP['hR']={n:'Rook',k:'飛車',pr:'+R_hon',v:560,fl:[],m:[[-1,0,'F'],[0,-1,'F'],[0,1,'F'],[1,0,'F']]};
+  // 飛車・角行は本将棋と大局で動き・成り後が同一の駒。大局コードR/Bの成り先も本将棋と同じ龍/馬に統一し、
+  // 「同名なのに成ると別物」になる不一致を解消（編集ピッカーでは大局R/Bを隠し、本将棋hR/hBに一本化）。
+  if(TP['R']) TP['R'].pr='+R_hon';
+  if(TP['B']) TP['B'].pr='+B_hon';
 })();
 // 本将棋の基本駒コード一覧
 const HON_BASE=['hP','hL','hN','hS','hG','hK','hB','hR'];
@@ -2417,6 +2421,13 @@ function applyMoveSilent(side,m,silent){
     if(!igui) board[m.fr][m.fc]=null;
     if(pc.t==='HASA'){ hasamiCapture(m.tr,m.tc,side); }
     if(hasFire(pc.t)){ fireBurn(m.tr,m.tc,side); }   // 火鬼：移動後に隣接敵を焼く
+    // どうぶつしょうぎ「トライ」：ライオンが相手陣の最奥段に到達し、その場で取り返されないなら勝ち
+    if(newCode==='zLion'){
+      const goalRow = side===1 ? 0 : board.length-1;
+      if(m.tr===goalRow && !squareAttackedBy(m.tr,m.tc,-side)){
+        history[history.length-1].to=[m.tr,m.tc]; render(); endGame(side,'try'); return;
+      }
+    }
     if(tookRoyal && !hasRoyal(-side)){
       history[history.length-1].to=[m.tr,m.tc]; render(); endGame(side); return;
     }
@@ -2429,10 +2440,19 @@ function applyMoveSilent(side,m,silent){
 }
 
 /* ===== 終了 ===== */
-function endGame(winner){
+// (tr,tc) が手番 by の駒に取られる位置か（どうぶつトライの取り返し判定に使用）
+function squareAttackedBy(tr,tc,by){
+  for(let r=0;r<board.length;r++){ const row=board[r]; if(!row) continue;
+    for(let c=0;c<row.length;c++){ const pc=row[c];
+      if(pc&&pc.p===by){ const ms=moves(board,r,c); for(const mm of ms){ if(mm[0]===tr&&mm[1]===tc) return true; } }
+    } }
+  return false;
+}
+function endGame(winner,reason){
   gameOver=true; render(); updateReplayUI();
-  if(winner===1)setStatus('▲ あなたの勝ち！相手の王を攻め取りました','win');
-  else setStatus('△ あなたの負け…王を取られました','lose');
+  const isTry = reason==='try';
+  if(winner===1)setStatus(isTry?'▲ あなたの勝ち！トライ成功（ライオンが敵陣の最奥へ到達）':'▲ あなたの勝ち！相手の王を攻め取りました','win');
+  else setStatus(isTry?'△ あなたの負け…相手のライオンがトライ成功':'△ あなたの負け…王を取られました','lose');
 }
 function setStatus(t,cls){
   const s=document.getElementById('status');
@@ -2744,7 +2764,8 @@ function pieceMatches(t){
 function buildPickGrid(){
   const mode=currentSortMode();
   const basicSet=new Set(BASIC_LIST);
-  let daikyoku=TBASE.filter(t=>!basicSet.has(t));
+  // 飛車R・角行Bは本将棋hR/hBに一本化したため大局セクションには出さない（重複・成り先不一致の解消）
+  let daikyoku=TBASE.filter(t=>!basicSet.has(t) && t!=='R' && t!=='B');
   if(typeof TPROM!=='undefined') daikyoku=daikyoku.concat(TPROM);
   const basic = BASIC_LIST.concat(typeof HON_PROMO_LIST!=='undefined'?HON_PROMO_LIST:[]);
   const chess = (typeof CHESS_LIST!=='undefined')? CHESS_LIST.slice() : [];
