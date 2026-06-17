@@ -956,7 +956,7 @@ TP['mVO']={n:'Fierce Bull(Maka)',k:'猛牛',pr:'G',v:240,fl:[],m:[[-1,0,2],[1,0,
 TP['mDO']={n:'Donkey(Maka)',k:'驢馬',pr:'G',v:200,fl:[],m:[[-1,0,1],[1,0,1],[0,-1,1],[0,1,1],[-2,0,'jump'],[2,0,'jump']]}; // 縦横1／前後2跳び → 金将
 TP['mLC']={n:'Left Chariot(Maka)',k:'左車',pr:'G',v:280,fl:[],m:[[-1,0,'F'],[-1,-1,'F'],[1,1,'F'],[1,0,1]]}; // 前・左斜め前・右斜め後ろ走り＋後1 → 金将
 TP['mRC']={n:'Right Chariot(Maka)',k:'右車',pr:'G',v:280,fl:[],m:[[-1,0,'F'],[-1,1,'F'],[1,-1,'F'],[1,0,1]]}; // 前・右斜め前・左斜め後ろ走り＋後1 → 金将
-const MAKA_LIST=['mK','JT','mRD','mKR','mBB','mOR','mLD','mWR','mKG','mYA','mFD','mVO','mDO','mLC','mRC','HENK','+HENK'];
+const MAKA_LIST=['mK','JT','mRD','mKR','mBB','mOR','mLD','mWR','mKG','mYA','mFD','mVO','mDO','mLC','mRC','mG','mS','mC','mI','mSG','mT','mEA','HENK','+HENK'];
 /* 摩訶大大将棋の「奔(自在)○将」＝基の将が動く各方向へ無制限に走る駒。多くの将駒の成り先。
    既存TPに大局系『奔○』は多数あるが、将系(金銀銅鉄石瓦土)の自在は未収録のため追加。 */
 TP['FGD']={n:'Free Gold',k:'奔金',pr:null,v:600,fl:[],m:[[-1,-1,'F'],[-1,0,'F'],[-1,1,'F'],[0,-1,'F'],[0,1,'F'],[1,0,'F']]};
@@ -964,9 +964,18 @@ TP['FSV']={n:'Free Silver',k:'奔銀',pr:null,v:540,fl:[],m:[[-1,-1,'F'],[-1,0,'
 TP['FCU']={n:'Free Copper',k:'奔銅',pr:null,v:480,fl:[],m:[[-1,-1,'F'],[-1,0,'F'],[-1,1,'F'],[1,0,'F']]};
 TP['FFE']={n:'Free Iron',k:'奔鉄',pr:null,v:420,fl:[],m:[[-1,-1,'F'],[-1,0,'F'],[-1,1,'F']]};
 TP['FSN']={n:'Free Stone',k:'奔石',pr:null,v:360,fl:[],m:[[-1,-1,'F'],[-1,1,'F']]};
-TP['FTL']={n:'Free Tile',k:'奔瓦',pr:null,v:360,fl:[],m:[[-1,-1,'F'],[-1,1,'F']]};
+TP['FTL']={n:'Free Tile',k:'奔瓦',pr:null,v:360,fl:[],m:[[-1,-1,'F'],[-1,1,'F'],[1,0,'F']]}; // 瓦将＝前斜め＋後直の各方向へ走る
 TP['FEA']={n:'Free Earth',k:'奔土',pr:null,v:360,fl:[],m:[[-1,0,'F'],[1,0,'F']]};
 const MAKA_FREE=['FGD','FSV','FCU','FFE','FSN','FTL','FEA'];
+/* 摩訶大大将棋の各将駒（動きは大局の同名将と同じだが、成り先が「奔(自在)○将」になる点が大局と異なる）。
+   大局：金→飛車 / 銀→竪馬 / 銅→…等だが、摩訶では各将がそれぞれの奔版へ成る。 */
+TP['mG'] ={n:'Gold General(Maka)',  k:'金将',pr:'FGD',v:240,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[0,-1,1],[0,1,1],[1,0,1]]}; // 金 → 奔金
+TP['mS'] ={n:'Silver General(Maka)',k:'銀将',pr:'FSV',v:200,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[1,-1,1],[1,1,1]]};        // 銀 → 奔銀
+TP['mC'] ={n:'Copper General(Maka)',k:'銅将',pr:'FCU',v:160,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[1,0,1]]};                // 銅 → 奔銅
+TP['mI'] ={n:'Iron General(Maka)',  k:'鉄将',pr:'FFE',v:120,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1]]};                       // 鉄 → 奔鉄
+TP['mSG']={n:'Stone General(Maka)', k:'石将',pr:'FSN',v:80, fl:[],m:[[-1,-1,1],[-1,1,1]]};                                // 石 → 奔石
+TP['mT'] ={n:'Tile General(Maka)',  k:'瓦将',pr:'FTL',v:120,fl:[],m:[[-1,-1,1],[-1,1,1],[1,0,1]]};                        // 瓦 → 奔瓦
+TP['mEA']={n:'Earth General(Maka)', k:'土将',pr:'FEA',v:80, fl:[],m:[[-1,0,1],[1,0,1]]};                                  // 土 → 奔土
 function isMaka(t){ return /^m[A-Z]/.test(t); } // 'm'＋大文字 ＝ 摩訶大大の駒
 
 // どうぶつしょうぎの駒。3×4の幼児向け将棋。
