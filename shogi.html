@@ -161,6 +161,20 @@
   .koma.daikyoku{gap:0;}
   .koma.promoted{color:var(--accent);}
   .koma{position:relative;}
+  /* 将棋系の駒：一般的な将棋アプリと同じ五角形（先頭が尖り、底が広い）。
+     clip-path は要素ローカル座標に適用されるため、相手駒の rotate(180deg) で自然に下向きになる。 */
+  .koma.shogi-koma{
+    border:none;border-radius:0;
+    clip-path:polygon(50% 1%, 84% 23%, 91% 99%, 9% 99%, 16% 23%);
+    box-shadow:none;
+    filter:drop-shadow(0 2px 2.5px rgba(0,0,0,.45));
+  }
+  .cap-koma.shogi-koma{
+    border:none;border-radius:0;
+    clip-path:polygon(50% 2%, 84% 25%, 91% 98%, 9% 98%, 16% 25%);
+    box-shadow:none;
+    filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));
+  }
   .orig-mark{position:absolute;top:0;right:0;font-size:7px;line-height:1;
     background:var(--accent);color:#fff;border-radius:0 2px 0 4px;padding:1px 2px;font-family:sans-serif;}
   .othello-disc{width:80%;height:80%;border-radius:50%;
@@ -1111,6 +1125,9 @@ function splitLabel(t){
 // 縦書きは右→左に読むため、駒名列を右側に、「(大局)」接尾辞をその左に配置する。
 function fillKoma(el, t){
   const p=dispParts(t);
+  // 将棋系の駒だけ将棋駒の五角形にする（チェス駒は対象外。囲碁・オセロは別要素で描画）
+  const isChessKoma=(((typeof TP!=='undefined'&&TP[t])?TP[t].fl:null)||[]).includes('chess');
+  el.classList.toggle('shogi-koma', !isChessKoma);
   const nameChars=[...p.name];
   const nameLen=nameChars.length;
   // 駒名を列に分割（3文字までは1列、4文字以上は2列でバランス配分）
