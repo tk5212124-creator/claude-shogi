@@ -379,7 +379,7 @@
 </head>
 <body>
   <h1>将棋</h1>
-  <div class="sub">対 局 ・ 先 手 が あ な た</div>
+  <div class="sub" id="senteLabel">対 局 ・ 先 手 が あ な た</div>
   <div class="sub" style="font-size:.62rem;color:#7d6e57;margin-top:-8px;">編集モードで大局将棋 全209種＋成92種が使えます</div>
 
   <div class="captured" id="capEnemy"><span class="lbl">相手</span></div>
@@ -1356,14 +1356,24 @@ function setupStartBoard(){
   board[1][1]={t:'hB',p:-1}; board[1][7]={t:'hR',p:-1};
   board[7][7]={t:'hB',p:1};  board[7][1]={t:'hR',p:1};
 }
+// 先手＝最初に指す側。あなたが先手なら true。先後入替でトグルする。
+let youAreSente=true;
+// ヘッダーのサブタイトルを現在の先手側に合わせて更新する
+function updateSenteLabel(){
+  const el=document.getElementById('senteLabel');
+  if(!el) return;
+  const txt = youAreSente ? '対 局 ・ 先 手 が あ な た' : '対 局 ・ 後 手 が あ な た';
+  el.textContent = txt;
+}
 // keepBoard=true なら現在の盤配置を維持し、対局の進行状態だけリセット
 function initState(keepBoard){
-  if(!keepBoard){ setupStartBoard(); capYou=[]; capEnemy=[]; }
+  if(!keepBoard){ setupStartBoard(); capYou=[]; capEnemy=[]; youAreSente=true; }
   // keepBoard 時は盤も持ち駒も維持（記憶配置のオセロ等を残して指し直すため）
   sel=null; history=[]; gameOver=false; pendingPromo=null;
-  turn=1; // 1=あなた(先手), -1=相手
+  turn = youAreSente ? 1 : -1; // 先手から開始（1=あなた, -1=相手）
   kifu=[]; gameStartSnap=null; // 棋譜とリプレイ起点
   posCount={};
+  updateSenteLabel();
 }
 // 棋譜・リプレイ・自動モード状態
 let kifu=[], gameStartSnap=null;
@@ -2177,7 +2187,7 @@ function stepForward(){
   if(gameOver||replaying||editing) return;
   stopAutoLoop();
   if(redoStack.length){ redoOne(); return; }
-  if(!isAuto(turn)){ setStatus('あなたの番です（盤をタップして指してください）'); return; }
+  if(!isAuto(turn)){ setStatus((turn===1?'あなた':'相手')+'の番です（盤をタップして指してください）'); return; }
   paused=true;
   const moved=doAutoMove();
   render(); updatePlayPauseLabel(); updateReplayUI();
@@ -2700,10 +2710,13 @@ document.getElementById('swapSides').onclick=()=>{
   }
   board=nb;
   const h=capYou; capYou=capEnemy; capEnemy=h; // 持ち駒も入れ替え
-  turn=1; gameOver=false; sel=null;
+  youAreSente=!youAreSente;           // 先手・後手を入れ替え
+  turn = youAreSente ? 1 : -1;        // 入れ替え後の先手から開始
+  gameOver=false; sel=null;
   history=[]; kifu=[]; gameStartSnap=null; if(typeof redoStack!=='undefined') redoStack.length=0;
-  paused=true; updateReplayUI(); render(); updatePlayPauseLabel();
-  setStatus('先手後手を入れ替えました。▶ 開始 で対局（あなたが手動なら盤をタップ）');
+  paused=true; updateReplayUI(); render(); updatePlayPauseLabel(); updateSenteLabel();
+  const youAre = youAreSente ? 'あなたが先手' : 'あなたは後手（相手が先手）';
+  setStatus('先後を入れ替えました（'+youAre+'）。▶ 開始 で対局（手番側が手動なら盤をタップ）');
 };
 // 初期配置（本将棋）に戻す（強制開始せず一時停止で待つ）
 document.getElementById('resetBoard').onclick=()=>{
