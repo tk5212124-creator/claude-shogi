@@ -602,8 +602,11 @@
       <label class="rule-row"><input type="checkbox" id="rSennichite"> 千日手（同一局面4回）で引き分け</label>
       <label class="rule-row"><input type="checkbox" id="rRankless"> 格なしの駒（チェス駒・成駒・はさみ駒）を一般駒として扱う（範囲攻撃で取られる）</label>
       <label class="rule-row"><input type="checkbox" id="rRandSpecial"> ランダム置換の候補にはさみ駒・オセロ駒を含める</label>
-      <label class="rule-row"><input type="checkbox" id="rRepromote"> 敵陣に入りなおすともう一度成れる（成駒の成駒に成れる）</label>
+      <label class="rule-row"><input type="checkbox" id="rRepromote"> 成り条件をもう一度満たすと、もう一度成れる（成駒の成駒。例：敵駒を取ると成るルールなら、再度敵駒を取ると更に成る）</label>
       <label class="rule-row"><input type="checkbox" id="rRandomPromote"> 成り先のない駒は、成るとき全駒からランダムな駒に変化する（王将・玉将はroyalな駒へ）</label>
+      <p class="rule-note" style="margin:6px 0 2px;">引き分け（持将棋）</p>
+      <label class="rule-row"><input type="checkbox" id="rDrawNoMove"> どこにも動けない・打てなくなったら持将棋（引き分け）にする</label>
+      <label class="rule-row"><input type="checkbox" id="rDrawBothEnter"> 双方の王が敵陣に入ったら持将棋（引き分け）にする</label>
       <p class="rule-note" style="margin:6px 0 2px;">成る条件（3つとも外すと「成り」が無くなります）</p>
       <label class="rule-row"><input type="checkbox" id="rPromoZone"> 敵陣に入ったら成れる</label>
       <label class="rule-row"><input type="checkbox" id="rPromoLast"> 敵陣の一番奥に着いたら成れる</label>
@@ -991,6 +994,11 @@ TP['GOW']={n:'Go(white)',k:'碁白',pr:null,v:60,fl:['go'],m:[]};
 const GO_LIST=['GOB','GOW'];
 function isGo(t){ return t==='GOB'||t==='GOW'; }
 function goOwner(t){ return t==='GOB'?1 : t==='GOW'? -1 : 0; } // 碁石の固有の色（所有者）
+// 盤上ゲーム（囲碁・オセロ・はさみ将棋）用のroyal駒。動かない王として各陣に1枚だけ置き、
+// 残りは持ち駒から打つ。取られたら負け（royal）。fl:['royal'] で玉将扱い。
+TP['goK']={n:'Go King',k:'王',pr:null,v:99999,fl:['royal'],m:[]};
+TP['otK']={n:'Othello King',k:'王',pr:null,v:99999,fl:['royal'],m:[]};
+TP['haK']={n:'Hasami King',k:'王',pr:null,v:99999,fl:['royal'],m:[]};
 
 // その他の将棋駒（大局将棋以外）：自在天王（摩訶大大将棋・玉将の成駒）。
 // 盤上のどこへでも1手で行ける（いくら駒を飛び越えてもよい）。
@@ -1240,14 +1248,16 @@ function randomPromoCode(royal){
 // 成る時の新コード：定義された成り先があればそれ。無くてランダム成りONなら無作為（royalはroyalへ）。
 function resolvePromoCode(t){
   if(TP[t]&&TP[t].pr) return TP[t].pr;
-  if(RULES.randomPromote) return randomPromoCode(isRoyal(t));
+  // 成り先が無い：ランダム成りON、または成駒の再成り(repromote)時はランダムな駒へ
+  if(RULES.randomPromote || (isPromoted(t)&&RULES.repromote)) return randomPromoCode(isRoyal(t));
   return t;
 }
 // 駒が成れるか（成り先あり／成駒の再成り／成り先なしのランダム成り）。royalも対象。
 function canPromoteNow(t){
   if(!isPromoted(t)) return !!(TP[t]&&TP[t].pr) || RULES.randomPromote;
-  // 既に成駒：再成りONなら、連鎖成り(pr)かランダム成りで再度成れる
-  return RULES.repromote && (!!(TP[t]&&TP[t].pr) || RULES.randomPromote);
+  // 既に成駒：再成りONなら、成り条件を満たすたびにもう一度成れる（成駒の成駒）。
+  // 連鎖成り(pr)があればそれ、無ければランダム成りで別の駒へ変化する。
+  return RULES.repromote;
 }
 // 成り条件（3トグルのいずれかを満たすか）。全てOFFなら成り自体が起きない。
 function promoTrigger(fr,tr,side,captured){
@@ -1521,19 +1531,29 @@ function setupChess(){
     board[0][c]={t:back[c],p:-1}; board[1][c]={t:'cP',p:-1};
   }
 }
-// オセロ（8×8）。中央4マスに白黒2枚ずつ。
+// オセロ（8×8）。中央4枚＋各陣にroyalの王（隅）。残りの牌は持ち駒として最大限保持。
 function setupOthello(){
   NR=NC=8; PZ=0; emptyBoard();
   board[3][3]={t:'OTH',p:-1}; board[3][4]={t:'OTH',p:1};
   board[4][3]={t:'OTH',p:1};  board[4][4]={t:'OTH',p:-1};
+  board[NR-1][0]={t:'otK',p:1}; board[0][NC-1]={t:'otK',p:-1};
+  const n=Math.floor(NR*NC/2);
+  capYou.push(...fill('OTH',n)); capEnemy.push(...fill('OTH',n));
 }
-// はさみ将棋（9×9）。最上段・最下段に駒を一列ずつ。
+// はさみ将棋（9×9）。各陣にroyalの王（隅）。駒は持ち駒として最大限保持し、打って動かす。
 function setupHasami(){
   NR=NC=9; PZ=0; emptyBoard();
-  for(let c=0;c<9;c++){ board[8][c]={t:'HASA',p:1}; board[0][c]={t:'HASA',p:-1}; }
+  board[NR-1][0]={t:'haK',p:1}; board[0][NC-1]={t:'haK',p:-1};
+  const n=Math.floor(NR*NC/2);
+  capYou.push(...fill('HASA',n)); capEnemy.push(...fill('HASA',n));
 }
-// 囲碁（19×19・空盤）。石は対局・編集で配置。
-function setupGo(){ NR=NC=19; PZ=0; emptyBoard(); }
+// 囲碁（19×19）。各陣にroyalの王（隅）。碁石は持ち駒として最大限保持し、空点に打つ。
+function setupGo(){
+  NR=NC=19; PZ=0; emptyBoard();
+  board[NR-1][NC-1]={t:'goK',p:1}; board[0][0]={t:'goK',p:-1};
+  const n=Math.floor(NR*NC/2);
+  capYou.push(...fill('GOB',n)); capEnemy.push(...fill('GOW',n));
+}
 
 // プリセット適用（盤・成りゾーンを設定）
 const PRESETS={
@@ -1583,7 +1603,9 @@ const RULES={
   randomPromote:false, // 成り先のない駒は、成るとき全駒からランダムな駒に変化する
   promoOnZone:true,  // 敵陣に入ったら成れる（本将棋の標準）
   promoOnLast:false, // 敵陣の一番奥に着いたら成れる
-  promoOnCapture:false // 敵駒を取ったら成れる（3つとも外すと成り自体が無くなる）
+  promoOnCapture:false, // 敵駒を取ったら成れる（3つとも外すと成り自体が無くなる）
+  drawNoMove:true,   // どこにも動けない・打てなくなったら持将棋（引き分け）。初期ON
+  drawBothEnter:false // 双方の王が敵陣に入ったら持将棋（引き分け）。初期OFF
 };
 let posCount={};     // 局面出現回数（千日手判定用）
 const SPEEDS=[
@@ -1888,7 +1910,7 @@ function isPromoted(t){ return t.charAt(0)==='+' || PROM_CODES.has(t); }
 // 取った駒を不成に戻す。成駒のときだけ元の駒へ。非成駒はそのまま。
 function demoteOf(t){ return (isPromoted(t) && DEMOTE[t]) ? DEMOTE[t] : t; }
 // 取られたら負けの駒（玉将 or 太子）。
-function isRoyal(t){ return t==='hK'||t==='hKw'||t==='mK'||t==='K'||t==='CP'||t==='cK'||t==='JT'||t==='zLion'; }
+function isRoyal(t){ return t==='hK'||t==='hKw'||t==='mK'||t==='K'||t==='CP'||t==='cK'||t==='JT'||t==='zLion'||!!(TP[t]&&TP[t].fl&&TP[t].fl.includes('royal')); }
 // 指定プレイヤーのroyal駒（玉・太子）が盤上または持ち駒に残っているか
 function hasRoyal(p){
   for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
@@ -2320,6 +2342,10 @@ function nextTurn(){
   render();
   updatePlayPauseLabel();
   if(gameOver||replaying||editing)return;
+  // 双方入玉で持将棋（ルールON時）
+  if(RULES.drawBothEnter && royalInEnemyCamp(1) && royalInEnemyCamp(-1)){ endDraw('双方入玉'); return; }
+  // 手番側が動けない・打てない → 持将棋 or 詰み
+  if(!hasAnyLegalMove(turn)){ resolveNoMove(turn); return; }
   if(isAuto(turn) && paused){
     setStatus('一時停止中　▶開始 か ▶❘1手進める で進みます','think');
     return;
@@ -2350,11 +2376,11 @@ function doAutoMove(){
   if(!isAuto(turn)) return false;
   const sp=SPEEDS[speedIdx];
   let m=cpuPickMove(turn);
-  if(!m){ endGame(-turn); return false; }
+  if(!m){ resolveNoMove(turn); return false; }
   // 手動と同一の合法判定を実盤で必ず通す。万一不正なら合法手から選び直す。
   if(!isLegalMove(m, turn)){
     const legal=genMoves(board,turn,capYou,capEnemy).filter(mm=>isLegalMove(mm,turn));
-    if(!legal.length){ endGame(-turn); return false; }
+    if(!legal.length){ resolveNoMove(turn); return false; }
     m=legal[Math.floor(Math.random()*legal.length)];
   }
   applyMoveSilent(turn,m, sp.turbo); // 超高速は描画を間引く
@@ -2593,7 +2619,7 @@ function cpuPickMove(side, depth){
   let DEPTH = depth!=null ? depth : (SPEEDS[speedIdx].depth||3);
   // 大盤は合法手・分岐が爆発するためCPUを簡易化（探索を浅くする割り切り）
   const BMAX=Math.max(NR,NC);
-  if(BMAX>=25) DEPTH=Math.min(DEPTH,1);
+  if(BMAX>=18) DEPTH=Math.min(DEPTH,1);   // 19路盤など広い盤＋多数の打ち手は浅く
   else if(BMAX>=13) DEPTH=Math.min(DEPTH,2);
   // 取りの大きい手を先に（αβ効率化）
   list.sort((a,b2)=>{
@@ -2713,6 +2739,41 @@ function endGame(winner,reason){
 function setStatus(t,cls){
   const s=document.getElementById('status');
   s.textContent=t; s.className='status'+(cls?' '+cls:'');
+}
+// 持将棋（引き分け）で終了
+function endDraw(msg){
+  gameOver=true; stopAutoLoop(); render(); updateReplayUI();
+  setStatus('持将棋（引き分け）'+(msg?'：'+msg:''),'think');
+}
+// side が動かせる駒・打てる持ち駒を1つでも持つか（最初に見つけたら即true）
+function hasAnyLegalMove(side){
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
+    const pc=board[r][c];
+    if(pc&&pc.p===side){
+      if(moves(board,r,c).length) return true;
+      if(hasLion(pc.t) && lionMoves(board,r,c).length>1) return true;
+    }
+  }
+  if(RULES.drops){
+    const cap=side===1?capYou:capEnemy;
+    for(const t of new Set(cap)){ if(dropTargets(board,t,side).length) return true; }
+  }
+  return false;
+}
+// side の royal（王・玉）が敵陣（成りゾーン）に入っているか
+function royalInEnemyCamp(side){
+  if(PZ<=0) return false;
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
+    const pc=board[r][c];
+    if(pc&&pc.p===side&&isRoyal(pc.t)&&inPromoZone(r,side)) return true;
+  }
+  return false;
+}
+// 手番 side に合法手が無いときの決着：王手でない＆ルールONなら持将棋、さもなくば負け（詰み）
+function resolveNoMove(side){
+  const inCheck=checkInfo(side).check;
+  if(!inCheck && RULES.drawNoMove){ endDraw((side===1?'あなた':'相手')+'は動かせる駒も打てる場所もありません'); }
+  else endGame(-side);
 }
 // 局面ハッシュ（盤＋手番＋持ち駒）
 function boardHash(){
@@ -2919,13 +2980,13 @@ document.getElementById('swapSides').onclick=()=>{
   const youAre = youAreSente ? 'あなたが先手' : 'あなたは後手（相手が先手）';
   setStatus('先後を入れ替えました（'+youAre+'）。▶ 開始 で対局（手番側が手動なら盤をタップ）');
 };
-// 初期配置（本将棋）に戻す（強制開始せず一時停止で待つ）
+// 初期配置に戻す：記憶した配置（編集した配置 or 適用したプリセット）へ戻す
 document.getElementById('resetBoard').onclick=()=>{
   if(replaying) exitReplay();
   paused=true; if(typeof redoStack!=='undefined') redoStack.length=0;
-  newGame(false);
+  restoreSetup();
   updatePlayPauseLabel();
-  setStatus('本将棋の初期配置に戻しました。▶ 開始 で対局開始（あなたが手動なら盤をタップ）');
+  setStatus('記憶した初期配置に戻しました。▶ 開始 で対局開始（あなたが手動なら盤をタップ）');
 };
 
 // ===== 盤サイズ・プリセットUIの配線 =====
@@ -2943,16 +3004,41 @@ function syncSizeUI(){
   if(cR) cR.value=NC;
   if(val) val.textContent=NR+' 行 × '+NC+' 列';
 }
+// 現在の盤・持ち駒・サイズを「初期配置」として記憶（初期配置に戻す で使用）
+let rememberedSetup=null;
+function rememberSetup(){
+  rememberedSetup={
+    board: board.map(row=>row.map(x=>x?{...x}:null)),
+    capYou:[...capYou], capEnemy:[...capEnemy],
+    NR, NC, PZ, youAreSente
+  };
+}
+// 記憶した初期配置（プリセット適用時・編集終了時に記憶）へ戻す
+function restoreSetup(){
+  if(!rememberedSetup){ newGame(false); return; }
+  exitReplay(); stopAutoLoop(); editing=false; multiSel=[];
+  const s=rememberedSetup;
+  NR=s.NR; NC=s.NC; PZ=s.PZ; youAreSente=s.youAreSente;
+  board=s.board.map(row=>row.map(x=>x?{...x}:null));
+  capYou=[...s.capYou]; capEnemy=[...s.capEnemy];
+  sel=null; history=[]; gameOver=false; pendingPromo=null; kifu=[]; gameStartSnap=null; posCount={};
+  turn = youAreSente ? 1 : -1;
+  if(typeof redoStack!=='undefined') redoStack.length=0;
+  updateSenteLabel(); syncSizeUI();
+  refreshAutoLabels(); refreshEditLabel(); updateMultiBar(); updateEditBar(); updateReplayUI();
+  paused=true; render(); updatePlayPauseLabel();
+}
 // builder() で盤(NR/NC/PZ含む)を作り直し、対局の進行状態をリセット（一時停止で待機）
 function newGameWithBoard(builder){
   exitReplay(); stopAutoLoop();
   editing=false; multiSel=[];
+  capYou=[]; capEnemy=[];   // 先にリセットし、builderが持ち駒を積めるようにする
   builder();
-  capYou=[]; capEnemy=[];
   sel=null; history=[]; gameOver=false; pendingPromo=null;
   turn = youAreSente ? 1 : -1;
   kifu=[]; gameStartSnap=null; posCount={};
   if(typeof redoStack!=='undefined') redoStack.length=0;
+  rememberSetup();          // このプリセット/配置を「初期配置」として記憶
   updateSenteLabel(); syncSizeUI();
   refreshAutoLabels(); refreshEditLabel(); updateMultiBar(); updateEditBar(); updateReplayUI();
   paused=true; render(); updatePlayPauseLabel();
@@ -3009,6 +3095,7 @@ document.getElementById('editMode').onclick=()=>{
       board: board.map(row=>row.map(x=>x?{...x}:null)),
       capYou: [...capYou], capEnemy: [...capEnemy]
     };
+    rememberSetup(); // 「初期配置に戻す」でこの編集配置へ戻れるよう記憶
     setStatus('編集を終了しました（この配置を記憶しました）'); nextTurn();
   }
 };
@@ -3429,6 +3516,8 @@ function openRuleModal(){
   document.getElementById('rPromoZone').checked=RULES.promoOnZone;
   document.getElementById('rPromoLast').checked=RULES.promoOnLast;
   document.getElementById('rPromoCap').checked=RULES.promoOnCapture;
+  document.getElementById('rDrawNoMove').checked=RULES.drawNoMove;
+  document.getElementById('rDrawBothEnter').checked=RULES.drawBothEnter;
   document.getElementById('ruleModal').classList.add('show');
 }
 document.getElementById('ruleBtn').onclick=openRuleModal;
@@ -3445,6 +3534,8 @@ document.getElementById('rRandomPromote').onchange=e=>{ RULES.randomPromote=e.ta
 document.getElementById('rPromoZone').onchange=e=>{ RULES.promoOnZone=e.target.checked; };
 document.getElementById('rPromoLast').onchange=e=>{ RULES.promoOnLast=e.target.checked; };
 document.getElementById('rPromoCap').onchange=e=>{ RULES.promoOnCapture=e.target.checked; };
+document.getElementById('rDrawNoMove').onchange=e=>{ RULES.drawNoMove=e.target.checked; };
+document.getElementById('rDrawBothEnter').onchange=e=>{ RULES.drawBothEnter=e.target.checked; };
 // 置く側トグル
 (function(){ const b=document.getElementById('sideToggle'); if(b) b.onclick=()=>{
   editSide=-editSide;
@@ -3501,6 +3592,7 @@ document.getElementById('playPause').onclick=()=>{
 document.getElementById('stepFwd').onclick=stepForward;
 
 newGame();
+rememberSetup(); // 起動時の本将棋配置を初期配置として記憶
 paused=true; updatePlayPauseLabel();
 setStatus('▶ 開始 で対局を始めます（あなたが手動なら盤をタップ）');
 
