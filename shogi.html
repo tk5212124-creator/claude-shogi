@@ -290,6 +290,23 @@
     pointer-events:none;
   }
   #pvPromo{background:linear-gradient(160deg,#caa23f,#9c7c28);border-color:var(--gold);color:#1a1330;}
+  .board-setup{width:100%;max-width:430px;margin-top:10px;
+    background:linear-gradient(160deg,rgba(53,42,85,.7),rgba(37,29,61,.7));
+    border:1px solid rgba(139,107,255,.3);border-radius:12px;padding:9px 12px;}
+  .board-setup .bs-lbl{font-size:.74rem;color:var(--gold);letter-spacing:.12em;display:block;margin-bottom:8px;}
+  .board-setup .bs-row{display:flex;gap:8px;align-items:center;margin-bottom:7px;}
+  .board-setup .bs-row label{font-size:.78rem;color:#b3a8d8;min-width:4.2em;}
+  .board-setup select{flex:1;font-size:.82rem;padding:6px 8px;border-radius:8px;
+    background:#2a2142;color:#ece3ff;border:1px solid rgba(139,107,255,.4);}
+  .board-setup #sizeRange{flex:1;}
+  .board-setup #sizeVal{font-size:.82rem;color:#ece3ff;min-width:4.2em;text-align:right;font-variant-numeric:tabular-nums;}
+  .board-setup .bs-note{font-size:.62rem;color:#7d6e57;line-height:1.4;}
+  /* 大盤：マスと駒名を縮小して収める */
+  .board.bigboard .koma{font-size:min(2.2vw,10px);border-radius:0;}
+  .board.bigboard .koma-name{font-size:min(2vw,9px);}
+  .board.bigboard .koma.small .koma-name{font-size:min(1.6vw,7px);}
+  .board.bigboard .koma.tiny .koma-name{font-size:min(1.2vw,5.5px);}
+  .board.bigboard .koma-suffix{display:none;}
   .multi-bar{
     width:100%;max-width:430px;margin-top:10px;
     display:flex;gap:8px;align-items:center;justify-content:space-between;
@@ -404,6 +421,24 @@
     <button id="swapSides">先後入替（あなた⇄相手）</button>
     <button id="reset">投了・指し直し</button>
     <button id="resetBoard">初期配置に戻す</button>
+  </div>
+  <div class="board-setup">
+    <span class="bs-lbl">盤の設定</span>
+    <div class="bs-row">
+      <label for="presetSel">プリセット</label>
+      <select id="presetSel">
+        <option value="hon">本将棋（9×9）</option>
+        <option value="mini">5五将棋（5×5）</option>
+        <option value="empty">空盤（サイズ指定）</option>
+      </select>
+      <button id="applyPresetBtn">適用</button>
+    </div>
+    <div class="bs-row">
+      <label for="sizeRange">サイズ</label>
+      <input type="range" id="sizeRange" min="3" max="40" value="9">
+      <span id="sizeVal">9 × 9</span>
+    </div>
+    <div class="bs-note">サイズ変更や「空盤」適用で盤が作り直されます（編集モードで駒を配置）。大盤はCPUを簡易化します。</div>
   </div>
 
   <div class="multi-bar" id="multiBar" style="display:none;">
@@ -1196,7 +1231,7 @@ function canPromoteNow(t){
 // 成り条件（3トグルのいずれかを満たすか）。全てOFFなら成り自体が起きない。
 function promoTrigger(fr,tr,side,captured){
   if(RULES.promoOnZone && (inPromoZone(fr,side)||inPromoZone(tr,side))) return true;
-  if(RULES.promoOnLast && tr===(side===1?0:8)) return true;
+  if(RULES.promoOnLast && tr===(side===1?0:N-1)) return true;
   if(RULES.promoOnCapture && captured) return true;
   return false;
 }
@@ -1341,20 +1376,51 @@ function histRank(arr,t){ const i=arr.indexOf(t); return i<0?9999:i; }
 
 
 let board, capYou, capEnemy, sel, history, gameOver, pendingPromo, turn;
+// 盤サイズ（正方形 N×N、3〜40で可変）と成りゾーンの深さ（段数）
+let N=9;          // 盤の一辺
+let PZ=3;         // 敵陣（成りゾーン）の段数。本将棋=3、5五将棋=1 等
+const BOARD_MIN=3, BOARD_MAX=40;
 
+// 本将棋（9×9）の初期配置。盤サイズと成りゾーンもここで確定する。
 function setupStartBoard(){
-  board=Array.from({length:9},()=>Array(9).fill(null));
+  N=9; PZ=3;
+  board=Array.from({length:N},()=>Array(N).fill(null));
   // 中央は王（相手＝後手は王将、あなた＝先手は玉将）
   const backYou=  ['hL','hN','hS','hG','hK', 'hG','hS','hN','hL'];
   const backEnemy=['hL','hN','hS','hG','hKw','hG','hS','hN','hL'];
-  for(let c=0;c<9;c++){
+  for(let c=0;c<N;c++){
     board[0][c]={t:backEnemy[c],p:-1};
     board[2][c]={t:'hP',p:-1};
-    board[8][c]={t:backYou[c],p:1};
-    board[6][c]={t:'hP',p:1};
+    board[N-1][c]={t:backYou[c],p:1};
+    board[N-3][c]={t:'hP',p:1};
   }
-  board[1][1]={t:'hB',p:-1}; board[1][7]={t:'hR',p:-1};
-  board[7][7]={t:'hB',p:1};  board[7][1]={t:'hR',p:1};
+  board[1][1]={t:'hB',p:-1}; board[1][N-2]={t:'hR',p:-1};
+  board[N-2][N-2]={t:'hB',p:1};  board[N-2][1]={t:'hR',p:1};
+}
+// ===== 盤サイズ可変・初期配置プリセット =====
+// 空盤を size×size で作る（size未指定なら現在のN）。成りゾーンは盤に応じて調整。
+function makeEmptyBoard(size){
+  if(size){ N=Math.max(BOARD_MIN,Math.min(BOARD_MAX,size|0)); }
+  PZ = N<=5 ? 1 : (N<=7 ? 2 : 3);   // 小盤は成りゾーンを浅く
+  board=Array.from({length:N},()=>Array(N).fill(null));
+}
+// 5五将棋（ミニ将棋 5×5）。点対称配置・成りゾーンは最奥1段のみ。
+function setupMinishogi(){
+  N=5; PZ=1;
+  board=Array.from({length:N},()=>Array(N).fill(null));
+  const you=['hK','hG','hS','hB','hR'];      // 下段(あなた)：玉金銀角飛
+  for(let c=0;c<N;c++){
+    board[N-1][c]={t:(you[c]==='hK'?'hK':you[c]),p:1};
+    board[0][N-1-c]={t:(you[c]==='hK'?'hKw':you[c]),p:-1}; // 180°回転で相手
+  }
+  board[N-2][0]={t:'hP',p:1};   // あなたの歩（玉の前）
+  board[1][N-1]={t:'hP',p:-1};  // 相手の歩
+}
+// プリセット適用（盤と成りゾーンを設定）。'empty'は現在のNで空盤。
+function applyPreset(key){
+  if(key==='hon'){ setupStartBoard(); }
+  else if(key==='mini'){ setupMinishogi(); }
+  else { makeEmptyBoard(key==='empty'?N:N); } // 既定は現在サイズの空盤
 }
 // 先手＝最初に指す側。あなたが先手なら true。先後入替でトグルする。
 let youAreSente=true;
@@ -1428,7 +1494,7 @@ function moves(b,r,c){
     const res=[];
     for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){
       let nr=r+dr, nc=c+dc;
-      while(nr>=0&&nr<9&&nc>=0&&nc<9){
+      while(nr>=0&&nr<N&&nc>=0&&nc<N){
         if(b[nr][nc]) break;   // 駒があれば止まる
         res.push([nr,nc]);
         nr+=dr; nc+=dc;
@@ -1441,17 +1507,17 @@ function moves(b,r,c){
     const res=[];
     const dir = p===1? -1 : 1; // あなたは上(-1)、相手は下(+1)
     const one=r+dir;
-    if(one>=0&&one<9 && !b[one][c]){
+    if(one>=0&&one<N && !b[one][c]){
       res.push([one,c]);
       // 初期段なら2マス（両方空）
-      const startRow = p===1? 6 : 2;
+      const startRow = p===1? N-3 : 2;
       const two=r+dir*2;
-      if(r===startRow && two>=0&&two<9 && !b[two][c]) res.push([two,c]);
+      if(r===startRow && two>=0&&two<N && !b[two][c]) res.push([two,c]);
     }
     // 斜め取り（通常）
     for(const dc of [-1,1]){
       const nr=r+dir, nc=c+dc;
-      if(nr<0||nr>8||nc<0||nc>8)continue;
+      if(nr<0||nr>=N||nc<0||nc>=N)continue;
       const tg=b[nr][nc];
       if(tg && tg.p!==p) res.push([nr,nc]);
     }
@@ -1461,7 +1527,7 @@ function moves(b,r,c){
       for(const dc of [-1,1]){
         if(ep.col===c+dc){
           const nr=r+dir, nc=c+dc;
-          if(nr>=0&&nr<9&&nc>=0&&nc<9 && !b[nr][nc]) res.push([nr,nc]);
+          if(nr>=0&&nr<N&&nc>=0&&nc<N && !b[nr][nc]) res.push([nr,nc]);
         }
       }
     }
@@ -1476,14 +1542,14 @@ function moves(b,r,c){
     if(flip){ dr=-dr; dc=-dc; }
     if(v.r==='jump'){
       const nr=r+dr, nc=c+dc;
-      if(nr<0||nr>8||nc<0||nc>8)continue;
+      if(nr<0||nr>=N||nc<0||nc>=N)continue;
       const tg=b[nr][nc];
       if(tg&&tg.p===p)continue;
       res.push([nr,nc]);
     } else {
       const max = v.r===F? 99 : v.r;
       let nr=r+dr, nc=c+dc, cnt=0;
-      while(nr>=0&&nr<9&&nc>=0&&nc<9&&cnt<max){
+      while(nr>=0&&nr<N&&nc>=0&&nc<N&&cnt<max){
         const tg=b[nr][nc];
         if(tg&&tg.p===p)break;
         res.push([nr,nc]);
@@ -1499,7 +1565,7 @@ function moves(b,r,c){
       let dr=ddr, dc=ddc;
       if(flip){ dr=-dr; dc=-dc; }
       let nr=r+dr, nc=c+dc;
-      while(nr>=0&&nr<9&&nc>=0&&nc<9){
+      while(nr>=0&&nr<N&&nc>=0&&nc<N){
         const tg=b[nr][nc];
         if(tg){
           const tr2=pieceRank(tg.t);
@@ -1540,7 +1606,7 @@ function lionMoves(b,r,c){
   const pc=b[r][c]; if(!pc||!hasLion(pc.t)) return [];
   const p=pc.p, full=((TP[pc.t]&&TP[pc.t].fl)||[]).includes('area2');
   const dirs=lionStepDirs(pc.t,p);
-  const inb=(x,y)=>x>=0&&x<9&&y>=0&&y<9;
+  const inb=(x,y)=>x>=0&&x<N&&y>=0&&y<N;
   const out=[], seen=new Set();
   const add=(tr,tc,caps)=>{
     const key=tr+'_'+tc+'|'+caps.map(q=>q[0]+','+q[1]).sort().join(';');
@@ -1590,7 +1656,7 @@ function isHook(t){ return ((TP[t]&&TP[t].fl)||[]).includes('hook'); }
 function hookDirs(t){ return ((TP[t]&&TP[t].m)||[]).filter(v=>v[2]==='F').map(v=>[v[0],v[1]]); }
 function hookMoves(b,r,c){
   const pc=b[r][c]; if(!pc||!isHook(pc.t)) return [];
-  const p=pc.p, inb=(x,y)=>x>=0&&x<9&&y>=0&&y<9;
+  const p=pc.p, inb=(x,y)=>x>=0&&x<N&&y>=0&&y<N;
   const res=[], seen=new Set();
   const addq=(x,y)=>{ const k=x+'_'+y; if(!seen.has(k)){seen.add(k);res.push([x,y]);} };
   const perp=d=>[[-d[1],d[0]],[d[1],-d[0]]]; // 90°回転（直交/斜めとも対応）
@@ -1621,7 +1687,7 @@ function hookMoves(b,r,c){
 function jtMoves(b,r,c){
   const p=b[r][c].p, enemy=-p;
   let enemyJT=null;
-  for(let er=0;er<9;er++)for(let ec=0;ec<9;ec++){
+  for(let er=0;er<N;er++)for(let ec=0;ec<N;ec++){
     const q=b[er][ec]; if(q&&q.p===enemy&&q.t==='JT') enemyJT=[er,ec];
   }
   // (tr,tc)が敵駒(その駒自身を除く)に効かれているか。対象マスを一旦空けて判定するため、
@@ -1630,7 +1696,7 @@ function jtMoves(b,r,c){
     if(enemyJT && !(enemyJT[0]===tr&&enemyJT[1]===tc)) return true; // 相手自在天王は全マスに効く
     const saved=b[tr][tc]; b[tr][tc]=null;
     let def=false;
-    for(let er=0;er<9&&!def;er++)for(let ec=0;ec<9&&!def;ec++){
+    for(let er=0;er<N&&!def;er++)for(let ec=0;ec<N&&!def;ec++){
       const q=b[er][ec]; if(!q||q.p!==enemy||q.t==='JT')continue;
       if(moves(b,er,ec).some(([a,bb])=>a===tr&&bb===tc)) def=true;
     }
@@ -1638,7 +1704,7 @@ function jtMoves(b,r,c){
     return def;
   }
   const res=[];
-  for(let r2=0;r2<9;r2++)for(let c2=0;c2<9;c2++){
+  for(let r2=0;r2<N;r2++)for(let c2=0;c2<N;c2++){
     if(r2===r&&c2===c)continue;
     const q=b[r2][c2];
     if(!q){ res.push([r2,c2]); continue; }   // 空マスへは自由
@@ -1651,16 +1717,16 @@ function jtMoves(b,r,c){
 /* ===== 持ち駒を打てるマス ===== */
 function dropTargets(b,t,p){
   const res=[];
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
     if(b[r][c])continue;
     // 行き所のない駒の禁止
-    const last = p===1?0:8, last2 = p===1?[0,1]:[7,8];
+    const last = p===1?0:N-1, last2 = p===1?[0,1]:[N-2,N-1];
     if(t==='hP'||t==='hL'||t==='P'||t==='L'){ if(r===last)continue; }
     if(t==='hN'||t==='N'){ if(last2.includes(r))continue; }
     // 二歩（ルールで有効時のみ）。本将棋の歩 hP は hP同士、大局の歩 P は P同士で判定。
     if((t==='hP'||t==='P') && RULES.nifu){
       let dbl=false;
-      for(let rr=0;rr<9;rr++){const q=b[rr][c]; if(q&&q.p===p&&q.t===t){dbl=true;break;}}
+      for(let rr=0;rr<N;rr++){const q=b[rr][c]; if(q&&q.p===p&&q.t===t){dbl=true;break;}}
       if(dbl)continue;
     }
     // オセロ駒：最低1枚裏返せる場所にしか置けない
@@ -1686,11 +1752,11 @@ function isLegalMove(m, p, b){
 }
 
 /* ===== 成り判定 ===== */
-function inPromoZone(r,p){ return p===1? r<=2 : r>=6; }
+function inPromoZone(r,p){ return p===1? r<PZ : r>=N-PZ; }
 function mustPromote(t,r,p){
   // 前進のみで最遠段だと動けなくなる駒は強制成り
-  if(t==='hP'||t==='hL'||t==='P'||t==='L'||t==='SG'||t==='I'||t==='D'||t==='GN'||t==='TG') return p===1? r===0 : r===8;
-  if(t==='hN'||t==='N') return p===1? r<=1 : r>=7;
+  if(t==='hP'||t==='hL'||t==='P'||t==='L'||t==='SG'||t==='I'||t==='D'||t==='GN'||t==='TG') return p===1? r===0 : r===N-1;
+  if(t==='hN'||t==='N') return p===1? r<=1 : r>=N-2;
   return false;
 }
 // 成駒かどうか（TPの成専用コードは'+'始まり。base→成りで名前が変わる駒も成駒扱い）
@@ -1702,7 +1768,7 @@ function demoteOf(t){ return (isPromoted(t) && DEMOTE[t]) ? DEMOTE[t] : t; }
 function isRoyal(t){ return t==='hK'||t==='hKw'||t==='mK'||t==='K'||t==='CP'||t==='cK'||t==='JT'||t==='zLion'; }
 // 指定プレイヤーのroyal駒（玉・太子）が盤上または持ち駒に残っているか
 function hasRoyal(p){
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
     const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) return true;
   }
   const cap = p===1?capYou:capEnemy;
@@ -1712,13 +1778,13 @@ function hasRoyal(p){
 // プレイヤー p が王手をかけられているか（pのroyalが相手の利きに入る）。royal位置も返す。
 function checkInfo(p){
   const royals=[];
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
     const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) royals.push([r,c]);
   }
   if(!royals.length) return {check:false,cells:[]};
   const key=new Set(royals.map(([r,c])=>r+'_'+c));
   const hit=new Set();
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
     const pc=board[r][c];
     if(pc&&pc.p===-p){
       for(const [tr,tc] of moves(board,r,c)){ if(key.has(tr+'_'+tc)) hit.add(tr+'_'+tc); }
@@ -1730,6 +1796,10 @@ function checkInfo(p){
 /* ===== 描画 ===== */
 function render(){
   const bd=document.getElementById('board'); bd.innerHTML='';
+  // 盤グリッドを現在のサイズ N×N に合わせる。大盤はマスを小さく。
+  bd.style.gridTemplateColumns='repeat('+N+',minmax(0,1fr))';
+  bd.style.gridTemplateRows='repeat('+N+',minmax(0,1fr))';
+  bd.classList.toggle('bigboard', N>=13);
   let movable=new Set();
   if(sel){
     if(sel.drop){ dropTargets(board,sel.t,sel.p||turn).forEach(([r,c])=>movable.add(r+'_'+c)); }
@@ -1742,7 +1812,7 @@ function render(){
       const k=board[sel.r][sel.c];
       if(k&&k.t==='cK'&&!k.moved){
         for(const tc of [sel.c-2, sel.c+2]){
-          if(tc>=0&&tc<9 && castlingMove(sel.r,sel.c,sel.r,tc)) movable.add(sel.r+'_'+tc);
+          if(tc>=0&&tc<N && castlingMove(sel.r,sel.c,sel.r,tc)) movable.add(sel.r+'_'+tc);
         }
       }
     }
@@ -1756,7 +1826,7 @@ function render(){
       if(ci.check) ci.cells.forEach(k=>checkCells.add(k));
     }
   }
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
     const cell=document.createElement('div'); cell.className='cell';
     const pc=board[r][c];
     if(movable.has(r+'_'+c)){ cell.classList.add('movable'); if(pc)cell.classList.add('has-koma'); }
@@ -1971,7 +2041,7 @@ function hasamiCapture(r,c,p){
     const line=[];
     let rr=r+dr, cc=c+dc;
     let closed=false;
-    while(rr>=0&&rr<9&&cc>=0&&cc<9){
+    while(rr>=0&&rr<N&&cc>=0&&cc<N){
       const q=board[rr][cc];
       if(!q){ break; }            // 空マス → 挟めない
       if(q.p===p){ closed=true; break; } // 自軍駒で閉じた → 挟み成立
@@ -1992,7 +2062,7 @@ function hasFire(t){ return t==='DM'||t==='+FFR'; }
 function fireBurn(r,c,p){
   for(const [dr,dc] of ALL8){
     const rr=r+dr, cc=c+dc;
-    if(rr<0||rr>8||cc<0||cc>8) continue;
+    if(rr<0||rr>=N||cc<0||cc>=N) continue;
     const q=board[rr][cc];
     if(q && q.p!==p){
       if(RULES.drops && !isRoyal(q.t)) (p===1?capYou:capEnemy).push(capturedCode(q));
@@ -2005,12 +2075,12 @@ function fireBurn(r,c,p){
 function goCaptureScan(){
   const orth=[[-1,0],[1,0],[0,-1],[0,1]];
   const caps=[];
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
     const q=board[r][c]; if(!q||!isGo(q.t))continue;
     const enemy=-q.p; let surrounded=true;
     for(const [dr,dc] of orth){
       const nr=r+dr,nc=c+dc;
-      if(nr<0||nr>8||nc<0||nc>8) continue;          // 盤端は壁＝囲み成立側
+      if(nr<0||nr>=N||nc<0||nc>=N) continue;          // 盤端は壁＝囲み成立側
       const n=board[nr][nc];
       if(!n || n.p!==enemy){ surrounded=false; break; } // 空 or 敵でない(味方含む)＝囲まれていない
     }
@@ -2050,7 +2120,7 @@ function othelloFlipCount(r,c,p,bd){
   let total=0;
   for(const [dr,dc] of dirs){
     let n=0, rr=r+dr, cc=c+dc, closed=false;
-    while(rr>=0&&rr<9&&cc>=0&&cc<9){
+    while(rr>=0&&rr<N&&cc>=0&&cc<N){
       const q=b[rr][cc];
       if(!q) break;
       if(q.p===p){ closed=true; break; } // 自軍の駒なら何でも閉じる
@@ -2067,7 +2137,7 @@ function othelloFlip(r,c,p){
     const line=[];
     let rr=r+dr, cc=c+dc;
     let closed=false;
-    while(rr>=0&&rr<9&&cc>=0&&cc<9){
+    while(rr>=0&&rr<N&&cc>=0&&cc<N){
       const q=board[rr][cc];
       if(!q){ break; }                    // 空マス → 挟めない
       if(q.p===p){ closed=true; break; }  // 自軍の駒なら何でも挟み成立
@@ -2213,17 +2283,17 @@ function afterPlayer(){
 /* ===== 相手AI：αβ探索 ===== */
 // 玉の位置を探す
 function findKing(b,p){
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){const pc=b[r][c];if(pc&&pc.p===p&&isRoyal(pc.t))return[r,c];}
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){const pc=b[r][c];if(pc&&pc.p===p&&isRoyal(pc.t))return[r,c];}
   return null;
 }
 function evaluate(b,cy,ce){ // 相手(-1)視点で大きいほど良い
   let s=0;
   const ek=findKing(b,-1), yk=findKing(b,1);
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
     const pc=b[r][c]; if(!pc)continue;
     let v=VALUE[pc.t];
     if(pc.t!=='K'){
-      const adv = pc.p===-1? r : (8-r);       // 前進ボーナス
+      const adv = pc.p===-1? r : (N-1-r);       // 前進ボーナス
       v += adv*7;
       // 敵玉への接近ボーナス（攻撃性）
       const tk = pc.p===-1? yk : ek;
@@ -2248,7 +2318,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     const dirs=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
     for(const [dr,dc] of dirs){
       const line=[]; let rr=r+dr, cc=c+dc, closed=false;
-      while(rr>=0&&rr<9&&cc>=0&&cc<9){
+      while(rr>=0&&rr<N&&cc>=0&&cc<N){
         const q=nb[rr][cc];
         if(!q) break;
         if(q.p===side){ closed=true; break; }
@@ -2267,7 +2337,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
     for(const [dr,dc] of dirs){
       const line=[]; let rr=r+dr, cc=c+dc, closed=false;
-      while(rr>=0&&rr<9&&cc>=0&&cc<9){
+      while(rr>=0&&rr<N&&cc>=0&&cc<N){
         const q=nb[rr][cc];
         if(!q) break;
         if(q.p===side){ closed=true; break; }
@@ -2286,7 +2356,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
   // コピー盤nb上で火鬼の焼き取り（隣接8方向の敵を焼く。royalを焼いたらking扱い）
   function simFireBurn(r,c,side){
     for(const [dr,dc] of ALL8){
-      const rr=r+dr, cc=c+dc; if(rr<0||rr>8||cc<0||cc>8)continue;
+      const rr=r+dr, cc=c+dc; if(rr<0||rr>=N||cc<0||cc>=N)continue;
       const q=nb[rr][cc];
       if(q && q.p!==side){ if(isRoyal(q.t)) king=true; else if(RULES.drops) myCap.push(capturedCode(q)); nb[rr][cc]=null; }
     }
@@ -2294,10 +2364,10 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
   // コピー盤nb上で囲碁の囲み取り（縦横4方を囲まれた碁石を取る。色保持で各陣営の持ち駒へ）
   function simGoCapture(){
     const orth=[[-1,0],[1,0],[0,-1],[0,1]];
-    for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
       const q=nb[r][c]; if(!q||!isGo(q.t))continue;
       const enemy=-q.p; let surr=true;
-      for(const [dr,dc] of orth){ const nr=r+dr,nc=c+dc; if(nr<0||nr>8||nc<0||nc>8)continue; const n=nb[nr][nc]; if(!n||n.p!==enemy){surr=false;break;} }
+      for(const [dr,dc] of orth){ const nr=r+dr,nc=c+dc; if(nr<0||nr>=N||nc<0||nc>=N)continue; const n=nb[nr][nc]; if(!n||n.p!==enemy){surr=false;break;} }
       if(surr){ nb[r][c]=null; if(RULES.drops) (enemy===1?ncy:nce).push(q.t); }
     }
   }
@@ -2331,7 +2401,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
 // 着手生成（成り/不成を別手として展開、持ち駒打ちも含む）
 function genMoves(b,p,cy,ce){
   const list=[];
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
     const pc=b[r][c];
     if(pc&&pc.p===p){
       moves(b,r,c).forEach(([tr,tc])=>{
@@ -2394,15 +2464,18 @@ function search(b,cy,ce,depth,side,alpha,beta){
 function cpuPickMove(side, depth){
   const list=genMoves(board,side,capYou,capEnemy);
   if(!list.length) return null;
-  const DEPTH = depth!=null ? depth : (SPEEDS[speedIdx].depth||3);
+  let DEPTH = depth!=null ? depth : (SPEEDS[speedIdx].depth||3);
+  // 大盤は合法手・分岐が爆発するためCPUを簡易化（探索を浅くする割り切り）
+  if(N>=25) DEPTH=Math.min(DEPTH,1);
+  else if(N>=13) DEPTH=Math.min(DEPTH,2);
   // 取りの大きい手を先に（αβ効率化）
   list.sort((a,b2)=>{
     const ca=board[a.tr]&&board[a.tr][a.tc]?VALUE[board[a.tr][a.tc].t]:0;
     const cb=board[b2.tr]&&board[b2.tr][b2.tc]?VALUE[board[b2.tr][b2.tc].t]:0;
     return cb-ca;
   });
-  // 超高速(depth<=1)では枝刈り前にトップNだけ評価して時間短縮
-  const cand = DEPTH<=1 ? list.slice(0, Math.min(list.length, 24)) : list;
+  // 超高速(depth<=1)や大盤では、トップ候補だけ評価して時間短縮
+  const cand = (DEPTH<=1 || N>=16) ? list.slice(0, Math.min(list.length, N>=16?18:24)) : list;
   let best=null, bestScore = side===-1? -Infinity : Infinity;
   for(const m of cand){
     const s=simulate(board,m,side,capYou,capEnemy);
@@ -2441,7 +2514,7 @@ function applyMoveSilent(side,m,silent){
     const igui = m.fr===m.tr && m.fc===m.tc; // 獅子の居喰い：動かず隣を取る
     const tg=igui? null : board[m.tr][m.tc]; // 居喰いは移動先=自駒なので取り対象外
     // チェスポーン昇格判定
-    const cpawnPromo = pc.t==='cP' && (m.tr===(side===1?0:8));
+    const cpawnPromo = pc.t==='cP' && (m.tr===(side===1?0:N-1));
     const promo0 = (cpawnPromo||igui) ? false : (m.promo!==undefined ? m.promo
       : canPromoteMove(pc.t,m.fr,m.tr,side, !!(tg&&tg.p!==side)||!!(m.caps&&m.caps.length)));
     // 成る場合の新コード（連鎖成り・ランダム成りを解決）。乱数なので棋譜に promoTo を記録。
@@ -2517,7 +2590,7 @@ function setStatus(t,cls){
 // 局面ハッシュ（盤＋手番＋持ち駒）
 function boardHash(){
   let s='';
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){const pc=board[r][c]; s+= pc?(pc.t+(pc.p>0?'+':'-')):'.'; s+=',';}
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){const pc=board[r][c]; s+= pc?(pc.t+(pc.p>0?'+':'-')):'.'; s+=',';}
   s+='|'+turn+'|'+[...capYou].sort().join('')+'|'+[...capEnemy].sort().join('');
   return s;
 }
@@ -2534,6 +2607,7 @@ function checkSennichite(){
 /* ===== 棋譜リプレイ ===== */
 function snapRestore(snap){
   board=snap.board.map(row=>row.map(x=>x?{...x}:null));
+  N=board.length;   // 盤サイズも復元局面に合わせる
   capYou=[...snap.capYou]; capEnemy=[...snap.capEnemy];
 }
 // kifu[i] を現在の盤へ適用（表示専用。勝敗判定なし）
@@ -2703,10 +2777,10 @@ document.getElementById('swapSides').onclick=()=>{
   if(editing){ setStatus('編集モード中は入れ替えできません'); return; }
   if(replaying) exitReplay();
   stopAutoLoop();
-  const nb=Array.from({length:9},()=>Array(9).fill(null));
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+  const nb=Array.from({length:N},()=>Array(N).fill(null));
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
     const pc=board[r][c];
-    if(pc) nb[8-r][8-c]={...pc, p:-pc.p};
+    if(pc) nb[N-1-r][N-1-c]={...pc, p:-pc.p};
   }
   board=nb;
   const h=capYou; capYou=capEnemy; capEnemy=h; // 持ち駒も入れ替え
@@ -2726,6 +2800,46 @@ document.getElementById('resetBoard').onclick=()=>{
   updatePlayPauseLabel();
   setStatus('本将棋の初期配置に戻しました。▶ 開始 で対局開始（あなたが手動なら盤をタップ）');
 };
+
+// ===== 盤サイズ・プリセットUIの配線 =====
+// サイズUI（スライダー値・表示）を現在のNに同期
+function syncSizeUI(){
+  const rng=document.getElementById('sizeRange'), val=document.getElementById('sizeVal');
+  if(rng) rng.value=N;
+  if(val) val.textContent=N+' × '+N;
+}
+// builder() で盤(N/PZ含む)を作り直し、対局の進行状態をリセット（一時停止で待機）
+function newGameWithBoard(builder){
+  exitReplay(); stopAutoLoop();
+  editing=false; multiSel=[];
+  builder();
+  capYou=[]; capEnemy=[];
+  sel=null; history=[]; gameOver=false; pendingPromo=null;
+  turn = youAreSente ? 1 : -1;
+  kifu=[]; gameStartSnap=null; posCount={};
+  if(typeof redoStack!=='undefined') redoStack.length=0;
+  updateSenteLabel(); syncSizeUI();
+  refreshAutoLabels(); refreshEditLabel(); updateMultiBar(); updateEditBar(); updateReplayUI();
+  paused=true; render(); updatePlayPauseLabel();
+}
+document.getElementById('applyPresetBtn').onclick=()=>{
+  const key=document.getElementById('presetSel').value;
+  newGameWithBoard(()=>applyPreset(key));
+  const label = key==='hon' ? '本将棋（9×9）' : key==='mini' ? '5五将棋（5×5）' : ('空盤 '+N+'×'+N);
+  setStatus(label+'を準備しました。▶ 開始 で対局（編集モードで駒も置けます）');
+};
+(function wireSizeRange(){
+  const rng=document.getElementById('sizeRange'), val=document.getElementById('sizeVal');
+  if(!rng) return;
+  // ドラッグ中は表示だけ更新（盤の作り直しは確定時）
+  rng.oninput=()=>{ if(val) val.textContent=rng.value+' × '+rng.value; };
+  rng.onchange=()=>{
+    const v=+rng.value;
+    newGameWithBoard(()=>makeEmptyBoard(v));
+    const sel=document.getElementById('presetSel'); if(sel) sel.value='empty';
+    setStatus('空盤 '+N+'×'+N+' を作りました（編集モードで駒を配置）');
+  };
+})();
 
 document.getElementById('autoYou').onclick=()=>{
   if(replaying)return;
@@ -3083,12 +3197,12 @@ function updateEditBar(){
 document.getElementById('copyToEnemy').onclick=()=>{
   if(!editing)return;
   // まず敵駒を全消去
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){ if(board[r][c]&&board[r][c].p===-1) board[r][c]=null; }
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){ if(board[r][c]&&board[r][c].p===-1) board[r][c]=null; }
   // あなたの駒を点対称(180°回転)位置に相手駒として配置
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
     const pc=board[r][c];
     if(pc&&pc.p===1){
-      const nr=8-r, nc=8-c;
+      const nr=N-1-r, nc=N-1-c;
       board[nr][nc]={...pc,p:-1};
     }
   }
@@ -3107,7 +3221,7 @@ function randomReplace(mode){
     if(typeof OTHELLO_LIST!=='undefined') pool=pool.concat(OTHELLO_LIST);
   }
   const nonRoyal = pool.filter(t=>!isRoyal(t));
-  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
     const pc=board[r][c];
     if(!pc) continue;
     let cands;
@@ -3144,7 +3258,7 @@ function ensureRoyalEachSide(){
   for(const side of [1,-1]){
     const own=[];
     let hasR=false;
-    for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){
       const pc=board[r][c];
       if(pc&&pc.p===side){ own.push([r,c]); if(isRoyal(pc.t)) hasR=true; }
     }
@@ -3213,7 +3327,7 @@ function captureState(){
   };
 }
 function restoreState(s){
-  board=dcopyBoard(s.board); capYou=[...s.capYou]; capEnemy=[...s.capEnemy];
+  board=dcopyBoard(s.board); N=board.length; capYou=[...s.capYou]; capEnemy=[...s.capEnemy];
   history=s.history.map(h=>({to:h.to?[...h.to]:null, board:h.board?dcopyBoard(h.board):null, capYou:h.capYou?[...h.capYou]:null, capEnemy:h.capEnemy?[...h.capEnemy]:null}));
   kifu=s.kifu.map(k=>({...k})); turn=s.turn; gameOver=s.gameOver; gameStartSnap=s.gameStartSnap;
 }
