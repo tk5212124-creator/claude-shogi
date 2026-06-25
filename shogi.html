@@ -431,8 +431,8 @@
           <option value="hon">本将棋（9×9）</option>
           <option value="heian">平安将棋（9×9）</option>
           <option value="mini">5五将棋（5×5）</option>
-          <option value="chu">中将棋（12×12・簡易）</option>
-          <option value="dai">大将棋（15×15・簡易）</option>
+          <option value="chu">中将棋（12×12）</option>
+          <option value="dai">大将棋（15×15）</option>
           <option value="makadai">摩訶大大将棋（19×19・簡易）</option>
           <option value="taikyoku">大局将棋（36×36・簡易）</option>
         </optgroup>
@@ -453,7 +453,7 @@
       <input type="range" id="colRange" min="3" max="40" value="9">
     </div>
     <div class="bs-row"><span id="sizeVal" class="bs-size">9 行 × 9 列</span></div>
-    <div class="bs-note">プリセット適用や行・列スライダー変更で盤が作り直されます（編集モードで駒を配置）。大盤・大局将棋等はCPUを簡易化します。中将棋以上の大型将棋は代表的な簡易配置です。</div>
+    <div class="bs-note">プリセット適用や行・列スライダー変更で盤が作り直されます（編集モードで駒を配置）。大盤・大局将棋等はCPUを簡易化します。中将棋・大将棋は正確な初期配置、摩訶大大将棋・大局将棋は代表的な簡易配置です。</div>
   </div>
 
   <div class="multi-bar" id="multiBar" style="display:none;">
@@ -1454,20 +1454,28 @@ function setupMinishogi(){
     {r:1,cells:['hP',null,null,null,null]}
   ]);
 }
-// 中将棋（12×12・代表的な簡易配置）
+// 中将棋（12×12・正確な初期配置 / 出典:HaChu chuArray・lishogi）
 function setupChu(){
   NR=NC=12; PZ=4; emptyBoard();
-  const r0=symRow(['L','N','FL','C','S','G'],12); r0[5]='K'; r0[6]='DE';
-  const r1=symRow(['RV','B','SM','VM','KR','LN'],12); r1[5]='PH'; r1[6]='R';
-  placeArmy([{r:0,cells:r0},{r:1,cells:r1},{r:2,cells:fill('P',12)}]);
+  placeArmy([
+    {r:0,cells:['L','FL','C','S','G','K','DE','G','S','C','FL','L']},
+    {r:1,cells:['RV',null,'B',null,'BT','KR','PH','BT',null,'B',null,'RV']},
+    {r:2,cells:['SM','VM','R','DH','DK','LN','Q','DK','DH','R','VM','SM']},
+    {r:3,cells:fill('P',12)},
+    {r:4,cells:[null,null,null,'GB',null,null,null,null,'GB',null,null,null]}
+  ]);
 }
-// 大将棋（15×15・代表的な簡易配置）
+// 大将棋（15×15・正確な初期配置 / 出典:HaChu daiArray）
 function setupDai(){
   NR=NC=15; PZ=5; emptyBoard();
-  const r0=symRow(['L','N','FL','C','S','G','DE'],15); r0[7]='K';
-  const r1=symRow(['RV','VM','SM','B','R','KR','PH'],15); r1[7]='LN';
-  const r2=symRow(['I','C','FL','BT','Q','DH','DK'],15); r2[7]='Q';
-  placeArmy([{r:0,cells:r0},{r:1,cells:r1},{r:2,cells:r2},{r:3,cells:fill('P',15)}]);
+  placeArmy([
+    {r:0,cells:['L','N','SG','I','C','S','G','K','G','S','C','I','SG','N','L']},
+    {r:1,cells:['RV',null,'CS',null,'FL',null,'BT','DE','BT',null,'FL',null,'CS',null,'RV']},
+    {r:2,cells:[null,'VO',null,'AB',null,'EW','KR','LN','PH','EW',null,'AB',null,'VO',null]},
+    {r:3,cells:['R','FD','SM','VM','B','DH','DK','Q','DK','DH','B','VM','SM','FD','R']},
+    {r:4,cells:fill('P',15)},
+    {r:5,cells:[null,null,null,null,'GB',null,null,null,null,null,'GB',null,null,null,null]}
+  ]);
 }
 // 摩訶大大将棋（19×19・代表的な簡易配置）
 function setupMakadai(){
@@ -2905,8 +2913,8 @@ document.getElementById('resetBoard').onclick=()=>{
 // ===== 盤サイズ・プリセットUIの配線 =====
 // プリセットの表示名（UI・状態表示で共用）
 const PRESET_LABELS={
-  hon:'本将棋（9×9）', heian:'平安将棋（9×9）', chu:'中将棋（12×12・簡易）',
-  dai:'大将棋（15×15・簡易）', makadai:'摩訶大大将棋（19×19・簡易）',
+  hon:'本将棋（9×9）', heian:'平安将棋（9×9）', chu:'中将棋（12×12）',
+  dai:'大将棋（15×15）', makadai:'摩訶大大将棋（19×19・簡易）',
   taikyoku:'大局将棋（36×36・簡易）', chess:'チェス（8×8）', othello:'オセロ（8×8）',
   hasami:'はさみ将棋（9×9）', go:'囲碁（19×19・空盤）', mini:'5五将棋（5×5）', empty:'空盤'
 };
