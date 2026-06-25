@@ -430,11 +430,12 @@
         <optgroup label="将棋系">
           <option value="hon">本将棋（9×9）</option>
           <option value="heian">平安将棋（9×9）</option>
+          <option value="sho">小将棋（9×9）</option>
           <option value="mini">5五将棋（5×5）</option>
           <option value="chu">中将棋（12×12）</option>
           <option value="dai">大将棋（15×15）</option>
-          <option value="makadai">摩訶大大将棋（19×19・簡易）</option>
-          <option value="taikyoku">大局将棋（36×36・簡易）</option>
+          <option value="makadai">摩訶大大将棋（19×19）</option>
+          <option value="taikyoku">大局将棋（36×36）</option>
         </optgroup>
         <optgroup label="その他のゲーム">
           <option value="chess">チェス（8×8）</option>
@@ -453,7 +454,7 @@
       <input type="range" id="colRange" min="3" max="40" value="9">
     </div>
     <div class="bs-row"><span id="sizeVal" class="bs-size">9 行 × 9 列</span></div>
-    <div class="bs-note">プリセット適用や行・列スライダー変更で盤が作り直されます（編集モードで駒を配置）。大盤・大局将棋等はCPUを簡易化します。中将棋・大将棋は正確な初期配置、摩訶大大将棋・大局将棋は代表的な簡易配置です。</div>
+    <div class="bs-note">プリセット適用や行・列スライダー変更で盤が作り直されます（編集モードで駒を配置）。大盤・大局将棋等はCPUを簡易化します。各将棋の初期配置は出典に基づく正確な配置です（大型将棋の一部の希少駒は動きを近縁駒で近似）。</div>
   </div>
 
   <div class="multi-bar" id="multiBar" style="display:none;">
@@ -1121,6 +1122,11 @@ function isHonPiece(t){ return HON_BASE.includes(t) || /^\+[A-Z]+_hon$/.test(t);
   // 大将(GG)は定義側で既に奔王相当(全8方向走り)を持つため上書きしない（旧:1マスへ縮小するバグを除去）
 })();
 
+// ===== 大型将棋（摩訶大大将棋・大局将棋）用に未収録だった駒を追加 =====
+// 漢字は出典どおりに表示。動きは同系統の近縁駒を流用した近似（配置の正確さを優先）。
+[['TK01','無明','DV'],['TK02','羅刹','WL'],['TK03','奔鬼','FR'],['TK04','横龍','VD'],['TK05','行鳥','GO'],['TK06','麟師','PM'],['TK07','金翅','EG'],['TK08','烏行','SM'],['TK09','鴟行','SM'],['TK10','馬麟','HR'],['TK11','鶏飛','CK'],['TK12','隠狐','TF'],['TK13','騎兵','HS'],['TK14','川将','RE'],['TK15','炮兵','BN'],['TK16','刀兵','SE'],['TK17','鎗兵','SP'],['TK18','奔狗','RP'],['TK19','奔鷲','EG'],['TK20','大師','MT'],['TK21','豚将','PI'],['TK22','変狸','EB'],['TK23','𠵇犬','D'],['TK24','古猿','OM'],['TK25','古鵄','OK'],['TK26','鳫飛','FY'],['TK27','山鷲','ML'],['TK28','吼犬','DL']]
+.forEach(([c,k,an])=>{ if(TP[an]) TP[c]={...TP[an], n:k, k:k, pr:null, fl:[]}; });
+
 // ===== 互換レイヤ：TP から既存システム用テーブルを生成 =====
 // 盤上の駒コードは TP のキー（"P","L","AB",...,"+FB" 等）。
 const KANJI={}, VALUE={}, CAN_PROMOTE={}, DEMOTE={}, ENAME={};
@@ -1446,6 +1452,15 @@ function setupHeian(){
     {r:2,cells:fill('hP',9)}
   ]);
 }
+// 小将棋（9×9・本将棋に醉象を加えた古将棋 / 出典:提示の配置図）
+function setupSho(){
+  NR=NC=9; PZ=3; emptyBoard();
+  placeArmy([
+    {r:0,cells:['hL','hN','hS','hG','hK','hG','hS','hN','hL']},
+    {r:1,cells:[null,'hB',null,null,'DE',null,null,'hR',null]},
+    {r:2,cells:fill('hP',9)}
+  ]);
+}
 // 5五将棋（ミニ将棋 5×5）
 function setupMinishogi(){
   NR=NC=5; PZ=1; emptyBoard();
@@ -1477,23 +1492,26 @@ function setupDai(){
     {r:5,cells:[null,null,null,null,'GB',null,null,null,null,null,'GB',null,null,null,null]}
   ]);
 }
-// 摩訶大大将棋（19×19・代表的な簡易配置）
-function setupMakadai(){
-  NR=NC=19; PZ=5; emptyBoard();
-  const r0=symRow(['L','N','FL','C','S','G','DE','BT','KR'],19); r0[9]='K';
-  const r1=symRow(['RV','VM','SM','B','R','DK','DH','EL','HF'],19); r1[9]='LN';
-  const r2=symRow(['I','C','FL','BT','Q','KR','PH','GB','GB'],19); r2[9]='Q';
-  placeArmy([{r:0,cells:r0},{r:1,cells:r1},{r:2,cells:r2},{r:3,cells:fill('P',19)}]);
+// 全盤データ（上段→下段の各行を空白区切りコードで、'.'は空き）から盤を作る。
+// 上半分が相手(p=-1)、下半分があなた(p=1)。摩訶大大将棋・大局将棋のような
+// 点対称でない配置をそのまま正確に再現するために使う。
+function placeFullGrid(rows, pz){
+  NR=rows.length; NC=rows[0].split(' ').length; PZ=pz; emptyBoard();
+  for(let r=0;r<NR;r++){
+    const cells=rows[r].split(' ');
+    for(let c=0;c<NC && c<cells.length;c++){
+      const t=cells[c];
+      if(t==='.'||!t) continue;
+      board[r][c]={t:t, p: r < NR/2 ? -1 : 1};
+    }
+  }
 }
-// 大局将棋（36×36・代表的な簡易配置／CPUは簡易）
-function setupTaikyoku(){
-  NR=NC=36; PZ=6; emptyBoard();
-  const base=['L','N','FL','C','S','G','DE','BT','KR','PH','I','B','R','VM','SM','RV','DK','DH'];
-  const r0=symRow(base,36); r0[17]='K'; r0[18]='DE';
-  const r1=symRow(['RV','VM','SM','B','R','DK','DH','EL','HF','LN','KR','PH','Q','BT','FL','C','I','GB'],36);
-  const r2=symRow(['I','C','FL','BT','Q','KR','PH','GB','SM','VM','RV','B','R','L','N','S','G','DE'],36);
-  placeArmy([{r:0,cells:r0},{r:1,cells:r1},{r:2,cells:r2},{r:3,cells:fill('P',36)},{r:4,cells:fill('P',36)}]);
-}
+// 摩訶大大将棋（19×19・正確な初期配置 / 出典:日本語版Wikipedia 配置図）
+const MAKA_ROWS=("L EA SG T I C S G TK01 K DV G S C I T SG EA L|RV . CS . TK24 . RD FL BT DE BT FL SN . CC . CS . RV|. OR . AB . BB . EW PH LN KR EW . BB . AB . OR .|DO . N . VO . FD YA mKG LD WR TK02 FD . VO . N . DO|R RC SM SI VM B DH DK HM Q CA DK DH B VM SI SM LC R|P P P P P P P P P P P P P P P P P P P|. . . . . GB . . . . . . . GB . . . . .|. . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . .|. . . . . GB . . . . . . . GB . . . . .|P P P P P P P P P P P P P P P P P P P|R LC SM SI VM B DH DK CA Q HM DK DH B VM SI SM RC R|DO . N . VO . FD TK02 WR LD mKG YA FD . VO . N . DO|. OR . AB . BB . EW KR LN PH EW . BB . AB . OR .|RV . CS . CC . SN FL BT DE BT FL RD . TK24 . CS . RV|L EA SG T I C S G DV K TK01 G S C I T SG EA L").split('|');
+function setupMakadai(){ placeFullGrid(MAKA_ROWS, 5); }
+// 大局将棋（36×36・正確な初期配置 / 出典:日本語版Wikipedia 配置表、犬・仲人段は英語版で補完）
+const TAIKYOKU_ROWS=("L WT RB W DM TK27 LO BO HR TK03 ED WO FT Q RS RG G CP K G LG RS Q FT WO ED TK03 HR BO LO TK27 DM W RB TS L|RV FG TD FS CT RA FO MS RP RU SS GR RT BA +HENK mKG S DE NK S WR TK02 BA RT GR SS RU RP MS FO RA CT FS TD WE RV|GC TK04 RN RW BG RO TT RI BC WD TK18 TK05 TK25 PC WA FI C PM TK06 C FI WA PC TK25 TK05 TK18 WD BC LE LT RO BG RW RN TK04 GC|SV VE N TK21 CG PG H O CN SA SR GL LN CO GS VD WL VG GG WL VD GS CO LN GL SR SA CN O H PG CG TK21 N VE SV|CI CE B R WF FC MF VT SO LS CL CR RH HE VO GD TK07 TK01 DV TK07 GD VO HE RH CR CL LS SO VT MF FC WF R B CE CI|WC WH TK23 SM PR WB FL EG FD PS TK26 TK08 BI WG F PH HM LL GT CA KR F WG BI TK08 TK26 PS FD EG FL WB PR SM TK23 WH WC|TC VW SX DO TK10 VB AB EW WI TK11 TK24 CC NB SU VS NT TK12 MT PE TK12 NT VS ES WS CC TK24 TK11 WI EW AB VB TK10 DO SX VW TC|EC VI TK22 TK13 TK09 CM CS SW BM BT OC SI BB OR SQ SN RD TK19 LI RD SN SQ OR BB SI OC BT BM SW CS CM TK09 TK13 TK22 BL EC|CH SL VR WN TK14 M SD HS GN OS EA BS SG LP T BE I GE TK20 I BE T LP SG BS EA OS GN HS SD M TK14 WN VR SL CH|RC MK VM OX SC VP VH TK15 DH DK TK16 HF EL TK17 VL TG LB TK28 LD LB TG VL TK17 EL HF TK16 DK DH TK15 VH VP SC OX VM MK LC|P P P P P P P P P P P P P P P P P P P P P P P P P P P P P P P P P P P P|. . . . . D . . . . GB . . . D . . . . . . D . . . GB . . . . D . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|. . . . . D . . . . GB . . . D . . . . . . D . . . GB . . . . D . . . . .|P P P P P P P P P P P P P P P P P P P P P P P P P P P P P P P P P P P P|LC MK VM OX SC VP VH TK15 DH DK TK16 HF EL TK17 VL TG LB LD TK28 LB TG VL TK17 EL HF TK16 DK DH TK15 VH VP SC OX VM MK RC|CH SL VR WN TK14 M SD HS GN OS EA BS SG LP T BE I TK20 GE I BE T LP SG BS EA OS GN HS SD M TK14 WN VR SL CH|EC BL TK22 TK13 TK09 CM CS SW BM BT OC SI BB OR SQ SN RD LI TK19 RD SN SQ OR BB SI OC BT BM SW CS CM TK09 TK13 TK22 VI EC|TC VW SX DO TK10 VB AB EW WI TK11 TK24 CC WS ES VS NT TK12 PE MT TK12 NT VS SU NB CC TK24 TK11 WI EW AB VB TK10 DO SX VW TC|WC WH TK23 SM PR WB FL EG FD PS TK26 TK08 BI WG F KR CA GT LL HM PH F WG BI TK08 TK26 PS FD EG FL WB PR SM TK23 WH WC|CI CE B R WF FC MF VT SO LS CL CR RH HE VO GD TK07 DV TK01 TK07 GD VO HE RH CR CL LS SO VT MF FC WF R B CE CI|SV VE N TK21 CG PG H O CN SA SR GL LN CO GS VD WL GG VG WL VD GS CO LN GL SR SA CN O H PG CG TK21 N VE SV|GC TK04 RN RW BG RO LT LE BC WD TK18 TK05 TK25 PC WA FI C TK06 PM C FI WA PC TK25 TK05 TK18 WD BC RI TT RO BG RW RN TK04 GC|RV WE TD FS CT RA FO MS RP RU SS GR RT BA TK02 WR S NK DE S mKG YA BA RT GR SS RU RP MS FO RA CT FS TD FG RV|L TS RB W DM TK27 LO BO HR TK03 ED WO FT Q RS LG G K CP G RG RS Q FT WO ED TK03 HR BO LO TK27 DM W RB WT L").split('|');
+function setupTaikyoku(){ placeFullGrid(TAIKYOKU_ROWS, 6); }
 // チェス（8×8）。左右対称（点対称ではない）に同じ並びを両陣へ。
 function setupChess(){
   NR=NC=8; PZ=0; emptyBoard();
@@ -1519,7 +1537,7 @@ function setupGo(){ NR=NC=19; PZ=0; emptyBoard(); }
 
 // プリセット適用（盤・成りゾーンを設定）
 const PRESETS={
-  hon:setupStartBoard, heian:setupHeian, mini:setupMinishogi,
+  hon:setupStartBoard, heian:setupHeian, sho:setupSho, mini:setupMinishogi,
   chu:setupChu, dai:setupDai, makadai:setupMakadai, taikyoku:setupTaikyoku,
   chess:setupChess, othello:setupOthello, hasami:setupHasami, go:setupGo
 };
@@ -2913,9 +2931,9 @@ document.getElementById('resetBoard').onclick=()=>{
 // ===== 盤サイズ・プリセットUIの配線 =====
 // プリセットの表示名（UI・状態表示で共用）
 const PRESET_LABELS={
-  hon:'本将棋（9×9）', heian:'平安将棋（9×9）', chu:'中将棋（12×12）',
-  dai:'大将棋（15×15）', makadai:'摩訶大大将棋（19×19・簡易）',
-  taikyoku:'大局将棋（36×36・簡易）', chess:'チェス（8×8）', othello:'オセロ（8×8）',
+  hon:'本将棋（9×9）', heian:'平安将棋（9×9）', sho:'小将棋（9×9）', chu:'中将棋（12×12）',
+  dai:'大将棋（15×15）', makadai:'摩訶大大将棋（19×19）',
+  taikyoku:'大局将棋（36×36）', chess:'チェス（8×8）', othello:'オセロ（8×8）',
   hasami:'はさみ将棋（9×9）', go:'囲碁（19×19・空盤）', mini:'5五将棋（5×5）', empty:'空盤'
 };
 // サイズUI（行・列スライダーと表示）を現在のNR/NCに同期
