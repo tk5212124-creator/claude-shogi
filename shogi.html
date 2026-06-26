@@ -242,8 +242,15 @@
     padding:18px;max-width:min(94vw,460px);max-height:84vh;overflow-y:auto;
     box-shadow:0 16px 50px rgba(0,0,0,.6);}
   .pick-box p{margin-bottom:12px;letter-spacing:.08em;text-align:center;}
-  .pick-section{margin-bottom:12px;}
+  .pick-section{margin-bottom:12px;position:relative;}
   .pick-lbl{font-size:.72rem;color:var(--gold);letter-spacing:.2em;display:block;margin-bottom:6px;}
+  /* 各セクション見出しの右側のプリセット配置ボタン（配置先のマス指定時のみ表示） */
+  .stamp-sec{position:absolute;top:-3px;right:0;font-size:.66rem;padding:4px 9px;border-radius:7px;
+    background:linear-gradient(160deg,#5a4a9e,#3d3168);color:#ece3ff;border:1px solid rgba(139,107,255,.5);
+    cursor:pointer;font-family:inherit;font-weight:700;}
+  .stamp-sec:active{transform:scale(.96);}
+  #pickList:not(.placing) .stamp-sec{display:none;}
+  #pickList.placing .pick-lbl{padding-right:7em;}
   .pick-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;}
   .pick-koma{
     font-family:'Shippori Mincho',serif;font-weight:700;
@@ -605,13 +612,13 @@
           <span><i style="background:#9a86c4"></i>格なし</span>
         </div>
         <div class="pick-scroll" id="pickScroll">
-          <div class="pick-section"><span class="pick-lbl" id="lblBasic">本将棋</span><div class="pick-grid" id="pickBasic"></div></div>
-          <div class="pick-section"><span class="pick-lbl" id="lblDaikyoku">大局将棋</span><div class="pick-grid" id="pickDaikyoku"></div></div>
-          <div class="pick-section"><span class="pick-lbl" id="lblChess">チェス</span><div class="pick-grid" id="pickChess"></div></div>
-          <div class="pick-section"><span class="pick-lbl" id="lblHasami">はさみ将棋（特殊駒）</span><div class="pick-grid" id="pickHasami"></div></div>
-          <div class="pick-section"><span class="pick-lbl" id="lblOthello">オセロ（特殊駒）</span><div class="pick-grid" id="pickOthello"></div></div>
-          <div class="pick-section"><span class="pick-lbl" id="lblGo">囲碁（特殊駒）</span><div class="pick-grid" id="pickGo"></div></div>
-          <div class="pick-section"><span class="pick-lbl" id="lblMaka">摩訶大大将棋（大局と別）</span><div class="pick-grid" id="pickMaka"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblBasic">本将棋</span><button class="stamp-sec" data-preset="hon">プリセット配置</button><div class="pick-grid" id="pickBasic"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblDaikyoku">大局将棋</span><button class="stamp-sec" data-preset="taikyoku">プリセット配置</button><div class="pick-grid" id="pickDaikyoku"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblChess">チェス</span><button class="stamp-sec" data-preset="chess">プリセット配置</button><div class="pick-grid" id="pickChess"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblHasami">はさみ将棋（特殊駒）</span><button class="stamp-sec" data-preset="hasami">プリセット配置</button><div class="pick-grid" id="pickHasami"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblOthello">オセロ（特殊駒）</span><button class="stamp-sec" data-preset="othello">プリセット配置</button><div class="pick-grid" id="pickOthello"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblGo">囲碁（特殊駒）</span><button class="stamp-sec" data-preset="go">プリセット配置</button><div class="pick-grid" id="pickGo"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblMaka">摩訶大大将棋（大局と別）</span><button class="stamp-sec" data-preset="makadai">プリセット配置</button><div class="pick-grid" id="pickMaka"></div></div>
           <div class="pick-section"><span class="pick-lbl" id="lblDoubutsu">どうぶつしょうぎ</span><div class="pick-grid" id="pickDoubutsu"></div></div>
           <div class="pick-section"><span class="pick-lbl" id="lblOther">その他の将棋駒</span><div class="pick-grid" id="pickOther"></div></div>
         </div>
@@ -3374,8 +3381,10 @@ function openPickList(){
     : (editCell ? ((board[editCell.r][editCell.c]?'駒を変更':'空マスに駒を置く')) : '駒の図鑑');
   document.getElementById('pickTitle').textContent = infoOnly?'駒の説明':target;
   // プリセット配置は単一マス指定（editCell）かつ説明モードでない時のみ表示
+  const placing = !!(editCell && !infoOnly);
   const psr=document.getElementById('presetStampRow');
-  if(psr) psr.style.display = (editCell && !infoOnly) ? '' : 'none';
+  if(psr) psr.style.display = placing ? '' : 'none';
+  const pl=document.getElementById('pickList'); if(pl) pl.classList.toggle('placing', placing);
   showList();
   document.getElementById('pickModal').classList.add('show');
 }
@@ -3669,6 +3678,18 @@ document.getElementById('rDrawBothEnter').onchange=e=>{ RULES.drawBothEnter=e.ta
   const f=document.getElementById('stampFull'), o=document.getElementById('stampOwn');
   if(f) f.onclick=()=>doStamp(false);
   if(o) o.onclick=()=>doStamp(true);
+  // 各セクション見出しの「プリセット配置」ボタン（その盤の全配置を選択マス左上に置く）
+  document.querySelectorAll('.stamp-sec').forEach(btn=>{
+    btn.onclick=()=>{
+      if(!editCell){ setStatus('配置先のマスを選んでから押してください','think'); return; }
+      const key=btn.getAttribute('data-preset');
+      const {r,c}=editCell;
+      stampPreset(key, r, c);
+      closePick(); render();
+      const nm=(typeof PRESET_LABELS!=='undefined'&&PRESET_LABELS[key])?PRESET_LABELS[key]:key;
+      setStatus(nm+' を ('+(r+1)+'行,'+(c+1)+'列) を左上に配置しました（入りきる分のみ）');
+    };
+  });
 })();
 
 // ===== 待った／やり直し（1手進める）用の状態スタック =====
