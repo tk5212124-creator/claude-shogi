@@ -574,30 +574,6 @@
           <span class="sort-lbl">置く側</span>
           <button id="sideToggle" class="side-toggle">あなたの駒</button>
         </div>
-        <div class="sort-bar" id="presetStampRow" style="flex-wrap:wrap;gap:6px;">
-          <span class="sort-lbl">プリセット配置</span>
-          <select id="stampSel">
-            <optgroup label="将棋系">
-              <option value="hon">本将棋</option>
-              <option value="heian">平安将棋</option>
-              <option value="sho">小将棋</option>
-              <option value="mini">5五将棋</option>
-              <option value="chu">中将棋</option>
-              <option value="dai">大将棋</option>
-              <option value="makadai">摩訶大大将棋</option>
-              <option value="taikyoku">大局将棋</option>
-            </optgroup>
-            <optgroup label="その他">
-              <option value="chess">チェス</option>
-              <option value="othello">オセロ</option>
-              <option value="hasami">はさみ将棋</option>
-              <option value="go">囲碁</option>
-            </optgroup>
-          </select>
-          <button id="stampFull">全部置く</button>
-          <button id="stampOwn">自陣のみ置く</button>
-          <div class="bs-note" style="width:100%;font-size:.62rem;color:#9c8fc7;">このマスを左上として配置（入りきる分のみ）。「自陣のみ」は上の「置く側」の駒だけを置きます。</div>
-        </div>
         <div class="sort-bar">
           <span class="sort-lbl">検索</span>
           <input id="pieceSearch" type="text" placeholder="駒名・特徴で検索（例：成香 / 飛 / ライオン / lion）" style="flex:1;min-width:0;padding:5px 8px;border-radius:6px;border:1px solid #6a5790;background:#241a3a;color:#eee;">
@@ -3380,24 +3356,11 @@ function openPickList(){
   const target = multiSel.length>0 ? ('選択した'+multiSel.length+'マスを変更')
     : (editCell ? ((board[editCell.r][editCell.c]?'駒を変更':'空マスに駒を置く')) : '駒の図鑑');
   document.getElementById('pickTitle').textContent = infoOnly?'駒の説明':target;
-  // プリセット配置は単一マス指定（editCell）かつ説明モードでない時のみ表示
+  // プリセット配置ボタンは単一マス指定（editCell）かつ説明モードでない時のみ表示
   const placing = !!(editCell && !infoOnly);
-  const psr=document.getElementById('presetStampRow');
-  if(psr) psr.style.display = placing ? '' : 'none';
   const pl=document.getElementById('pickList'); if(pl) pl.classList.toggle('placing', placing);
   showList();
   document.getElementById('pickModal').classList.add('show');
-}
-// プリセット配置（pickModal内）：editCell を左上に配置して閉じる
-function doStamp(ownOnly){
-  if(!editCell){ return; }
-  const key=document.getElementById('stampSel').value;
-  const {r,c}=editCell;
-  const n = ownOnly ? stampPresetSide(key,r,c,editSide) : stampPreset(key,r,c);
-  closePick(); render();
-  const nm=(typeof PRESET_LABELS!=='undefined'&&PRESET_LABELS[key])?PRESET_LABELS[key]:key;
-  if(ownOnly && n===0) setStatus(nm+'には'+(editSide===1?'あなた':'相手')+'側の駒がありません','think');
-  else setStatus(nm+(ownOnly?('（'+(editSide===1?'あなた':'相手')+'側のみ '+n+'枚）'):'')+' を ('+(r+1)+'行,'+(c+1)+'列) を左上に配置しました');
 }
 function openPick(r,c){ editCell={r,c}; infoOnly=false; openPickList(); }
 
@@ -3675,19 +3638,19 @@ document.getElementById('rDrawBothEnter').onchange=e=>{ RULES.drawBothEnter=e.ta
   b.classList.toggle('on', editSide===-1);
 }; })();
 (function(){
-  const f=document.getElementById('stampFull'), o=document.getElementById('stampOwn');
-  if(f) f.onclick=()=>doStamp(false);
-  if(o) o.onclick=()=>doStamp(true);
-  // 各セクション見出しの「プリセット配置」ボタン（その盤の全配置を選択マス左上に置く）
+  // 各セクション見出しの「プリセット配置」ボタン：そのプリセットの「置く側」の駒だけを
+  // 選択マスを左上として配置（敵陣は別途「自陣を敵にコピー」で埋められる）
   document.querySelectorAll('.stamp-sec').forEach(btn=>{
     btn.onclick=()=>{
       if(!editCell){ setStatus('配置先のマスを選んでから押してください','think'); return; }
       const key=btn.getAttribute('data-preset');
       const {r,c}=editCell;
-      stampPreset(key, r, c);
+      const n=stampPresetSide(key, r, c, editSide);
       closePick(); render();
       const nm=(typeof PRESET_LABELS!=='undefined'&&PRESET_LABELS[key])?PRESET_LABELS[key]:key;
-      setStatus(nm+' を ('+(r+1)+'行,'+(c+1)+'列) を左上に配置しました（入りきる分のみ）');
+      const who=editSide===1?'あなた':'相手';
+      if(n===0) setStatus(nm+'には'+who+'側の駒がありません','think');
+      else setStatus(nm+'（'+who+'側のみ '+n+'枚）を ('+(r+1)+'行,'+(c+1)+'列) を左上に配置しました','win');
     };
   });
 })();
