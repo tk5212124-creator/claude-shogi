@@ -290,15 +290,28 @@
     pointer-events:none;
   }
   #pvPromo{background:linear-gradient(160deg,#caa23f,#9c7c28);border-color:var(--gold);color:#1a1330;}
-  .board-setup{width:100%;max-width:430px;margin-top:10px;
+  /* アコーディオン（盤の設定・編集ツール） */
+  .acc{width:100%;max-width:430px;margin-top:10px;
     background:linear-gradient(160deg,rgba(53,42,85,.7),rgba(37,29,61,.7));
-    border:1px solid rgba(139,107,255,.3);border-radius:12px;padding:9px 12px;}
+    border:1px solid rgba(139,107,255,.3);border-radius:12px;overflow:hidden;}
+  .acc-head{width:100%;display:flex;align-items:center;justify-content:space-between;
+    background:transparent;border:none;color:var(--gold);font-size:.86rem;font-weight:700;
+    letter-spacing:.08em;padding:11px 14px;cursor:pointer;font-family:inherit;}
+  .acc-chev{transition:transform .2s;font-size:.9rem;color:#b3a8d8;}
+  .acc.open .acc-chev{transform:rotate(180deg);}
+  .acc.open .acc-head{color:var(--glow);}
+  .acc-body{display:none;padding:2px 12px 11px;}
+  .acc.open .acc-body{display:block;}
+  .acc#accEdit.open{border-color:var(--sel);box-shadow:0 0 0 1px rgba(98,209,160,.4);}
   .board-setup .bs-lbl{font-size:.74rem;color:var(--gold);letter-spacing:.12em;display:block;margin-bottom:8px;}
-  .board-setup .bs-row{display:flex;gap:8px;align-items:center;margin-bottom:7px;}
-  .board-setup .bs-row label{font-size:.78rem;color:#b3a8d8;min-width:4.2em;}
-  .board-setup select{flex:1;font-size:.82rem;padding:6px 8px;border-radius:8px;
+  .board-setup .bs-row{display:flex;gap:8px;align-items:center;margin-bottom:7px;flex-wrap:wrap;}
+  .board-setup .bs-row label{font-size:.78rem;color:#b3a8d8;min-width:2em;}
+  .board-setup select{flex:1;min-width:8em;font-size:.82rem;padding:6px 8px;border-radius:8px;
     background:#2a2142;color:#ece3ff;border:1px solid rgba(139,107,255,.4);}
-  .board-setup #rowRange,.board-setup #colRange{flex:1;min-width:0;}
+  .board-setup .bs-num{width:4em;font-size:.92rem;padding:6px;border-radius:8px;text-align:center;
+    background:#2a2142;color:#ece3ff;border:1px solid rgba(139,107,255,.4);}
+  .board-setup .edit-bar-row{display:flex;gap:7px;flex-wrap:wrap;margin:4px 0;}
+  .board-setup .edit-bar-row button,.board-setup .bs-row button{font-size:.78rem;padding:7px 10px;}
   .board-setup .bs-size{font-size:.82rem;color:#ece3ff;font-variant-numeric:tabular-nums;}
   .board-setup .bs-note{font-size:.62rem;color:#7d6e57;line-height:1.4;}
   /* 大盤：マスと駒名を縮小して収める */
@@ -416,14 +429,14 @@
     <button class="primary" id="undo">◀ 待った</button>
   </div>
   <div class="controls">
-    <button id="editMode">編集モード：OFF</button>
     <button id="ruleBtn">ルール設定</button>
     <button id="swapSides">先後入替（あなた⇄相手）</button>
     <button id="reset">投了・指し直し</button>
     <button id="resetBoard">初期配置に戻す</button>
   </div>
-  <div class="board-setup">
-    <span class="bs-lbl">盤の設定</span>
+  <div class="acc" id="accBoard">
+   <button type="button" class="acc-head" id="accBoardHead">盤の設定<span class="acc-chev">∨</span></button>
+   <div class="acc-body board-setup">
     <div class="bs-row">
       <label for="presetSel">プリセット</label>
       <select id="presetSel">
@@ -449,12 +462,27 @@
     </div>
     <div class="bs-row">
       <label for="rowRange">行</label>
-      <input type="range" id="rowRange" min="3" max="40" value="9">
+      <input type="number" id="rowRange" class="bs-num" min="3" max="40" step="1" value="9">
       <label for="colRange">列</label>
-      <input type="range" id="colRange" min="3" max="40" value="9">
+      <input type="number" id="colRange" class="bs-num" min="3" max="40" step="1" value="9">
+      <button id="applySizeBtn">作成</button>
     </div>
     <div class="bs-row"><span id="sizeVal" class="bs-size">9 行 × 9 列</span></div>
-    <div class="bs-note">プリセット適用や行・列スライダー変更で盤が作り直されます（編集モードで駒を配置）。大盤・大局将棋等はCPUを簡易化します。各将棋の初期配置は出典に基づく正確な配置です（大型将棋の一部の希少駒は動きを近縁駒で近似）。</div>
+    <div class="bs-note">プリセット適用や行・列の数値を変えて「作成」で盤が作り直されます（編集ツールで駒を配置）。大盤・大局将棋等はCPUを簡易化します。各将棋の初期配置は出典に基づく正確な配置です（大型将棋の一部の希少駒は動きを近縁駒で近似）。</div>
+   </div>
+  </div>
+  <div class="acc" id="accEdit">
+   <button type="button" class="acc-head" id="accEditHead">編集ツール<span class="acc-chev">∨</span></button>
+   <div class="acc-body board-setup">
+    <div class="bs-note">開くと編集モードです。盤のマスをタップして駒を配置・変更できます（閉じると編集終了）。</div>
+    <div class="edit-bar-row">
+      <button id="copyToEnemy">自陣の配置を敵にコピー</button>
+      <button id="randomPower">ランダム置換（強さ近い）</button>
+      <button id="randomRank">ランダム置換（同じ格）</button>
+      <button id="randomFull">ランダム置換（完全）</button>
+      <button id="restoreCustom">記憶した配置に戻す</button>
+    </div>
+   </div>
   </div>
 
   <div class="multi-bar" id="multiBar" style="display:none;">
@@ -463,16 +491,6 @@
     <button id="multiClear">選択解除</button>
   </div>
 
-  <div class="edit-bar" id="editBar" style="display:none;">
-    <span class="edit-bar-lbl">編集ツール</span>
-    <div class="edit-bar-row">
-      <button id="copyToEnemy">自陣の配置を敵にコピー</button>
-      <button id="randomPower">ランダム置換（強さ近い）</button>
-      <button id="randomRank">ランダム置換（同じ格）</button>
-      <button id="randomFull">ランダム置換（完全）</button>
-      <button id="restoreCustom">記憶した配置に戻す</button>
-    </div>
-  </div>
 
   <div class="replay-panel" id="replayPanel">
     <div class="replay-head">
@@ -588,6 +606,23 @@
         <button id="emInfo">説明を見る</button>
         <button class="primary" id="emChange">この駒を変更</button>
         <button id="emSelectAdd">複数選択に追加</button>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <select id="emStampSel" style="flex:1;font-size:.82rem;padding:6px;border-radius:8px;background:#2a2142;color:#ece3ff;border:1px solid rgba(139,107,255,.4);">
+            <option value="hon">本将棋</option>
+            <option value="heian">平安将棋</option>
+            <option value="sho">小将棋</option>
+            <option value="mini">5五将棋</option>
+            <option value="chu">中将棋</option>
+            <option value="dai">大将棋</option>
+            <option value="makadai">摩訶大大将棋</option>
+            <option value="taikyoku">大局将棋</option>
+            <option value="chess">チェス</option>
+            <option value="othello">オセロ</option>
+            <option value="hasami">はさみ将棋</option>
+            <option value="go">囲碁</option>
+          </select>
+          <button id="emStamp">このマスを左上に配置</button>
+        </div>
         <button id="emCancel">閉じる</button>
       </div>
     </div>
@@ -604,6 +639,7 @@
       <label class="rule-row"><input type="checkbox" id="rRandSpecial"> ランダム置換の候補にはさみ駒・オセロ駒を含める</label>
       <label class="rule-row"><input type="checkbox" id="rRepromote"> 成り条件をもう一度満たすと、もう一度成れる（成駒の成駒。例：敵駒を取ると成るルールなら、再度敵駒を取ると更に成る）</label>
       <label class="rule-row"><input type="checkbox" id="rRandomPromote"> 成り先のない駒は、成るとき全駒からランダムな駒に変化する（王将・玉将はroyalな駒へ）</label>
+      <label class="rule-row"><input type="checkbox" id="rCaptureAll"> 相手の駒を全て取る（取り切る）まで戦う（王の有無に関係なく勝敗判定。囲碁・オセロ・はさみ将棋向け）</label>
       <p class="rule-note" style="margin:6px 0 2px;">引き分け（持将棋）</p>
       <label class="rule-row"><input type="checkbox" id="rDrawNoMove"> どこにも動けない・打てなくなったら持将棋（引き分け）にする</label>
       <label class="rule-row"><input type="checkbox" id="rDrawBothEnter"> 双方の王が敵陣に入ったら持将棋（引き分け）にする</label>
@@ -994,11 +1030,6 @@ TP['GOW']={n:'Go(white)',k:'碁白',pr:null,v:60,fl:['go'],m:[]};
 const GO_LIST=['GOB','GOW'];
 function isGo(t){ return t==='GOB'||t==='GOW'; }
 function goOwner(t){ return t==='GOB'?1 : t==='GOW'? -1 : 0; } // 碁石の固有の色（所有者）
-// 盤上ゲーム（囲碁・オセロ・はさみ将棋）用のroyal駒。動かない王として各陣に1枚だけ置き、
-// 残りは持ち駒から打つ。取られたら負け（royal）。fl:['royal'] で玉将扱い。
-TP['goK']={n:'Go King',k:'王',pr:null,v:99999,fl:['royal'],m:[]};
-TP['otK']={n:'Othello King',k:'王',pr:null,v:99999,fl:['royal'],m:[]};
-TP['haK']={n:'Hasami King',k:'王',pr:null,v:99999,fl:['royal'],m:[]};
 
 // その他の将棋駒（大局将棋以外）：自在天王（摩訶大大将棋・玉将の成駒）。
 // 盤上のどこへでも1手で行ける（いくら駒を飛び越えてもよい）。
@@ -1531,26 +1562,23 @@ function setupChess(){
     board[0][c]={t:back[c],p:-1}; board[1][c]={t:'cP',p:-1};
   }
 }
-// オセロ（8×8）。中央4枚＋各陣にroyalの王（隅）。残りの牌は持ち駒として最大限保持。
+// オセロ（8×8）。中央4枚＋牌を持ち駒として最大限保持。勝敗は「取り切るまで戦う」ルールで判定。
 function setupOthello(){
   NR=NC=8; PZ=0; emptyBoard();
   board[3][3]={t:'OTH',p:-1}; board[3][4]={t:'OTH',p:1};
   board[4][3]={t:'OTH',p:1};  board[4][4]={t:'OTH',p:-1};
-  board[NR-1][0]={t:'otK',p:1}; board[0][NC-1]={t:'otK',p:-1};
   const n=Math.floor(NR*NC/2);
   capYou.push(...fill('OTH',n)); capEnemy.push(...fill('OTH',n));
 }
-// はさみ将棋（9×9）。各陣にroyalの王（隅）。駒は持ち駒として最大限保持し、打って動かす。
+// はさみ将棋（9×9）。駒を持ち駒として最大限保持し、打って動かす。
 function setupHasami(){
   NR=NC=9; PZ=0; emptyBoard();
-  board[NR-1][0]={t:'haK',p:1}; board[0][NC-1]={t:'haK',p:-1};
   const n=Math.floor(NR*NC/2);
   capYou.push(...fill('HASA',n)); capEnemy.push(...fill('HASA',n));
 }
-// 囲碁（19×19）。各陣にroyalの王（隅）。碁石は持ち駒として最大限保持し、空点に打つ。
+// 囲碁（19×19）。碁石を持ち駒として最大限保持し、空点に打つ。
 function setupGo(){
   NR=NC=19; PZ=0; emptyBoard();
-  board[NR-1][NC-1]={t:'goK',p:1}; board[0][0]={t:'goK',p:-1};
   const n=Math.floor(NR*NC/2);
   capYou.push(...fill('GOB',n)); capEnemy.push(...fill('GOW',n));
 }
@@ -1564,6 +1592,26 @@ const PRESETS={
 function applyPreset(key){
   const fn=PRESETS[key];
   if(fn) fn(); else makeEmptyBoard(NR,NC); // 既定は現在サイズの空盤
+}
+// プリセットの駒配置（盤グリッド）を、現在の盤・サイズ・持ち駒を壊さずに取得する
+function presetGrid(key){
+  const sv={board, NR, NC, PZ, cy:capYou, ce:capEnemy};
+  board=[]; capYou=[]; capEnemy=[];
+  applyPreset(key);
+  const g=board.map(row=>row.map(x=>x?{...x}:null));
+  board=sv.board; NR=sv.NR; NC=sv.NC; PZ=sv.PZ; capYou=sv.cy; capEnemy=sv.ce;
+  return g;
+}
+// プリセットの配置を (r0,c0) を左上として現在の盤へ重ねる（盤に入りきる分だけ）
+function stampPreset(key, r0, c0){
+  const g=presetGrid(key);
+  const rows=board.length, cols=board[0]?board[0].length:0;
+  let n=0;
+  for(let r=0;r<g.length;r++)for(let c=0;c<g[r].length;c++){
+    const tr=r0+r, tc=c0+c;
+    if(tr>=0&&tr<rows&&tc>=0&&tc<cols){ board[tr][tc]= g[r][c]?{...g[r][c]}:null; n++; }
+  }
+  return n;
 }
 // 先手＝最初に指す側。あなたが先手なら true。先後入替でトグルする。
 let youAreSente=true;
@@ -1605,7 +1653,8 @@ const RULES={
   promoOnLast:false, // 敵陣の一番奥に着いたら成れる
   promoOnCapture:false, // 敵駒を取ったら成れる（3つとも外すと成り自体が無くなる）
   drawNoMove:true,   // どこにも動けない・打てなくなったら持将棋（引き分け）。初期ON
-  drawBothEnter:false // 双方の王が敵陣に入ったら持将棋（引き分け）。初期OFF
+  drawBothEnter:false,// 双方の王が敵陣に入ったら持将棋（引き分け）。初期OFF
+  captureAll:false   // 相手の駒を全て取り切るまで戦う（王の有無に関係なく勝敗判定）。囲碁/オセロ/はさみ向け
 };
 let posCount={};     // 局面出現回数（千日手判定用）
 const SPEEDS=[
@@ -2342,6 +2391,11 @@ function nextTurn(){
   render();
   updatePlayPauseLabel();
   if(gameOver||replaying||editing)return;
+  // 取り切るまで戦う：どちらかの駒が全滅したら決着（勝ち優先）
+  if(RULES.captureAll){
+    if(sidePieces(1)===0){ endGame(-1,'capture'); return; }
+    if(sidePieces(-1)===0){ endGame(1,'capture'); return; }
+  }
   // 双方入玉で持将棋（ルールON時）
   if(RULES.drawBothEnter && royalInEnemyCamp(1) && royalInEnemyCamp(-1)){ endDraw('双方入玉'); return; }
   // 手番側が動けない・打てない → 持将棋 or 詰み
@@ -2732,9 +2786,14 @@ function squareAttackedBy(tr,tc,by){
 }
 function endGame(winner,reason){
   gameOver=true; render(); updateReplayUI();
-  const isTry = reason==='try';
-  if(winner===1)setStatus(isTry?'▲ あなたの勝ち！トライ成功（ライオンが敵陣の最奥へ到達）':'▲ あなたの勝ち！相手の王を攻め取りました','win');
-  else setStatus(isTry?'△ あなたの負け…相手のライオンがトライ成功':'△ あなたの負け…王を取られました','lose');
+  const isTry = reason==='try', isCap = reason==='capture';
+  const winMsg = isTry?'▲ あなたの勝ち！トライ成功（ライオンが敵陣の最奥へ到達）'
+               : isCap?'▲ あなたの勝ち！相手の駒を全て取り切りました'
+               : '▲ あなたの勝ち！相手の王を攻め取りました';
+  const loseMsg= isTry?'△ あなたの負け…相手のライオンがトライ成功'
+               : isCap?'△ あなたの負け…自分の駒を全て取られました'
+               : '△ あなたの負け…王を取られました';
+  setStatus(winner===1?winMsg:loseMsg, winner===1?'win':'lose');
 }
 function setStatus(t,cls){
   const s=document.getElementById('status');
@@ -2759,6 +2818,13 @@ function hasAnyLegalMove(side){
     for(const t of new Set(cap)){ if(dropTargets(board,t,side).length) return true; }
   }
   return false;
+}
+// side の駒の総数（盤上＋持ち駒）。「取り切るまで戦う」勝敗判定に使う。
+function sidePieces(side){
+  let n=0;
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===side) n++; }
+  n += (side===1?capYou:capEnemy).length;
+  return n;
 }
 // side の royal（王・玉）が敵陣（成りゾーン）に入っているか
 function royalInEnemyCamp(side){
@@ -3046,21 +3112,28 @@ function newGameWithBoard(builder){
 document.getElementById('applyPresetBtn').onclick=()=>{
   const key=document.getElementById('presetSel').value;
   newGameWithBoard(()=>applyPreset(key));
+  // 囲碁・オセロ・はさみ将棋は王を置かない代わりに「取り切るまで戦う」を自動ON
+  if(key==='go'||key==='othello'||key==='hasami') RULES.captureAll=true;
   const label = PRESET_LABELS[key] || ('空盤 '+NR+'×'+NC);
-  setStatus(label+'を準備しました。▶ 開始 で対局（編集モードで駒も置けます）');
+  const extra = (key==='go'||key==='othello'||key==='hasami') ? '（ルール「取り切るまで戦う」を自動ON）' : '';
+  setStatus(label+'を準備しました'+extra+'。▶ 開始 で対局（編集ツールで駒も置けます）');
 };
 (function wireSizeRange(){
   const rR=document.getElementById('rowRange'), cR=document.getElementById('colRange'), val=document.getElementById('sizeVal');
+  const btn=document.getElementById('applySizeBtn');
   if(!rR||!cR) return;
-  // ドラッグ中は表示だけ更新（盤の作り直しは確定時）
-  const showLive=()=>{ if(val) val.textContent=rR.value+' 行 × '+cR.value+' 列'; };
+  // 入力中は表示だけ更新（盤の作り直しは「作成」ボタンで確定）
+  const clampN=v=>Math.max(3,Math.min(40, Math.round(+v)||3));
+  const showLive=()=>{ if(val) val.textContent=clampN(rR.value)+' 行 × '+clampN(cR.value)+' 列'; };
   rR.oninput=showLive; cR.oninput=showLive;
   const rebuild=()=>{
-    newGameWithBoard(()=>makeEmptyBoard(+rR.value, +cR.value));
+    const rows=clampN(rR.value), cols=clampN(cR.value);
+    rR.value=rows; cR.value=cols;
+    newGameWithBoard(()=>makeEmptyBoard(rows, cols));
     const sel=document.getElementById('presetSel'); if(sel) sel.value='empty';
-    setStatus('空盤 '+NR+' 行 × '+NC+' 列 を作りました（編集モードで駒を配置）');
+    setStatus('空盤 '+NR+' 行 × '+NC+' 列 を作りました（編集ツールで駒を配置）');
   };
-  rR.onchange=rebuild; cR.onchange=rebuild;
+  if(btn) btn.onclick=rebuild;
 })();
 
 document.getElementById('autoYou').onclick=()=>{
@@ -3079,16 +3152,14 @@ document.getElementById('speed').onclick=()=>{
 };
 
 /* ===== 編集モード ===== */
-function refreshEditLabel(){
-  const b=document.getElementById('editMode');
-  b.textContent='編集モード：'+(editing?'ON':'OFF');
-  b.classList.toggle('on',editing);
-}
-document.getElementById('editMode').onclick=()=>{
+function refreshEditLabel(){ updateEditBar(); } // 編集状態は「編集ツール」アコーディオンが表す
+// 編集モードの ON/OFF（「編集ツール」アコーディオンの開閉に連動）
+function setEditing(on){
+  on=!!on;
+  if(on===editing){ updateEditBar(); return; }
   if(replaying) exitReplay();
-  editing=!editing; refreshEditLabel(); sel=null; multiSel=[]; updateMultiBar(); stopAutoLoop();
-  updateEditBar();
-  if(editing){ render(); setStatus('編集中：駒をタップ（説明／変更／複数選択）'); }
+  editing=on; sel=null; multiSel=[]; updateMultiBar(); stopAutoLoop(); updateEditBar();
+  if(editing){ render(); setStatus('編集中：盤のマスをタップ（説明／変更／プリセット配置）'); }
   else {
     // 編集後の配置をカスタム初期配置として保存
     customStart = {
@@ -3098,6 +3169,14 @@ document.getElementById('editMode').onclick=()=>{
     rememberSetup(); // 「初期配置に戻す」でこの編集配置へ戻れるよう記憶
     setStatus('編集を終了しました（この配置を記憶しました）'); nextTurn();
   }
+}
+// アコーディオン開閉の配線
+document.getElementById('accBoardHead').onclick=()=>{
+  document.getElementById('accBoard').classList.toggle('open');
+};
+document.getElementById('accEditHead').onclick=()=>{
+  const acc=document.getElementById('accEdit');
+  setEditing(!acc.classList.contains('open'));
 };
 let customStart=null; // 編集で作った任意配置
 
@@ -3239,6 +3318,15 @@ document.getElementById('emChange').onclick=()=>{
 };
 document.getElementById('emSelectAdd').onclick=()=>{
   if(menuCell){ toggleMultiSel(menuCell.r,menuCell.c); } closeEditMenu();
+};
+document.getElementById('emStamp').onclick=()=>{
+  if(!menuCell){ closeEditMenu(); return; }
+  const key=document.getElementById('emStampSel').value;
+  const {r,c}=menuCell;
+  stampPreset(key, r, c);
+  closeEditMenu(); render();
+  const nm=(typeof PRESET_LABELS!=='undefined'&&PRESET_LABELS[key])?PRESET_LABELS[key]:key;
+  setStatus(nm+'の配置を ('+(r+1)+'行,'+(c+1)+'列) を左上に配置しました（入りきる分のみ）');
 };
 
 // 複数選択
@@ -3413,8 +3501,8 @@ document.getElementById('multiClear').onclick=()=>{ clearMultiSel(); setStatus('
 
 // 編集ツールバー
 function updateEditBar(){
-  const bar=document.getElementById('editBar');
-  if(bar) bar.style.display = editing? 'block':'none';
+  const acc=document.getElementById('accEdit');
+  if(acc) acc.classList.toggle('open', editing); // 編集状態とアコーディオンの開閉を同期
 }
 // 自陣（あなたの駒）の配置を、上下対称に敵側へコピー
 document.getElementById('copyToEnemy').onclick=()=>{
@@ -3516,6 +3604,7 @@ function openRuleModal(){
   document.getElementById('rPromoZone').checked=RULES.promoOnZone;
   document.getElementById('rPromoLast').checked=RULES.promoOnLast;
   document.getElementById('rPromoCap').checked=RULES.promoOnCapture;
+  document.getElementById('rCaptureAll').checked=RULES.captureAll;
   document.getElementById('rDrawNoMove').checked=RULES.drawNoMove;
   document.getElementById('rDrawBothEnter').checked=RULES.drawBothEnter;
   document.getElementById('ruleModal').classList.add('show');
@@ -3534,6 +3623,7 @@ document.getElementById('rRandomPromote').onchange=e=>{ RULES.randomPromote=e.ta
 document.getElementById('rPromoZone').onchange=e=>{ RULES.promoOnZone=e.target.checked; };
 document.getElementById('rPromoLast').onchange=e=>{ RULES.promoOnLast=e.target.checked; };
 document.getElementById('rPromoCap').onchange=e=>{ RULES.promoOnCapture=e.target.checked; };
+document.getElementById('rCaptureAll').onchange=e=>{ RULES.captureAll=e.target.checked; };
 document.getElementById('rDrawNoMove').onchange=e=>{ RULES.drawNoMove=e.target.checked; };
 document.getElementById('rDrawBothEnter').onchange=e=>{ RULES.drawBothEnter=e.target.checked; };
 // 置く側トグル
