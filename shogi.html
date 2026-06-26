@@ -315,7 +315,7 @@
   .board-setup .bs-row label{font-size:.78rem;color:#b3a8d8;min-width:2em;}
   .board-setup select{flex:1;min-width:8em;font-size:.82rem;padding:6px 8px;border-radius:8px;
     background:#2a2142;color:#ece3ff;border:1px solid rgba(139,107,255,.4);}
-  .board-setup .bs-num{width:4em;font-size:.92rem;padding:6px;border-radius:8px;text-align:center;
+  .board-setup .bs-num{flex:none;width:4.5em;min-width:0;font-size:.9rem;padding:6px;border-radius:8px;text-align:center;
     background:#2a2142;color:#ece3ff;border:1px solid rgba(139,107,255,.4);}
   .board-setup .edit-bar-row{display:flex;gap:7px;flex-wrap:wrap;margin:4px 0;}
   .board-setup .edit-bar-row button,.board-setup .bs-row button{font-size:.78rem;padding:7px 10px;}
@@ -469,9 +469,9 @@
     </div>
     <div class="bs-row">
       <label for="rowRange">行</label>
-      <input type="number" id="rowRange" class="bs-num" min="3" max="40" step="1" value="9">
+      <select id="rowRange" class="bs-num"></select>
       <label for="colRange">列</label>
-      <input type="number" id="colRange" class="bs-num" min="3" max="40" step="1" value="9">
+      <select id="colRange" class="bs-num"></select>
       <button id="applySizeBtn">作成</button>
     </div>
     <div class="bs-row"><span id="sizeVal" class="bs-size">9 行 × 9 列</span></div>
@@ -3133,10 +3133,16 @@ document.getElementById('applyPresetBtn').onclick=()=>{
   const rR=document.getElementById('rowRange'), cR=document.getElementById('colRange'), val=document.getElementById('sizeVal');
   const btn=document.getElementById('applySizeBtn');
   if(!rR||!cR) return;
-  // 入力中は表示だけ更新（盤の作り直しは「作成」ボタンで確定）
+  // 3〜40 の選択肢をプルダウンに用意
+  for(let i=3;i<=40;i++){
+    const oa=document.createElement('option'); oa.value=i; oa.textContent=i; rR.appendChild(oa);
+    const ob=document.createElement('option'); ob.value=i; ob.textContent=i; cR.appendChild(ob);
+  }
+  rR.value=NR; cR.value=NC;
+  // 選択中は表示だけ更新（盤の作り直しは「作成」ボタンで確定）
   const clampN=v=>Math.max(3,Math.min(40, Math.round(+v)||3));
   const showLive=()=>{ if(val) val.textContent=clampN(rR.value)+' 行 × '+clampN(cR.value)+' 列'; };
-  rR.oninput=showLive; cR.oninput=showLive;
+  rR.onchange=showLive; cR.onchange=showLive;
   const rebuild=()=>{
     const rows=clampN(rR.value), cols=clampN(cR.value);
     rR.value=rows; cR.value=cols;
