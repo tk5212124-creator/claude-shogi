@@ -1573,6 +1573,7 @@ function setupOthello(){
 // はさみ将棋（9×9）。駒を持ち駒として最大限保持し、打って動かす。
 function setupHasami(){
   NR=NC=9; PZ=0; emptyBoard();
+  for(let c=0;c<NC;c++){ board[0][c]={t:'HASA',p:-1}; board[NR-1][c]={t:'HASA',p:1}; }
   const n=Math.floor(NR*NC/2);
   capYou.push(...fill('HASA',n)); capEnemy.push(...fill('HASA',n));
 }
