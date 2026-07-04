@@ -1281,11 +1281,25 @@ function canPromoteNow(t){
   return RULES.repromote;
 }
 // 成り条件（3トグルのいずれかを満たすか）。全てOFFなら成り自体が起きない。
-function promoTrigger(fr,tr,side,captured){
-  if(RULES.promoOnZone && (inPromoZone(fr,side)||inPromoZone(tr,side))) return true;
-  if(RULES.promoOnLast && tr===(side===1?0:NR-1)) return true;
-  if(RULES.promoOnCapture && captured) return true;
-  return false;
+// 満たしている成り条件の数（0〜3）。再成りONのとき、この数だけ連続して成る。
+function promoCount(fr,tr,side,captured){
+  let n=0;
+  if(RULES.promoOnZone && (inPromoZone(fr,side)||inPromoZone(tr,side))) n++;
+  if(RULES.promoOnLast && tr===(side===1?0:NR-1)) n++;
+  if(RULES.promoOnCapture && captured) n++;
+  return n;
+}
+function promoTrigger(fr,tr,side,captured){ return promoCount(fr,tr,side,captured)>0; }
+// 現在コード cur から levels 段だけ成った最終コードを返す（連鎖成り／無ければランダム成り）。
+// 1段でも成れなければ元のまま。
+function promoteChain(cur, levels){
+  for(let i=0;i<levels;i++){
+    if(!canPromoteNow(cur)) break;
+    const nx=resolvePromoCode(cur);
+    if(!nx || nx===cur) break;
+    cur=nx;
+  }
+  return cur;
 }
 // この着手で成れるか（駒が成れる かつ いずれかの成り条件を満たす）
 function canPromoteMove(t,fr,tr,side,captured){
@@ -2733,11 +2747,21 @@ function applyMoveSilent(side,m,silent){
     const tg=igui? null : board[m.tr][m.tc]; // 居喰いは移動先=自駒なので取り対象外
     // チェスポーン昇格判定
     const cpawnPromo = pc.t==='cP' && (m.tr===(side===1?0:NR-1));
+    const captured0 = !!(tg&&tg.p!==side)||!!(m.caps&&m.caps.length);
     const promo0 = (cpawnPromo||igui) ? false : (m.promo!==undefined ? m.promo
-      : canPromoteMove(pc.t,m.fr,m.tr,side, !!(tg&&tg.p!==side)||!!(m.caps&&m.caps.length)));
+      : canPromoteMove(pc.t,m.fr,m.tr,side, captured0));
     // 成る場合の新コード（連鎖成り・ランダム成りを解決）。乱数なので棋譜に promoTo を記録。
+    // 再成りONのときは、満たした成り条件の数だけ連続して成る（2条件→2段、3条件→3段）。
     const willPromo = !cpawnPromo && promo0 && canPromoteNow(pc.t);
-    const promoNew = willPromo ? (m.promoTo || resolvePromoCode(pc.t)) : null;
+    let promoNew = null;
+    if(willPromo){
+      if(m.promoTo){ promoNew=m.promoTo; }            // 棋譜再現（確定値）
+      else {
+        const levels = RULES.repromote ? Math.max(1, promoCount(m.fr,m.tr,side,captured0)) : 1;
+        const fin = promoteChain(pc.t, levels);
+        promoNew = (fin!==pc.t) ? fin : null;
+      }
+    }
     recordKifu({side,from:[m.fr,m.fc],to:[m.tr,m.tc],code:pc.t,promo:!!promo0,promoTo:cpawnPromo?'cQ':(promoNew||undefined),cap:tg?tg.t:null,caps:m.caps||undefined});
     let tookRoyal = tg && isRoyal(tg.t);
     if(tg && RULES.drops){ cap.push(capturedCode(tg)); }
