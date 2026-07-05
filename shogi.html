@@ -688,8 +688,8 @@ const TP={
   "CT":{n:"Fowl Cadet",k:"禽吏",pr:"CO",v:560,fl:[],m:[[-1, -1, 2], [-1, 0, 2], [-1, 1, 2], [0, -1, 2], [0, 1, 2], [1, -1, 2], [1, 1, 2]]},
   "D":{n:"Dog",k:"犬",pr:"+MUG",v:120,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1]]},
   "DE":{n:"Drunken Elephant",k:"醉象",pr:"CP",v:200,fl:[],m:[[-1, -1, 1], [-1, 0, 1], [-1, 1, 1], [0, -1, 1], [0, 1, 1]]},
-  "DH":{n:"Dragon Horse",k:"竜馬",pr:"HF",v:720,fl:[],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [-1, 0, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
-  "DK":{n:"Dragon King",k:"竜王",pr:"EL",v:720,fl:[],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [1, -1, 1], [1, 1, 1]]},
+  "DH":{n:"Dragon Horse",k:"竜馬",pr:"HF",v:720,fl:["promoted"],m:[[-1, -1, "F"], [-1, 1, "F"], [1, -1, "F"], [1, 1, "F"], [-1, 0, 1], [0, -1, 1], [0, 1, 1], [1, 0, 1]]},
+  "DK":{n:"Dragon King",k:"竜王",pr:"EL",v:720,fl:["promoted"],m:[[-1, 0, "F"], [0, -1, "F"], [0, 1, "F"], [1, 0, "F"], [-1, -1, 1], [-1, 1, 1], [1, -1, 1], [1, 1, 1]]},
   "DL":{n:"Howling Dog Left",k:"吼犬左",pr:"+LDG",v:180,fl:[],m:[[-1, 0, "F"], [1, 0, 1]]},
   "DM":{n:"Fire Demon",k:"火鬼",pr:"+FFR",v:440,fl:[],m:[[0, -1, "F"], [0, 1, "F"], [-1, 0, 2], [1, 0, 2]]},
   "DO":{n:"Donkey",k:"驢馬",pr:"CD",v:320,fl:[],m:[[-1, 0, 2], [0, -1, 2], [0, 1, 2], [1, 0, 2]]},
@@ -1271,15 +1271,18 @@ function randomPromoCode(royal){
 function resolvePromoCode(t){
   if(TP[t]&&TP[t].pr) return TP[t].pr;
   // 成り先が無い：ランダム成りON、または成駒の再成り(repromote)時はランダムな駒へ
-  if(RULES.randomPromote || (isPromoted(t)&&RULES.repromote)) return randomPromoCode(isRoyal(t));
+  if(RULES.randomPromote || (isPromotedPiece(t)&&RULES.repromote)) return randomPromoCode(isRoyal(t));
   return t;
 }
 // 駒が成れるか（成り先あり／成駒の再成り／成り先なしのランダム成り）。royalも対象。
-// 竜王・竜馬は飛車・角の成り＝実質「成駒」。通常は終端、再成りONのときのみ更に成る扱いにする。
-const DRAGON_PROMOTED = new Set(['DK','DH']);
+// 「成」フラグ（fl:['promoted']）：それ自体が成駒である駒（竜王/竜馬など、+接頭やPROM_CODESに
+// 載らないもの）に付ける。追加の成りは再成りルールON時のみ許可する。
+function hasPromotedFlag(t){ return !!(TP[t]&&TP[t].fl&&TP[t].fl.includes('promoted')); }
+// 追加の成りの判定で「既に成駒」とみなす駒（+接頭／PROM_CODES／「成」フラグ）
+function isPromotedPiece(t){ return isPromoted(t) || hasPromotedFlag(t); }
 function canPromoteNow(t){
-  if(!isPromoted(t) && !DRAGON_PROMOTED.has(t)) return !!(TP[t]&&TP[t].pr) || RULES.randomPromote;
-  // 既に成駒（竜王/竜馬を含む）：再成りONなら、成り条件を満たすたびにもう一度成れる（成駒の成駒）。
+  if(!isPromotedPiece(t)) return !!(TP[t]&&TP[t].pr) || RULES.randomPromote;
+  // 既に成駒：再成りONなら、成り条件を満たすたびにもう一度成れる（成駒の成駒）。
   // 連鎖成り(pr)があればそれ、無ければランダム成りで別の駒へ変化する。
   return RULES.repromote;
 }
