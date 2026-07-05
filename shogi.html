@@ -3190,13 +3190,13 @@ document.getElementById('swapSides').onclick=()=>{
   const youAre = youAreSente ? 'あなたが先手' : 'あなたは後手（相手が先手）';
   setStatus('先後を入れ替えました（'+youAre+'）。▶ 開始 で対局（手番側が手動なら盤をタップ）');
 };
-// 初期配置に戻す：記憶した配置（編集した配置 or 適用したプリセット）へ戻す
+// 初期配置に戻す：対局の最初の一打目を打つ直前の盤面（編集した配置も含む）へ戻す
 document.getElementById('resetBoard').onclick=()=>{
   if(replaying) exitReplay();
   paused=true; if(typeof redoStack!=='undefined') redoStack.length=0;
   restoreSetup();
   updatePlayPauseLabel();
-  setStatus('記憶した初期配置に戻しました。▶ 開始 で対局開始（あなたが手動なら盤をタップ）');
+  setStatus('初期配置（最初の一手を打つ前の盤面）に戻しました。▶ 開始 で対局開始（あなたが手動なら盤をタップ）');
 };
 
 // ===== 盤サイズ・プリセットUIの配線 =====
@@ -3224,14 +3224,16 @@ function rememberSetup(){
     NR, NC, PZ, youAreSente
   };
 }
-// 記憶した初期配置（プリセット適用時・編集終了時に記憶）へ戻す
+// 「初期配置に戻す」：対局の最初の一打目を打つ直前の盤面（＝編集した配置も含む）へ戻す。
+// まだ一打も打っていなければ、現在の盤がそのまま初期配置（盤はいじらず進行だけリセット）。
 function restoreSetup(){
-  if(!rememberedSetup){ newGame(false); return; }
   exitReplay(); stopAutoLoop(); editing=false; multiSel=[];
-  const s=rememberedSetup;
-  NR=s.NR; NC=s.NC; PZ=s.PZ; youAreSente=s.youAreSente;
-  board=s.board.map(row=>row.map(x=>x?{...x}:null));
-  capYou=[...s.capYou]; capEnemy=[...s.capEnemy];
+  if(gameStartSnap){
+    board=gameStartSnap.board.map(row=>row.map(x=>x?{...x}:null));
+    NR=board.length; NC=board[0]?board[0].length:NR;
+    capYou=[...gameStartSnap.capYou]; capEnemy=[...gameStartSnap.capEnemy];
+    // PZ・youAreSente は対局開始から不変なので現状維持
+  }
   sel=null; history=[]; gameOver=false; pendingPromo=null; kifu=[]; gameStartSnap=null; posCount={};
   turn = youAreSente ? 1 : -1;
   if(typeof redoStack!=='undefined') redoStack.length=0;
