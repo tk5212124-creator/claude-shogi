@@ -3312,13 +3312,14 @@ function setEditing(on){
   editing=on; sel=null; multiSel=[]; updateMultiBar(); stopAutoLoop(); updateEditBar();
   if(editing){ render(); setStatus('編集中：盤のマスをタップ（説明／変更／プリセット配置）'); }
   else {
-    // 編集後の配置をカスタム初期配置として保存
+    // 編集後の配置は「記憶した配置に戻す」用にだけ保存する。
+    // ※「初期配置に戻す」の対象（rememberedSetup）は、編集では上書きしない
+    //   （＝プリセット/サイズ適用時の＝対局開始時の配置を保つ）。
     customStart = {
       board: board.map(row=>row.map(x=>x?{...x}:null)),
       capYou: [...capYou], capEnemy: [...capEnemy]
     };
-    rememberSetup(); // 「初期配置に戻す」でこの編集配置へ戻れるよう記憶
-    setStatus('編集を終了しました（この配置を記憶しました）'); nextTurn();
+    setStatus('編集を終了しました（「記憶した配置に戻す」で戻せます）'); nextTurn();
   }
 }
 // アコーディオン開閉の配線
