@@ -25,6 +25,7 @@
     --glow:#8b6bff;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
+  input,textarea{-webkit-user-select:text;user-select:text;} /* 入力欄だけは選択可 */
   body{
     background:
       radial-gradient(ellipse 80% 50% at 50% -5%, rgba(139,107,255,.28), transparent 60%),
@@ -34,6 +35,9 @@
     color:#ece3ff;
     font-family:'Zen Maru Gothic',sans-serif;
     min-height:100vh;
+    /* 長押し・ドラッグ時に文字選択やiOSのコールアウトが出ないようにする */
+    -webkit-user-select:none; user-select:none;
+    -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent;
     display:flex;flex-direction:column;align-items:center;
     padding:18px 10px 40px;
     -webkit-tap-highlight-color:transparent;
@@ -2146,10 +2150,12 @@ function renderCap(id,arr,p){
 }
 
 /* ===== 盤のポインタ操作（タップ／長押しで編集モード／編集中はドラッグ移動） ===== */
-// 編集モードでの自由移動：(fr,fc)→(tr,tc) に駒を移す（移動先は上書き）。
+// 編集モードでの移動：(fr,fc)→(tr,tc)。移動先が空のときだけ移す。
+// 既に駒がある場合は上書きせず、元の場所に戻す（移動しない）。
 function moveEditPiece(fr,fc,tr,tc){
-  const pc=board[fr]&&board[fr][fc]; if(!pc) return;
-  if(fr===tr&&fc===tc) return;
+  const pc=board[fr]&&board[fr][fc]; if(!pc){ render(); return; }
+  if(fr===tr&&fc===tc){ render(); return; }
+  if(board[tr][tc]){ render(); setStatus('そのマスには駒があるため移動できません（元に戻しました）','think'); return; }
   board[tr][tc]={...pc};
   board[fr][fc]=null;
   sel=null; render();
@@ -2180,10 +2186,9 @@ function moveEditPiece(fr,fc,tr,tc){
     const cell=cellOf(e.target); if(!cell) return;
     try{ bd.setPointerCapture(e.pointerId); }catch(_){}
     g={r:cell.r,c:cell.c,x0:e.clientX,y0:e.clientY,moved:false,dragging:false,longPress:false};
-    if(!editing){
-      lpTimer=setTimeout(()=>{ if(g&&!g.moved){ g.longPress=true; bd.classList.add('lp-armed');
-        if(navigator.vibrate) try{navigator.vibrate(15);}catch(_){} } }, LP_MS);
-    }
+    // 長押し検出は両モードで有効：非編集→編集モードへ、編集→駒変更メニュー
+    lpTimer=setTimeout(()=>{ if(g&&!g.moved&&!g.dragging){ g.longPress=true; bd.classList.add('lp-armed');
+      if(navigator.vibrate){ try{navigator.vibrate(15);}catch(_){} } } }, LP_MS);
   });
   bd.addEventListener('pointermove', e=>{
     if(!g) return;
@@ -2204,16 +2209,27 @@ function moveEditPiece(fr,fc,tr,tc){
   bd.addEventListener('pointerup', e=>{
     clearLP(); bd.classList.remove('lp-armed');
     if(!g) return; const gg=g; g=null;
+    // ドラッグ（編集中のみ発生）→ 移動
     if(gg.dragging){
       const t=cellOf(document.elementFromPoint(e.clientX,e.clientY)); endGhost();
-      if(t) moveEditPiece(gg.r,gg.c,t.r,t.c);
+      if(t) moveEditPiece(gg.r,gg.c,t.r,t.c); else render();
       return;
     }
-    if(gg.longPress && !gg.moved && !editing){
-      setEditing(true); openEditMenu(gg.r, gg.c); // 長押し→編集モードに入り、そのマスの操作メニューを表示
+    // 長押し（動かさず）
+    if(gg.longPress && !gg.moved){
+      if(!editing){ setEditing(true); setStatus('編集モードに入りました（駒を長押しで変更、ドラッグで移動、タップで解除）','think'); }
+      else { openEditMenu(gg.r, gg.c); }   // 編集中の長押し→駒変更メニュー
       return;
     }
-    if(!gg.moved) onCell(gg.r, gg.c);  // 通常のタップ
+    // 軽いタップ（動かさず）
+    if(!gg.moved){
+      if(editing){
+        if(multiSel.length>0) toggleMultiSel(gg.r,gg.c);  // 複数選択中はトグルを優先
+        else setEditing(false);                            // 編集中のタップ→編集モード解除
+      } else {
+        onCell(gg.r, gg.c);                                // 通常のタップ→着手
+      }
+    }
   });
   bd.addEventListener('pointercancel', ()=>{ clearLP(); endGhost(); g=null; bd.classList.remove('lp-armed'); });
 })();
