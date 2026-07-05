@@ -127,6 +127,14 @@
   @keyframes pulse{0%,100%{transform:scale(1);opacity:.85;}50%{transform:scale(1.25);opacity:1;}}
   .cell.sel{background:radial-gradient(circle,rgba(98,209,160,.55),rgba(98,209,160,.2));}
   .cell.last{background:rgba(224,86,63,.18);}
+  /* 編集モードのドラッグ移動 */
+  .cell.drag-src{opacity:.3;}
+  .cell.drag-over{outline:2px solid var(--glow);outline-offset:-2px;background:rgba(139,107,255,.22);}
+  .drag-ghost{position:fixed;z-index:9999;pointer-events:none;transform:translate(-50%,-50%);
+    opacity:.92;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5));width:40px;height:44px;}
+  .drag-ghost .koma{width:100%;height:100%;}
+  /* 長押しで編集モードに入る予備動作のフィードバック */
+  .board.lp-armed{box-shadow:0 0 0 3px var(--glow), inset 0 0 24px rgba(106,74,30,.4);}
   .cell.check{
     background:radial-gradient(circle,rgba(224,86,63,.6),rgba(224,86,63,.25));
     animation:checkpulse 1s ease-in-out infinite;
@@ -2056,6 +2064,7 @@ function render(){
   }
   for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
     const cell=document.createElement('div'); cell.className='cell';
+    cell.dataset.r=r; cell.dataset.c=c;   // ポインタ操作（タップ/長押し/ドラッグ）で参照
     const pc=board[r][c];
     if(movable.has(r+'_'+c)){ cell.classList.add('movable'); if(pc)cell.classList.add('has-koma'); }
     if(checkCells.has(r+'_'+c)) cell.classList.add('check');
@@ -2074,7 +2083,6 @@ function render(){
         const disc=document.createElement('div');
         disc.className='othello-disc '+(pc.p===1?'black':'white');
         cell.appendChild(disc);
-        cell.onclick=()=>onCell(r,c);
         bd.appendChild(cell);
         continue;
       }
@@ -2083,7 +2091,6 @@ function render(){
         const disc=document.createElement('div');
         disc.className='go-disc '+(pc.t==='GOB'?'black':'white');
         cell.appendChild(disc);
-        cell.onclick=()=>onCell(r,c);
         bd.appendChild(cell);
         continue;
       }
@@ -2095,7 +2102,6 @@ function render(){
       if(pc.o){ const mk=document.createElement('div'); mk.className='orig-mark'; mk.textContent='成'; k.appendChild(mk); }
       cell.appendChild(k);
     }
-    cell.onclick=()=>onCell(r,c);
     bd.appendChild(cell);
   }
   renderCap('capYou',capYou,1);
@@ -2139,6 +2145,78 @@ function renderCap(id,arr,p){
   }
 }
 
+/* ===== 盤のポインタ操作（タップ／長押しで編集モード／編集中はドラッグ移動） ===== */
+// 編集モードでの自由移動：(fr,fc)→(tr,tc) に駒を移す（移動先は上書き）。
+function moveEditPiece(fr,fc,tr,tc){
+  const pc=board[fr]&&board[fr][fc]; if(!pc) return;
+  if(fr===tr&&fc===tc) return;
+  board[tr][tc]={...pc};
+  board[fr][fc]=null;
+  sel=null; render();
+  setStatus('駒を移動しました（編集モード）');
+}
+(function setupBoardGestures(){
+  const bd=document.getElementById('board'); if(!bd) return;
+  bd.style.touchAction='none';   // 盤上ではブラウザのスクロール/ズームを抑止しジェスチャを取得
+  const LP_MS=450, MOVE_TH=8;
+  let g=null, lpTimer=null, ghost=null;
+  const cellOf=(el)=>{ const c=el&&el.closest?el.closest('.cell'):null;
+    return (c&&c.dataset&&c.dataset.r!==undefined)?{r:+c.dataset.r,c:+c.dataset.c,el:c}:null; };
+  const clearLP=()=>{ if(lpTimer){clearTimeout(lpTimer); lpTimer=null;} };
+  function makeGhost(pc, srcEl, x, y){
+    ghost=document.createElement('div'); ghost.className='drag-ghost';
+    const rect=srcEl?srcEl.getBoundingClientRect():null;
+    if(rect){ ghost.style.width=rect.width+'px'; ghost.style.height=rect.height+'px'; }
+    const k=document.createElement('div'); k.className='koma'+(pc.p===-1?' enemy':'');
+    if(isGo(pc.t)){ const d=document.createElement('div'); d.className='go-disc '+(pc.t==='GOB'?'black':'white'); k.appendChild(d); }
+    else if(pc.t==='OTH'){ const d=document.createElement('div'); d.className='othello-disc '+(pc.p===1?'black':'white'); k.appendChild(d); }
+    else fillKoma(k, pc.t);
+    ghost.appendChild(k); document.body.appendChild(ghost); moveGhost(x,y);
+  }
+  const moveGhost=(x,y)=>{ if(ghost){ ghost.style.left=x+'px'; ghost.style.top=y+'px'; } };
+  function endGhost(){ if(ghost){ghost.remove(); ghost=null;}
+    bd.querySelectorAll('.cell.drag-src,.cell.drag-over').forEach(c=>c.classList.remove('drag-src','drag-over')); }
+  bd.addEventListener('pointerdown', e=>{
+    const cell=cellOf(e.target); if(!cell) return;
+    try{ bd.setPointerCapture(e.pointerId); }catch(_){}
+    g={r:cell.r,c:cell.c,x0:e.clientX,y0:e.clientY,moved:false,dragging:false,longPress:false};
+    if(!editing){
+      lpTimer=setTimeout(()=>{ if(g&&!g.moved){ g.longPress=true; bd.classList.add('lp-armed');
+        if(navigator.vibrate) try{navigator.vibrate(15);}catch(_){} } }, LP_MS);
+    }
+  });
+  bd.addEventListener('pointermove', e=>{
+    if(!g) return;
+    if(!g.moved && Math.hypot(e.clientX-g.x0, e.clientY-g.y0)>MOVE_TH){ g.moved=true; clearLP(); bd.classList.remove('lp-armed'); }
+    if(editing && g.moved && !g.dragging){
+      const pc=board[g.r]&&board[g.r][g.c];
+      if(pc){ g.dragging=true; const src=bd.querySelector('.cell[data-r=\"'+g.r+'\"][data-c=\"'+g.c+'\"]');
+        if(src)src.classList.add('drag-src'); makeGhost(pc, src, e.clientX, e.clientY); }
+      else { g=null; return; }
+    }
+    if(g.dragging){
+      moveGhost(e.clientX,e.clientY);
+      bd.querySelectorAll('.cell.drag-over').forEach(c=>c.classList.remove('drag-over'));
+      const t=cellOf(document.elementFromPoint(e.clientX,e.clientY)); if(t&&t.el) t.el.classList.add('drag-over');
+      e.preventDefault();
+    }
+  });
+  bd.addEventListener('pointerup', e=>{
+    clearLP(); bd.classList.remove('lp-armed');
+    if(!g) return; const gg=g; g=null;
+    if(gg.dragging){
+      const t=cellOf(document.elementFromPoint(e.clientX,e.clientY)); endGhost();
+      if(t) moveEditPiece(gg.r,gg.c,t.r,t.c);
+      return;
+    }
+    if(gg.longPress && !gg.moved && !editing){
+      setEditing(true); openEditMenu(gg.r, gg.c); // 長押し→編集モードに入り、そのマスの操作メニューを表示
+      return;
+    }
+    if(!gg.moved) onCell(gg.r, gg.c);  // 通常のタップ
+  });
+  bd.addEventListener('pointercancel', ()=>{ clearLP(); endGhost(); g=null; bd.classList.remove('lp-armed'); });
+})();
 /* ===== クリック処理 ===== */
 function onCell(r,c){
   if(gameOver||pendingPromo)return;
