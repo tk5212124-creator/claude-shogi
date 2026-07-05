@@ -1090,7 +1090,8 @@ TP['zHiyoko']={n:'Chick(Doubutsu)',k:'ひよこ',pr:'zNiwa',v:100,fl:[],m:[[-1,0
 TP['zNiwa']={n:'Hen(Doubutsu)',k:'にわとり',pr:null,v:320,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[0,-1,1],[0,1,1],[1,0,1]]};
 const DOUBUTSU_LIST=['zLion','zKirin','zZou','zHiyoko','zNiwa'];
 // 本将棋の成駒（成り先にしかない駒）も一覧/検索に出す
-const HON_PROMO_LIST=['+P_hon','+L_hon','+N_hon','+S_hon','+B_hon','+R_hon'];
+// 飛車・角は竜王(DK)/竜馬(DH)に成るため、略記の龍/馬(+R_hon/+B_hon)はピッカーに出さない
+const HON_PROMO_LIST=['+P_hon','+L_hon','+N_hon','+S_hon'];
 
 // 本将棋の成駒。と・成香・成桂・成銀は金の動き、馬・龍。
 (function addHonProm(){
@@ -1116,12 +1117,12 @@ const HON_PROMO_LIST=['+P_hon','+L_hon','+N_hon','+S_hon','+B_hon','+R_hon'];
   TP['hKw']={n:'King(Ou)',k:'王将',pr:null,v:99999,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[0,-1,1],[0,1,1],[1,-1,1],[1,0,1],[1,1,1]]};
   // 玉将(摩訶)：動きは本将棋の玉将と同じ。摩訶大大将棋では玉将の成駒が自在天王なので成り先をJTに。
   TP['mK']={n:'King(Maka)',k:'玉将',pr:'JT',v:99999,fl:[],m:[[-1,-1,1],[-1,0,1],[-1,1,1],[0,-1,1],[0,1,1],[1,-1,1],[1,0,1],[1,1,1]]};
-  TP['hB']={n:'Bishop',k:'角行',pr:'+B_hon',v:560,fl:[],m:[[-1,-1,'F'],[-1,1,'F'],[1,-1,'F'],[1,1,'F']]};
-  TP['hR']={n:'Rook',k:'飛車',pr:'+R_hon',v:560,fl:[],m:[[-1,0,'F'],[0,-1,'F'],[0,1,'F'],[1,0,'F']]};
-  // 飛車・角行は本将棋と大局で動き・成り後が同一の駒。大局コードR/Bの成り先も本将棋と同じ龍/馬に統一し、
-  // 「同名なのに成ると別物」になる不一致を解消（編集ピッカーでは大局R/Bを隠し、本将棋hR/hBに一本化）。
-  if(TP['R']) TP['R'].pr='+R_hon';
-  if(TP['B']) TP['B'].pr='+B_hon';
+  TP['hB']={n:'Bishop',k:'角行',pr:'DH',v:560,fl:[],m:[[-1,-1,'F'],[-1,1,'F'],[1,-1,'F'],[1,1,'F']]};
+  TP['hR']={n:'Rook',k:'飛車',pr:'DK',v:560,fl:[],m:[[-1,0,'F'],[0,-1,'F'],[0,1,'F'],[1,0,'F']]};
+  // 飛車・角行は本将棋も大局も、成ると動きが同一の竜王(DK)/竜馬(DH)。よって成り先を
+  // 大局将棋の竜王/竜馬に一本化する（略記の龍/馬=+R_hon/+B_hon は使わない）。
+  if(TP['R']) TP['R'].pr='DK';
+  if(TP['B']) TP['B'].pr='DH';
 })();
 // 本将棋の基本駒コード一覧
 const HON_BASE=['hP','hL','hN','hS','hG','hK','hB','hR'];
@@ -1274,9 +1275,11 @@ function resolvePromoCode(t){
   return t;
 }
 // 駒が成れるか（成り先あり／成駒の再成り／成り先なしのランダム成り）。royalも対象。
+// 竜王・竜馬は飛車・角の成り＝実質「成駒」。通常は終端、再成りONのときのみ更に成る扱いにする。
+const DRAGON_PROMOTED = new Set(['DK','DH']);
 function canPromoteNow(t){
-  if(!isPromoted(t)) return !!(TP[t]&&TP[t].pr) || RULES.randomPromote;
-  // 既に成駒：再成りONなら、成り条件を満たすたびにもう一度成れる（成駒の成駒）。
+  if(!isPromoted(t) && !DRAGON_PROMOTED.has(t)) return !!(TP[t]&&TP[t].pr) || RULES.randomPromote;
+  // 既に成駒（竜王/竜馬を含む）：再成りONなら、成り条件を満たすたびにもう一度成れる（成駒の成駒）。
   // 連鎖成り(pr)があればそれ、無ければランダム成りで別の駒へ変化する。
   return RULES.repromote;
 }
