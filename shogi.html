@@ -424,6 +424,87 @@
   .pv-legend{font-size:.66rem;color:#9c8a70;margin-top:4px;letter-spacing:.04em;}
   .pv-actions{display:flex;flex-direction:column;gap:8px;}
   .pv-actions button{width:100%;}
+
+  /* ===== ソシャゲRPG風の演出・色味 ===== */
+  /* 背景に、ゆっくり動く光のシマー */
+  body::before{content:"";position:fixed;inset:-20%;z-index:-1;pointer-events:none;
+    background:
+      radial-gradient(closest-side at 20% 25%, rgba(139,107,255,.22), transparent 70%),
+      radial-gradient(closest-side at 82% 18%, rgba(98,209,160,.16), transparent 70%),
+      radial-gradient(closest-side at 50% 92%, rgba(224,86,63,.16), transparent 70%);
+    filter:blur(8px); animation:bgDrift 18s ease-in-out infinite alternate;}
+  @keyframes bgDrift{0%{transform:translate(-3%, -2%) scale(1.02);} 100%{transform:translate(3%, 2%) scale(1.08);}}
+  /* ヘッダーの金文字を淡く光らせる */
+  h1{text-shadow:0 0 14px rgba(245,207,107,.5), 0 2px 6px rgba(0,0,0,.5); animation:goldPulse 3.4s ease-in-out infinite;}
+  @keyframes goldPulse{0%,100%{filter:brightness(1);} 50%{filter:brightness(1.18);}}
+  /* 盤枠を金色に脈動させる */
+  .board-wrap{animation:frameGlow 4s ease-in-out infinite;}
+  @keyframes frameGlow{0%,100%{box-shadow:0 0 0 2px rgba(245,207,107,.35), 0 14px 40px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.08);}
+    50%{box-shadow:0 0 0 2px rgba(245,207,107,.7), 0 0 22px rgba(245,207,107,.35), 0 14px 44px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.12);}}
+  /* ボタンの押下感・光沢 */
+  button{transition:transform .08s ease, filter .12s ease;}
+  button:active{transform:translateY(1px) scale(.97); filter:brightness(1.1);}
+  button.primary{position:relative;overflow:hidden;}
+  button.primary::after{content:"";position:absolute;top:0;left:-60%;width:45%;height:100%;
+    background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);
+    transform:skewX(-18deg); animation:sheen 5s ease-in-out infinite;}
+  @keyframes sheen{0%,72%{left:-60%;} 84%{left:130%;} 100%{left:130%;}}
+
+  /* エフェクト用オーバーレイ（盤の上に重ねる） */
+  #fxLayer{position:absolute; inset:10px; z-index:30; pointer-events:none; overflow:visible;}
+  /* 取られた駒が倒れて散る（トップル） */
+  .fx-topple{position:absolute; transform-origin:50% 100%; will-change:transform,opacity;
+    animation:fxTopple .6s cubic-bezier(.4,.1,.6,1) forwards; filter:drop-shadow(0 4px 6px rgba(0,0,0,.5));}
+  @keyframes fxTopple{
+    0%{transform:rotate(0) translateY(0) scale(1); opacity:1;}
+    35%{transform:rotate(-62deg) translateY(4%) scale(1); opacity:1;}
+    100%{transform:rotate(-96deg) translate(-30%,70%) scale(.7); opacity:0;}}
+  .fx-ring{position:absolute; border-radius:50%; border:3px solid rgba(255,210,120,.95);
+    box-shadow:0 0 16px rgba(255,170,80,.8); animation:fxRing .5s ease-out forwards;}
+  @keyframes fxRing{0%{transform:scale(.2);opacity:.95;} 100%{transform:scale(1.9);opacity:0;}}
+  .fx-particle{position:absolute; width:8%; height:8%; border-radius:50%;
+    background:radial-gradient(circle,#fff2c8,#ffae4d 60%,#e0563f); will-change:transform,opacity;
+    animation:fxPart .55s ease-out forwards;}
+  @keyframes fxPart{0%{transform:translate(0,0) scale(1);opacity:1;} 100%{transform:translate(var(--dx),var(--dy)) scale(.2);opacity:0;}}
+  /* 着地した駒のインパクト */
+  .koma.landed{animation:komaLand .34s cubic-bezier(.3,1.4,.5,1);}
+  @keyframes komaLand{0%{transform:translateY(-46%) scale(1.35);} 55%{transform:translateY(6%) scale(.9);} 100%{transform:none;}}
+  /* 盤の揺れ（取ったとき） */
+  .board-wrap.shake{animation:bshake .32s ease;}
+  @keyframes bshake{0%,100%{transform:translate(0,0);} 20%{transform:translate(-4px,2px) rotate(-.4deg);}
+    40%{transform:translate(4px,-2px) rotate(.4deg);} 60%{transform:translate(-3px,1px);} 80%{transform:translate(3px,-1px);}}
+  /* オセロの裏返り */
+  .othello-disc.flip{animation:discFlip .55s cubic-bezier(.4,.1,.3,1);}
+  @keyframes discFlip{0%{transform:rotateY(180deg) scale(.55);} 60%{transform:rotateY(0) scale(1.12);} 100%{transform:rotateY(0) scale(1);}}
+  /* 碁石を置いたときの着地 */
+  .go-disc.drop-in{animation:discDrop .3s ease-out;}
+  @keyframes discDrop{0%{transform:scale(1.6);opacity:.2;} 100%{transform:scale(1);opacity:1;}}
+
+  /* 勝敗バナー（ソシャゲの結果画面風） */
+  #resultBanner{position:fixed; inset:0; z-index:400; display:none; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 45%, rgba(20,14,40,.55), rgba(8,6,18,.86)); backdrop-filter:blur(3px);}
+  #resultBanner.show{display:flex; animation:rbFade .3s ease;}
+  @keyframes rbFade{from{opacity:0;} to{opacity:1;}}
+  .rb-card{position:relative; text-align:center; padding:30px 34px; border-radius:22px;
+    background:linear-gradient(160deg, rgba(60,48,100,.96), rgba(32,24,58,.96));
+    border:1px solid rgba(245,207,107,.5); box-shadow:0 0 40px rgba(139,107,255,.5), 0 20px 60px rgba(0,0,0,.6);
+    animation:rbPop .5s cubic-bezier(.2,1.5,.4,1);}
+  @keyframes rbPop{0%{transform:scale(.6) translateY(20px);opacity:0;} 100%{transform:none;opacity:1;}}
+  .rb-title{font-size:2.6rem; font-weight:900; letter-spacing:.06em; margin-bottom:6px;
+    font-family:'Shippori Mincho',serif;}
+  .rb-win .rb-title{color:#ffe08a; text-shadow:0 0 20px rgba(245,207,107,.9), 0 2px 4px rgba(0,0,0,.5); animation:goldPulse 1.6s ease-in-out infinite;}
+  .rb-lose .rb-title{color:#ff9a86; text-shadow:0 0 18px rgba(224,86,63,.7);}
+  .rb-draw .rb-title{color:#bfe9d6; text-shadow:0 0 18px rgba(98,209,160,.6);}
+  .rb-sub{font-size:.92rem; color:#d9cffb; margin-bottom:16px; max-width:16em;}
+  .rb-card button{font-size:.95rem; padding:10px 22px;}
+  .rb-rays{position:absolute; inset:-40%; z-index:-1; pointer-events:none;
+    background:conic-gradient(from 0deg, rgba(245,207,107,.18) 0 8deg, transparent 8deg 30deg);
+    animation:rays 12s linear infinite;}
+  .rb-win .rb-rays{display:block;} .rb-lose .rb-rays,.rb-draw .rb-rays{display:none;}
+  @keyframes rays{to{transform:rotate(360deg);}}
+  .confetti{position:absolute; width:9px; height:14px; top:-16px; opacity:.95;
+    animation:confFall linear forwards;}
+  @keyframes confFall{to{transform:translateY(110vh) rotate(720deg);}}
 </style>
 </head>
 <body>
@@ -432,7 +513,7 @@
   <div class="sub" style="font-size:.62rem;color:#7d6e57;margin-top:-8px;">編集モードで大局将棋 全209種＋成92種が使えます</div>
 
   <div class="captured" id="capEnemy"><span class="lbl">相手</span></div>
-  <div class="board-wrap"><div class="board" id="board"></div></div>
+  <div class="board-wrap"><div class="board" id="board"></div><div id="fxLayer"></div></div>
   <div class="captured" id="capYou"><span class="lbl">あなた</span></div>
 
   <div class="multi-bar" id="multiBar" style="display:none;">
@@ -447,6 +528,7 @@
     <button id="autoYou">あなた：手動</button>
     <button id="autoEnemy">相手：CPU</button>
     <button id="speed">速度：標準</button>
+    <button id="sfxToggle">🔊 音・演出：ON</button>
   </div>
   <div class="controls">
     <button class="primary" id="playPause">▶ 開始</button>
@@ -534,6 +616,15 @@
     </div>
     <div class="replay-row" style="margin-top:6px;margin-bottom:0;">
       <button id="rpExit">対局に戻る</button>
+    </div>
+  </div>
+
+  <div id="resultBanner">
+    <div class="rb-card" id="rbCard">
+      <div class="rb-rays"></div>
+      <div class="rb-title" id="rbTitle">勝ち！</div>
+      <div class="rb-sub" id="rbSub"></div>
+      <button class="primary" id="rbClose">閉じる</button>
     </div>
   </div>
 
@@ -2119,6 +2210,7 @@ function render(){
   }
   renderCap('capYou',capYou,1);
   renderCap('capEnemy',capEnemy,-1);
+  if(pendingFx){ const d=pendingFx; pendingFx=null; requestAnimationFrame(()=>applyFx(d)); } // 着手演出
 }
 function renderCap(id,arr,p){
   const el=document.getElementById(id);
@@ -2546,7 +2638,7 @@ function nextTurn(){
   } else {
     const ck = checkInfo(turn).check;
     const who = turn===1?'あなた':'相手';
-    if(ck) setStatus('⚠ '+who+'に王手！',  'lose');
+    if(ck){ setStatus('⚠ '+who+'に王手！',  'lose'); SFX.play('check'); }
     else setStatus(who+'の番です');
   }
 }
@@ -2835,6 +2927,8 @@ function applyMove(side,m){ applyMoveSilent(side,m,false); }
 function applyMoveSilent(side,m,silent){
   pushHistory();
   if(typeof redoStack!=='undefined') redoStack.length=0; // 新しい着手でやり直し履歴は無効
+  const _fxPrev = silent ? null : board.map(row=>row.map(x=>x?{...x}:null)); // 演出用に着手前を控える
+  let _fxPromo=false;
   const cap = side===-1? capEnemy : capYou;
   if(m.drop){
     recordKifu({side,drop:m.drop,to:[m.tr,m.tc]});
@@ -2880,6 +2974,7 @@ function applyMoveSilent(side,m,silent){
       if(v){ if(isRoyal(v.t)) tookRoyal=true; else if(RULES.drops) cap.push(capturedCode(v)); board[cr][cc]=null; }
     }
     const newCode = cpawnPromo ? 'cQ' : (promoNew || pc.t);
+    _fxPromo = !!(promoNew || cpawnPromo);
     const np={t:newCode,p:side};
     if(promoNew) np.o = pc.o || pc.t;
     else if(pc.o) np.o = pc.o;
@@ -2905,16 +3000,17 @@ function applyMoveSilent(side,m,silent){
     if(newCode==='zLion'){
       const goalRow = side===1 ? 0 : board.length-1;
       if(m.tr===goalRow && !squareAttackedBy(m.tr,m.tc,-side)){
-        history[history.length-1].to=[m.tr,m.tc]; render(); endGame(side,'try'); return;
+        history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side,'try'); return;
       }
     }
     if(tookRoyal && !hasRoyal(-side)){
-      history[history.length-1].to=[m.tr,m.tc]; render(); endGame(side); return;
+      history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side); return;
     }
-    if(!hasRoyal(-side)){ history[history.length-1].to=[m.tr,m.tc]; render(); endGame(side); return; }
+    if(!hasRoyal(-side)){ history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side); return; }
   }
   goCaptureScan(); // 囲碁：縦横4方を囲まれた碁石を取る（色は保持して持ち駒へ）
   history[history.length-1].to=[m.tr,m.tc];
+  if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo);
   if(!silent) render();
   checkSennichite();
 }
@@ -2938,6 +3034,7 @@ function endGame(winner,reason){
                : isCap?'△ あなたの負け…自分の駒を全て取られました'
                : '△ あなたの負け…王を取られました';
   setStatus(winner===1?winMsg:loseMsg, winner===1?'win':'lose');
+  showResult(winner===1?'win':'lose', winner===1?'勝利！':'敗北…', (winner===1?winMsg:loseMsg).replace(/^[▲△]\s*/,''));
 }
 function setStatus(t,cls){
   const s=document.getElementById('status');
@@ -2947,7 +3044,143 @@ function setStatus(t,cls){
 function endDraw(msg){
   gameOver=true; stopAutoLoop(); render(); updateReplayUI();
   setStatus('持将棋（引き分け）'+(msg?'：'+msg:''),'think');
+  showResult('draw','引き分け', '持将棋'+(msg?'：'+msg:''));
 }
+
+/* ===== 効果音（Web Audioで合成・アセット不要） ===== */
+const SFX = (function(){
+  let ctx=null, master=null, on=true;
+  function ensure(){
+    if(!ctx){ try{ const AC=window.AudioContext||window.webkitAudioContext; ctx=new AC();
+      master=ctx.createGain(); master.gain.value=0.45; master.connect(ctx.destination);
+    }catch(e){ ctx=null; } }
+    if(ctx && ctx.state==='suspended'){ try{ctx.resume();}catch(_){} }
+    return ctx;
+  }
+  function tone(f,t0,dur,type,gain,slideTo){
+    if(!ctx) return; const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type=type||'sine'; o.frequency.setValueAtTime(f,t0);
+    if(slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20,slideTo), t0+dur);
+    g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(gain||0.28, t0+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    o.connect(g); g.connect(master); o.start(t0); o.stop(t0+dur+0.03);
+  }
+  function noise(t0,dur,gain,freq){
+    if(!ctx) return; const len=Math.max(1,(ctx.sampleRate*dur)|0);
+    const buf=ctx.createBuffer(1,len,ctx.sampleRate); const d=buf.getChannelData(0);
+    for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
+    const n=ctx.createBufferSource(); n.buffer=buf;
+    const f=ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=freq||1200;
+    const g=ctx.createGain(); g.gain.setValueAtTime(gain||0.35,t0); g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    n.connect(f); f.connect(g); g.connect(master); n.start(t0); n.stop(t0+dur+0.02);
+  }
+  return {
+    get on(){return on;}, set on(v){on=!!v;},
+    resume(){ ensure(); },
+    play(name){
+      if(!on || !ensure()) return; const t=ctx.currentTime;
+      switch(name){
+        case 'move': tone(300,t,0.07,'triangle',0.2); noise(t,0.04,0.1,900); break;
+        case 'drop': tone(230,t,0.09,'triangle',0.22); noise(t,0.05,0.12,700); break;
+        case 'capture': noise(t,0.13,0.5,650); tone(150,t,0.16,'sawtooth',0.26,70); tone(88,t+0.02,0.22,'sine',0.3,44); break;
+        case 'promote': [523,659,784,1047].forEach((f,i)=>tone(f,t+i*0.06,0.18,'triangle',0.2)); break;
+        case 'flip': tone(520,t,0.09,'sine',0.16,1000); noise(t,0.05,0.08,1600); break;
+        case 'check': tone(880,t,0.12,'square',0.14); tone(1174,t+0.09,0.12,'square',0.12); break;
+        case 'win': [523,659,784,1047,1319].forEach((f,i)=>tone(f,t+i*0.09,0.3,'triangle',0.24)); break;
+        case 'lose': [440,392,330,247].forEach((f,i)=>tone(f,t+i*0.13,0.36,'sine',0.22)); break;
+        case 'draw': [523,523,415].forEach((f,i)=>tone(f,t+i*0.13,0.3,'sine',0.18)); break;
+      }
+    }
+  };
+})();
+
+/* ===== 着手の演出（取る・打つ・裏返る・着地・勝敗） ===== */
+let pendingFx=null; // applyMoveSilentで記録→render後に再生
+// 着手前の盤(prev)と現在の盤を比較し、取った駒・裏返した駒を割り出す
+function computeFx(prev, side, m, promo){
+  const caps=[], flips=[];
+  const R=board.length, C=board[0]?board[0].length:0;
+  for(let r=0;r<R;r++)for(let c=0;c<C;c++){
+    const a=prev[r]&&prev[r][c], b=board[r][c];
+    if(!a) continue;
+    if(a.t==='OTH' && b && b.t==='OTH' && a.p!==b.p){ flips.push({r,c}); continue; }
+    const wasEnemy=a.p!==side, changed=!b||b.t!==a.t||b.p!==a.p;
+    if(wasEnemy && changed) caps.push({r,c,code:a.t,p:a.p});
+  }
+  return {caps, flips, moveTo:(m&&m.tr!==undefined?[m.tr,m.tc]:null), drop:!!(m&&m.drop), promo:!!promo};
+}
+function applyFx(d){
+  if(!SFX.on) return;
+  const bd=document.getElementById('board'), fx=document.getElementById('fxLayer');
+  if(!bd||!fx) return;
+  const fxRect=fx.getBoundingClientRect();
+  const cellAt=(r,c)=>bd.querySelector('.cell[data-r="'+r+'"][data-c="'+c+'"]');
+  // 音
+  if(d.caps.length) SFX.play('capture'); else if(d.drop) SFX.play('drop'); else SFX.play('move');
+  if(d.flips.length) setTimeout(()=>SFX.play('flip'),40);
+  if(d.promo) setTimeout(()=>SFX.play('promote'),120);
+  // 着地インパクト
+  if(d.moveTo){ const cell=cellAt(d.moveTo[0],d.moveTo[1]);
+    if(cell){ const k=cell.querySelector('.koma'); if(k) k.classList.add('landed');
+      const gd=cell.querySelector('.go-disc'); if(gd&&d.drop) gd.classList.add('drop-in'); } }
+  // オセロ裏返り
+  d.flips.forEach(f=>{ const cell=cellAt(f.r,f.c); if(cell){ const disc=cell.querySelector('.othello-disc'); if(disc) disc.classList.add('flip'); } });
+  // 取った駒：盤揺れ＋倒れる駒＋リング＋粒子
+  if(d.caps.length){
+    const wrap=document.querySelector('.board-wrap');
+    if(wrap){ wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake'); setTimeout(()=>wrap.classList.remove('shake'),340); }
+    d.caps.forEach(cap=>{
+      const cell=cellAt(cap.r,cap.c); if(!cell) return;
+      const cr=cell.getBoundingClientRect();
+      const x=cr.left-fxRect.left, y=cr.top-fxRect.top, w=cr.width, h=cr.height;
+      // 倒れる駒（ゴースト）
+      const gh=document.createElement('div'); gh.className='fx-topple';
+      gh.style.cssText='left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;';
+      const k=document.createElement('div'); k.className='koma'+(cap.p===-1?' enemy':''); k.style.cssText='width:100%;height:100%;';
+      if(isGo(cap.code)){ const g=document.createElement('div'); g.className='go-disc '+(cap.code==='GOB'?'black':'white'); g.style.cssText='width:100%;height:100%'; gh.appendChild(g); }
+      else if(cap.code==='OTH'){ const o=document.createElement('div'); o.className='othello-disc '+(cap.p===1?'black':'white'); o.style.cssText='width:100%;height:100%'; gh.appendChild(o); }
+      else { fillKoma(k, cap.code); gh.appendChild(k); }
+      fx.appendChild(gh); setTimeout(()=>gh.remove(),650);
+      // リング
+      const ring=document.createElement('div'); ring.className='fx-ring';
+      ring.style.cssText='left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;';
+      fx.appendChild(ring); setTimeout(()=>ring.remove(),520);
+      // 粒子
+      const cx=x+w*0.46, cy=y+h*0.46, ps=Math.max(4,w*0.16);
+      for(let i=0;i<8;i++){ const p=document.createElement('div'); p.className='fx-particle';
+        const ang=Math.PI*2*i/8+Math.random()*0.5, dist=w*(0.8+Math.random()*0.9);
+        p.style.cssText='left:'+cx+'px;top:'+cy+'px;width:'+ps+'px;height:'+ps+'px;--dx:'+(Math.cos(ang)*dist)+'px;--dy:'+(Math.sin(ang)*dist)+'px;';
+        fx.appendChild(p); setTimeout(()=>p.remove(),560); }
+    });
+  }
+}
+function showResult(kind, title, sub){
+  SFX.play(kind==='win'?'win':kind==='lose'?'lose':'draw');
+  const rb=document.getElementById('resultBanner'); if(!rb) return;
+  document.getElementById('rbCard').className='rb-card rb-'+kind;
+  document.getElementById('rbTitle').textContent=title;
+  document.getElementById('rbSub').textContent=sub||'';
+  rb.classList.add('show');
+  if(kind==='win' && SFX.on){
+    const colors=['#f5cf6b','#8b6bff','#62d1a0','#e0563f','#ffffff'];
+    for(let i=0;i<44;i++){ const c=document.createElement('div'); c.className='confetti';
+      c.style.cssText='left:'+(Math.random()*100)+'%;background:'+colors[i%5]+';animation-duration:'+(1.8+Math.random()*1.7)+'s;animation-delay:'+(Math.random()*0.5)+'s;';
+      rb.appendChild(c); setTimeout(()=>c.remove(),4000); }
+  }
+}
+// 音・演出トグル／結果バナー／初回ジェスチャでオーディオ起動
+(function(){
+  const btn=document.getElementById('sfxToggle');
+  const upd=()=>{ if(btn){ btn.textContent=(SFX.on?'🔊':'🔇')+' 音・演出：'+(SFX.on?'ON':'OFF'); btn.classList.toggle('on',SFX.on); } };
+  if(btn) btn.onclick=()=>{ SFX.on=!SFX.on; if(SFX.on) SFX.resume(); upd(); };
+  upd();
+  const rb=document.getElementById('resultBanner');
+  const hide=()=>{ if(rb){ rb.classList.remove('show'); rb.querySelectorAll('.confetti').forEach(c=>c.remove()); } };
+  const cl=document.getElementById('rbClose'); if(cl) cl.onclick=hide;
+  if(rb) rb.addEventListener('pointerdown', e=>{ if(e.target===rb) hide(); });
+  const wake=()=>{ SFX.resume(); document.removeEventListener('pointerdown',wake); document.removeEventListener('keydown',wake); };
+  document.addEventListener('pointerdown',wake); document.addEventListener('keydown',wake);
+})();
 // side が動かせる駒・打てる持ち駒を1つでも持つか（最初に見つけたら即true）
 function hasAnyLegalMove(side){
   for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
