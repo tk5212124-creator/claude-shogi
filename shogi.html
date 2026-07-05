@@ -435,6 +435,12 @@
   <div class="board-wrap"><div class="board" id="board"></div></div>
   <div class="captured" id="capYou"><span class="lbl">あなた</span></div>
 
+  <div class="multi-bar" id="multiBar" style="display:none;">
+    <span id="multiCount">0マス選択中</span>
+    <button class="primary" id="multiChange">まとめて変更</button>
+    <button id="multiClear">選択解除</button>
+  </div>
+
   <div class="status" id="status">あなたの番です</div>
 
   <div class="controls">
@@ -474,6 +480,7 @@
           <option value="othello">オセロ（8×8）</option>
           <option value="hasami">はさみ将棋（9×9）</option>
           <option value="go">囲碁（19×19・空盤）</option>
+          <option value="doubutsu">どうぶつしょうぎ（3×4）</option>
         </optgroup>
         <option value="empty">空盤（サイズ指定）</option>
       </select>
@@ -502,12 +509,6 @@
       <button id="restoreCustom">記憶した配置に戻す</button>
     </div>
    </div>
-  </div>
-
-  <div class="multi-bar" id="multiBar" style="display:none;">
-    <span id="multiCount">0マス選択中</span>
-    <button class="primary" id="multiChange">まとめて変更</button>
-    <button id="multiClear">選択解除</button>
   </div>
 
 
@@ -607,7 +608,7 @@
           <div class="pick-section"><span class="pick-lbl" id="lblOthello">オセロ（特殊駒）</span><button class="stamp-sec" data-preset="othello">プリセット配置</button><div class="pick-grid" id="pickOthello"></div></div>
           <div class="pick-section"><span class="pick-lbl" id="lblGo">囲碁（特殊駒）</span><button class="stamp-sec" data-preset="go">プリセット配置</button><div class="pick-grid" id="pickGo"></div></div>
           <div class="pick-section"><span class="pick-lbl" id="lblMaka">摩訶大大将棋（大局と別）</span><button class="stamp-sec" data-preset="makadai">プリセット配置</button><div class="pick-grid" id="pickMaka"></div></div>
-          <div class="pick-section"><span class="pick-lbl" id="lblDoubutsu">どうぶつしょうぎ</span><div class="pick-grid" id="pickDoubutsu"></div></div>
+          <div class="pick-section"><span class="pick-lbl" id="lblDoubutsu">どうぶつしょうぎ</span><button class="stamp-sec" data-preset="doubutsu">プリセット配置</button><div class="pick-grid" id="pickDoubutsu"></div></div>
           <div class="pick-section"><span class="pick-lbl" id="lblOther">その他の将棋駒</span><div class="pick-grid" id="pickOther"></div></div>
         </div>
         <div class="pick-actions">
@@ -1605,12 +1606,20 @@ function setupGo(){
   const n=Math.floor(NR*NC/2);
   capYou.push(...fill('GOB',n)); capEnemy.push(...fill('GOW',n));
 }
+// どうぶつしょうぎ（3列×4段）。ライオン・ぞう・きりん・ひよこ。ひよこは最奥でにわとりに成る。
+function setupDoubutsu(){
+  NR=4; NC=3; PZ=1; emptyBoard();
+  placeArmy([
+    {r:0,cells:['zZou','zLion','zKirin']},
+    {r:1,cells:[null,'zHiyoko',null]}
+  ]);
+}
 
 // プリセット適用（盤・成りゾーンを設定）
 const PRESETS={
   hon:setupStartBoard, heian:setupHeian, sho:setupSho, mini:setupMinishogi,
   chu:setupChu, dai:setupDai, makadai:setupMakadai, taikyoku:setupTaikyoku,
-  chess:setupChess, othello:setupOthello, hasami:setupHasami, go:setupGo
+  chess:setupChess, othello:setupOthello, hasami:setupHasami, go:setupGo, doubutsu:setupDoubutsu
 };
 function applyPreset(key){
   const fn=PRESETS[key];
@@ -3196,7 +3205,8 @@ const PRESET_LABELS={
   hon:'本将棋（9×9）', heian:'平安将棋（9×9）', sho:'小将棋（9×9）', chu:'中将棋（12×12）',
   dai:'大将棋（15×15）', makadai:'摩訶大大将棋（19×19）',
   taikyoku:'大局将棋（36×36）', chess:'チェス（8×8）', othello:'オセロ（8×8）',
-  hasami:'はさみ将棋（9×9）', go:'囲碁（19×19・空盤）', mini:'5五将棋（5×5）', empty:'空盤'
+  hasami:'はさみ将棋（9×9）', go:'囲碁（19×19・空盤）', mini:'5五将棋（5×5）',
+  doubutsu:'どうぶつしょうぎ（3×4）', empty:'空盤'
 };
 // サイズUI（行・列スライダーと表示）を現在のNR/NCに同期
 function syncSizeUI(){
