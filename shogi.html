@@ -507,6 +507,43 @@
   .confetti{position:absolute; width:9px; height:14px; top:-16px; opacity:.95;
     animation:confFall linear forwards;}
   @keyframes confFall{to{transform:translateY(110vh) rotate(720deg);}}
+
+  /* カットイン（王手！／YOUR TURN）：画面を帯が横切る */
+  #cutIn{position:fixed; left:0; right:0; top:38%; z-index:350; pointer-events:none;
+    display:flex; align-items:center; justify-content:center; height:3.4em;
+    opacity:0; transform:translateX(-105%); }
+  #cutIn.danger{background:linear-gradient(90deg, transparent, rgba(190,30,20,.92) 18%, rgba(120,10,10,.95) 50%, rgba(190,30,20,.92) 82%, transparent);
+    box-shadow:0 0 30px rgba(224,60,40,.6);}
+  #cutIn.turn{background:linear-gradient(90deg, transparent, rgba(60,48,120,.92) 18%, rgba(90,70,180,.94) 50%, rgba(60,48,120,.92) 82%, transparent);
+    box-shadow:0 0 26px rgba(139,107,255,.55);}
+  #cutIn.go{animation:cutInSlide 1s cubic-bezier(.2,.9,.3,1) forwards;}
+  @keyframes cutInSlide{
+    0%{opacity:0; transform:translateX(-105%);}
+    18%{opacity:1; transform:translateX(0);}
+    78%{opacity:1; transform:translateX(0);}
+    100%{opacity:0; transform:translateX(105%);}}
+  #cutInText{font-family:'Shippori Mincho',serif; font-weight:900; letter-spacing:.28em;
+    font-size:1.7rem; color:#fff; text-shadow:0 0 14px rgba(255,220,120,.9), 0 2px 4px rgba(0,0,0,.6);}
+  #cutIn.turn #cutInText{font-family:'Zen Maru Gothic',sans-serif; letter-spacing:.2em; font-size:1.3rem;}
+
+  /* 勝利の放射光を強く・二重に */
+  .rb-rays{background:conic-gradient(from 0deg, rgba(245,207,107,.34) 0 9deg, transparent 9deg 30deg);}
+  .rb-win .rb-title::before{content:"✦ "; } .rb-win .rb-title::after{content:" ✦";}
+
+  /* ステータス帯をクエストバナー風に（金の飾り） */
+  .status{position:relative;
+    background:linear-gradient(160deg,rgba(64,50,104,.85),rgba(38,30,66,.85));
+    border:1px solid rgba(245,207,107,.4);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 3px 12px rgba(0,0,0,.35);}
+  .status::before,.status::after{content:"◆";position:absolute;top:50%;transform:translateY(-50%);
+    font-size:.55em;color:rgba(245,207,107,.75);}
+  .status::before{left:8px;} .status::after{right:8px;}
+
+  /* 端末の「視差効果を減らす」設定を尊重（常時アニメを停止） */
+  @media (prefers-reduced-motion: reduce){
+    body::before,.board-wrap,h1,button.primary::after,.rb-rays{animation:none !important;}
+    .koma.landed,.koma.enemy.landed,.othello-disc.flip,.go-disc.drop-in{animation:none !important;}
+  }
 </style>
 </head>
 <body>
@@ -2381,12 +2418,14 @@ function attemptMove(fr,fc,tr,tc){
       const epPawn=board[fr][tc];
       if(epPawn && epPawn.t==='cP' && epPawn.p!==me){
         pushHistory();
+        const _prev=board.map(row=>row.map(x=>x?{...x}:null)); // 演出用
         recordKifu({side:me,from:[fr,fc],to:[tr,tc],code:'cP',cap:'cP',enpassant:true});
         if(RULES.drops) (me===1?capYou:capEnemy).push('cP');
         board[fr][tc]=null;            // 取られる相手ポーン
         board[tr][tc]={t:'cP',p:me};
         board[fr][fc]=null;
         history[history.length-1].to=[tr,tc];
+        pendingFx=computeFx(_prev,me,{fr,fc,tr,tc},false);
         checkSennichite();
         sel=null; afterPlayer(); return;
       }
@@ -2407,6 +2446,7 @@ function attemptMove(fr,fc,tr,tc){
 // チェスポーンを指定駒に昇格させて着手
 function doMoveChessPromo(fr,fc,tr,tc,toCode,p){
   pushHistory();
+  const _prev=board.map(row=>row.map(x=>x?{...x}:null)); // 演出用
   const tg=board[tr][tc];
   recordKifu({side:p,from:[fr,fc],to:[tr,tc],code:'cP',promoTo:toCode,cap:tg?tg.t:null});
   const tookRoyal = tg && isRoyal(tg.t);
@@ -2414,6 +2454,7 @@ function doMoveChessPromo(fr,fc,tr,tc,toCode,p){
   board[tr][tc]={t:toCode,p};
   board[fr][fc]=null;
   history[history.length-1].to=[tr,tc];
+  pendingFx=computeFx(_prev,p,{fr,fc,tr,tc},true);
   if(tookRoyal && !hasRoyal(-p)){ endGame(p); return; }
   checkSennichite();
 }
@@ -2435,6 +2476,7 @@ function castlingMove(fr,fc,tr,tc){
 }
 function doCastling(fr,fc,tr,tc,cast,p){
   pushHistory();
+  const _prev=board.map(row=>row.map(x=>x?{...x}:null)); // 演出用
   recordKifu({side:p,from:[fr,fc],to:[tr,tc],code:'cK',castle:cast});
   const k=board[fr][fc];
   board[tr][tc]={...k,moved:true};
@@ -2443,6 +2485,7 @@ function doCastling(fr,fc,tr,tc,cast,p){
   board[cast.rookTo[0]][cast.rookTo[1]]={...rook,moved:true};
   board[cast.rookFrom[0]][cast.rookFrom[1]]=null;
   history[history.length-1].to=[tr,tc];
+  pendingFx=computeFx(_prev,p,{fr,fc,tr,tc},false);
   checkSennichite();
 }
 
@@ -2640,10 +2683,16 @@ function nextTurn(){
   } else {
     const ck = checkInfo(turn).check;
     const who = turn===1?'あなた':'相手';
-    if(ck){ setStatus('⚠ '+who+'に王手！',  'lose'); SFX.play('check'); }
-    else setStatus(who+'の番です');
+    if(ck){ setStatus('⚠ '+who+'に王手！',  'lose'); SFX.play('check'); cutIn('王手！','danger'); }
+    else{
+      setStatus(who+'の番です');
+      // 手番があなたに移ったときだけ「あなたの番」カットイン（連続発火は抑止）
+      if(turn===1 && lastRibbonTurn!==turn && history.length>0) cutIn('YOUR TURN','turn');
+    }
+    lastRibbonTurn=turn;
   }
 }
+let lastRibbonTurn=0; // カットインの連続発火防止
 function scheduleAutoStep(){
   stopAutoLoop();
   if(paused) return; // 一時停止中は自動進行しない
@@ -3127,8 +3176,9 @@ function applyFx(d){
       const gd=cell.querySelector('.go-disc'); if(gd&&d.drop) gd.classList.add('drop-in'); } }
   // オセロ裏返り
   d.flips.forEach(f=>{ const cell=cellAt(f.r,f.c); if(cell){ const disc=cell.querySelector('.othello-disc'); if(disc) disc.classList.add('flip'); } });
-  // 取った駒：盤揺れ＋倒れる駒＋リング＋粒子
+  // 取った駒：盤揺れ＋倒れる駒＋リング＋粒子＋バイブ
   if(d.caps.length){
+    if(navigator.vibrate){ try{navigator.vibrate(d.caps.length>1?[30,40,30]:30);}catch(_){} }
     const wrap=document.querySelector('.board-wrap');
     if(wrap){ wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake'); setTimeout(()=>wrap.classList.remove('shake'),340); }
     d.caps.forEach(cap=>{
@@ -3169,6 +3219,23 @@ function showResult(kind, title, sub){
       c.style.cssText='left:'+(Math.random()*100)+'%;background:'+colors[i%5]+';animation-duration:'+(1.8+Math.random()*1.7)+'s;animation-delay:'+(Math.random()*0.5)+'s;';
       rb.appendChild(c); setTimeout(()=>c.remove(),4000); }
   }
+}
+// カットイン（王手！／あなたの番）：盤の上を帯が横切るソシャゲ風演出
+let cutInTimer=null;
+function cutIn(text, kind){
+  if(!SFX.on) return;
+  let el=document.getElementById('cutIn');
+  if(!el){
+    el=document.createElement('div'); el.id='cutIn';
+    el.innerHTML='<span id="cutInText"></span>';
+    document.body.appendChild(el);
+  }
+  document.getElementById('cutInText').textContent=text;
+  el.className=kind||'';
+  el.classList.remove('go'); void el.offsetWidth;
+  el.classList.add('go');
+  if(cutInTimer) clearTimeout(cutInTimer);
+  cutInTimer=setTimeout(()=>{ el.classList.remove('go'); }, 1000);
 }
 // 音・演出トグル／結果バナー／初回ジェスチャでオーディオ起動
 (function(){
