@@ -459,6 +459,22 @@
     0%{transform:rotate(0) translateY(0) scale(1); opacity:1;}
     35%{transform:rotate(-62deg) translateY(4%) scale(1); opacity:1;}
     100%{transform:rotate(-96deg) translate(-30%,70%) scale(.7); opacity:0;}}
+  /* 斬撃：白い斬線が走る（ドラクエの攻撃エフェクト風） */
+  .fx-slash{position:absolute; height:7px; border-radius:999px; pointer-events:none;
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,.25) 15%, #fff 50%, rgba(255,255,255,.25) 85%, transparent);
+    box-shadow:0 0 10px rgba(255,255,255,.95), 0 0 26px rgba(150,200,255,.7);
+    will-change:transform,opacity;
+    animation:fxSlash .2s cubic-bezier(.1,.8,.2,1) forwards;}
+  @keyframes fxSlash{
+    0%{transform:translate(-50%,-50%) rotate(var(--ang)) scaleX(.05); opacity:0;}
+    22%{opacity:1;}
+    70%{transform:translate(-50%,-50%) rotate(var(--ang)) scaleX(1); opacity:1;}
+    100%{transform:translate(-50%,-50%) rotate(var(--ang)) scaleX(1.08); opacity:0;}}
+  /* ヒット閃光：マスが白く光る */
+  .fx-flash{position:absolute; border-radius:12%; pointer-events:none;
+    background:radial-gradient(circle, rgba(255,255,255,.95), rgba(255,240,200,.5) 55%, transparent 75%);
+    animation:fxFlash .26s ease-out forwards;}
+  @keyframes fxFlash{0%{opacity:0; transform:scale(.6);} 30%{opacity:1; transform:scale(1.15);} 100%{opacity:0; transform:scale(1.3);}}
   .fx-ring{position:absolute; border-radius:50%; border:3px solid rgba(255,210,120,.95);
     box-shadow:0 0 16px rgba(255,170,80,.8); animation:fxRing .5s ease-out forwards;}
   @keyframes fxRing{0%{transform:scale(.2);opacity:.95;} 100%{transform:scale(1.9);opacity:0;}}
@@ -543,6 +559,7 @@
   @media (prefers-reduced-motion: reduce){
     body::before,.board-wrap,h1,button.primary::after,.rb-rays{animation:none !important;}
     .koma.landed,.koma.enemy.landed,.othello-disc.flip,.go-disc.drop-in{animation:none !important;}
+    .fx-slash,.fx-flash{animation-duration:.01s !important;}
   }
 </style>
 </head>
@@ -3125,6 +3142,19 @@ const SFX = (function(){
     const g=ctx.createGain(); g.gain.setValueAtTime(gain||0.35,t0); g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
     n.connect(f); f.connect(g); g.connect(master); n.start(t0); n.stop(t0+dur+0.02);
   }
+  // 斬撃用：バンドパスの中心周波数を f0→f1 へ素早くスイープするノイズ（シャキン！の芯）
+  function noiseSweep(t0,dur,gain,f0,f1){
+    if(!ctx) return; const len=Math.max(1,(ctx.sampleRate*dur)|0);
+    const buf=ctx.createBuffer(1,len,ctx.sampleRate); const d=buf.getChannelData(0);
+    for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
+    const n=ctx.createBufferSource(); n.buffer=buf;
+    const f=ctx.createBiquadFilter(); f.type='bandpass'; f.Q.value=1.2;
+    f.frequency.setValueAtTime(f0,t0); f.frequency.exponentialRampToValueAtTime(Math.max(60,f1),t0+dur);
+    const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(gain||0.4,t0+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    n.connect(f); f.connect(g); g.connect(master); n.start(t0); n.stop(t0+dur+0.02);
+  }
   return {
     get on(){return on;}, set on(v){on=!!v;},
     resume(){ ensure(); },
@@ -3134,6 +3164,11 @@ const SFX = (function(){
         case 'move': tone(300,t,0.07,'triangle',0.2); noise(t,0.04,0.1,900); break;
         case 'drop': tone(230,t,0.09,'triangle',0.22); noise(t,0.05,0.12,700); break;
         case 'capture': noise(t,0.13,0.5,650); tone(150,t,0.16,'sawtooth',0.26,70); tone(88,t+0.02,0.22,'sine',0.3,44); break;
+        case 'slash': /* シャキン！：高域→中域へ走るノイズ＋金属の残響ピング */
+          noiseSweep(t,0.15,0.5,7000,1200);
+          tone(3600,t+0.012,0.1,'sine',0.11,700);
+          tone(5200,t+0.03,0.06,'sine',0.06,1800);
+          break;
         case 'promote': [523,659,784,1047].forEach((f,i)=>tone(f,t+i*0.06,0.18,'triangle',0.2)); break;
         case 'flip': tone(520,t,0.09,'sine',0.16,1000); noise(t,0.05,0.08,1600); break;
         case 'check': tone(880,t,0.12,'square',0.14); tone(1174,t+0.09,0.12,'square',0.12); break;
@@ -3166,43 +3201,65 @@ function applyFx(d){
   if(!bd||!fx) return;
   const fxRect=fx.getBoundingClientRect();
   const cellAt=(r,c)=>bd.querySelector('.cell[data-r="'+r+'"][data-c="'+c+'"]');
-  // 音
-  if(d.caps.length) SFX.play('capture'); else if(d.drop) SFX.play('drop'); else SFX.play('move');
+  // 音：取りは「シャキン！（斬撃）→ ドスン（衝撃）」の2段。それ以外は従来どおり
+  if(d.caps.length){ SFX.play('slash'); setTimeout(()=>SFX.play('capture'),110); }
+  else if(d.drop) SFX.play('drop'); else SFX.play('move');
   if(d.flips.length) setTimeout(()=>SFX.play('flip'),40);
-  if(d.promo) setTimeout(()=>SFX.play('promote'),120);
+  if(d.promo) setTimeout(()=>SFX.play('promote'),160);
   // 着地インパクト
   if(d.moveTo){ const cell=cellAt(d.moveTo[0],d.moveTo[1]);
     if(cell){ const k=cell.querySelector('.koma'); if(k) k.classList.add('landed');
       const gd=cell.querySelector('.go-disc'); if(gd&&d.drop) gd.classList.add('drop-in'); } }
   // オセロ裏返り
   d.flips.forEach(f=>{ const cell=cellAt(f.r,f.c); if(cell){ const disc=cell.querySelector('.othello-disc'); if(disc) disc.classList.add('flip'); } });
-  // 取った駒：盤揺れ＋倒れる駒＋リング＋粒子＋バイブ
+  // 取った駒：RPG風の斬撃 → ヒット（白閃光・盤揺れ・バイブ）→ 倒れて散る
   if(d.caps.length){
-    if(navigator.vibrate){ try{navigator.vibrate(d.caps.length>1?[30,40,30]:30);}catch(_){} }
-    const wrap=document.querySelector('.board-wrap');
-    if(wrap){ wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake'); setTimeout(()=>wrap.classList.remove('shake'),340); }
-    d.caps.forEach(cap=>{
+    // ヒットのタイミング（斬線が走り終わる頃）に衝撃系をまとめる
+    setTimeout(()=>{
+      if(navigator.vibrate){ try{navigator.vibrate(d.caps.length>1?[30,40,30]:30);}catch(_){} }
+      const wrap=document.querySelector('.board-wrap');
+      if(wrap){ wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake'); setTimeout(()=>wrap.classList.remove('shake'),340); }
+    },110);
+    d.caps.forEach((cap,ci)=>{
       const cell=cellAt(cap.r,cap.c); if(!cell) return;
       const cr=cell.getBoundingClientRect();
       const x=cr.left-fxRect.left, y=cr.top-fxRect.top, w=cr.width, h=cr.height;
-      // 倒れる駒（ゴースト）
-      const gh=document.createElement('div'); gh.className='fx-topple';
-      gh.style.cssText='left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;';
-      const k=document.createElement('div'); k.className='koma'+(cap.p===-1?' enemy':''); k.style.cssText='width:100%;height:100%;';
-      if(isGo(cap.code)){ const g=document.createElement('div'); g.className='go-disc '+(cap.code==='GOB'?'black':'white'); g.style.cssText='width:100%;height:100%'; gh.appendChild(g); }
-      else if(cap.code==='OTH'){ const o=document.createElement('div'); o.className='othello-disc '+(cap.p===1?'black':'white'); o.style.cssText='width:100%;height:100%'; gh.appendChild(o); }
-      else { fillKoma(k, cap.code); gh.appendChild(k); }
-      fx.appendChild(gh); setTimeout(()=>gh.remove(),650);
-      // リング
-      const ring=document.createElement('div'); ring.className='fx-ring';
-      ring.style.cssText='left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;';
-      fx.appendChild(ring); setTimeout(()=>ring.remove(),520);
-      // 粒子
-      const cx=x+w*0.46, cy=y+h*0.46, ps=Math.max(4,w*0.16);
-      for(let i=0;i<8;i++){ const p=document.createElement('div'); p.className='fx-particle';
-        const ang=Math.PI*2*i/8+Math.random()*0.5, dist=w*(0.8+Math.random()*0.9);
-        p.style.cssText='left:'+cx+'px;top:'+cy+'px;width:'+ps+'px;height:'+ps+'px;--dx:'+(Math.cos(ang)*dist)+'px;--dy:'+(Math.sin(ang)*dist)+'px;';
-        fx.appendChild(p); setTimeout(()=>p.remove(),560); }
+      const cx=x+w/2, cy=y+h/2;
+      // 1) 斬撃：白い斬線が2本、X字に走る（ドラクエの攻撃エフェクト風）
+      [[-52,0],[38,70]].forEach(([ang,delay])=>{
+        setTimeout(()=>{
+          const s=document.createElement('div'); s.className='fx-slash';
+          s.style.cssText='left:'+cx+'px;top:'+cy+'px;width:'+(w*2.1)+'px;--ang:'+ang+'deg;';
+          fx.appendChild(s); setTimeout(()=>s.remove(),240);
+        }, delay);
+      });
+      // 2) ヒット閃光：マスが白く光る
+      setTimeout(()=>{
+        const fl=document.createElement('div'); fl.className='fx-flash';
+        fl.style.cssText='left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;';
+        fx.appendChild(fl); setTimeout(()=>fl.remove(),260);
+      },90);
+      // 3) 倒れる駒（斬られてから倒れる）
+      setTimeout(()=>{
+        const gh=document.createElement('div'); gh.className='fx-topple';
+        gh.style.cssText='left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;';
+        const k=document.createElement('div'); k.className='koma'+(cap.p===-1?' enemy':''); k.style.cssText='width:100%;height:100%;';
+        if(isGo(cap.code)){ const g=document.createElement('div'); g.className='go-disc '+(cap.code==='GOB'?'black':'white'); g.style.cssText='width:100%;height:100%'; gh.appendChild(g); }
+        else if(cap.code==='OTH'){ const o=document.createElement('div'); o.className='othello-disc '+(cap.p===1?'black':'white'); o.style.cssText='width:100%;height:100%'; gh.appendChild(o); }
+        else { fillKoma(k, cap.code); gh.appendChild(k); }
+        fx.appendChild(gh); setTimeout(()=>gh.remove(),700);
+      },130);
+      // 4) リング＋粒子（ヒットの飛沫）
+      setTimeout(()=>{
+        const ring=document.createElement('div'); ring.className='fx-ring';
+        ring.style.cssText='left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;';
+        fx.appendChild(ring); setTimeout(()=>ring.remove(),520);
+        const ps=Math.max(4,w*0.16);
+        for(let i=0;i<8;i++){ const p=document.createElement('div'); p.className='fx-particle';
+          const ang=Math.PI*2*i/8+Math.random()*0.5, dist=w*(0.8+Math.random()*0.9);
+          p.style.cssText='left:'+(cx-w*0.04)+'px;top:'+(cy-h*0.04)+'px;width:'+ps+'px;height:'+ps+'px;--dx:'+(Math.cos(ang)*dist)+'px;--dy:'+(Math.sin(ang)*dist)+'px;';
+          fx.appendChild(p); setTimeout(()=>p.remove(),560); }
+      },150);
     });
   }
 }
