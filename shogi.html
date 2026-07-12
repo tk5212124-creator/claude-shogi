@@ -513,7 +513,7 @@
   .rb-win .rb-title{color:#ffe08a; text-shadow:0 0 20px rgba(245,207,107,.9), 0 2px 4px rgba(0,0,0,.5); animation:goldPulse 1.6s ease-in-out infinite;}
   .rb-lose .rb-title{color:#ff9a86; text-shadow:0 0 18px rgba(224,86,63,.7);}
   .rb-draw .rb-title{color:#bfe9d6; text-shadow:0 0 18px rgba(98,209,160,.6);}
-  .rb-sub{font-size:.92rem; color:#d9cffb; margin-bottom:16px; max-width:16em;}
+  .rb-sub{font-size:.92rem; color:#d9cffb; margin-bottom:16px; max-width:16em; white-space:pre-line;}
   .rb-card button{font-size:.95rem; padding:10px 22px;}
   .rb-rays{position:absolute; inset:-40%; z-index:-1; pointer-events:none;
     background:conic-gradient(from 0deg, rgba(245,207,107,.18) 0 8deg, transparent 8deg 30deg);
@@ -561,6 +561,62 @@
     .koma.landed,.koma.enemy.landed,.othello-disc.flip,.go-disc.drop-in{animation:none !important;}
     .fx-slash,.fx-flash{animation-duration:.01s !important;}
   }
+
+  /* ===== デザイン改善パック（評価①〜⑥反映） ===== */
+  /* 饅頭型ボタン：濃い縁取り＋上ハイライト＋下影の2トーン */
+  button{
+    border:1px solid rgba(20,14,40,.9);
+    box-shadow:0 0 0 1px rgba(139,107,255,.35), 0 3px 0 rgba(15,10,30,.8), 0 6px 12px rgba(0,0,0,.35),
+      inset 0 2px 0 rgba(255,255,255,.14), inset 0 -3px 6px rgba(0,0,0,.3);
+  }
+  button:active{transform:translateY(2px); box-shadow:0 0 0 1px rgba(139,107,255,.35), 0 1px 0 rgba(15,10,30,.8), 0 3px 8px rgba(0,0,0,.3),
+      inset 0 2px 0 rgba(255,255,255,.1), inset 0 -2px 4px rgba(0,0,0,.3);}
+  /* 金CTA：開始・再生（1画面の主役ボタン） */
+  #playPause, #rpPlay{
+    background:linear-gradient(160deg,#ffd97a 0%,#f2b13e 45%,#d98f1f 100%);
+    border-color:#7a5a10; color:#3a2504; text-shadow:0 1px 0 rgba(255,255,255,.45);
+    box-shadow:0 0 0 1px rgba(255,220,130,.7), 0 3px 0 rgba(90,60,10,.9), 0 6px 16px rgba(242,177,62,.45),
+      inset 0 2px 0 rgba(255,255,255,.5), inset 0 -3px 6px rgba(160,100,20,.35);
+    font-weight:800;
+  }
+  #playPause:hover, #rpPlay:hover{background:linear-gradient(160deg,#ffe392 0%,#f7bd52 45%,#e29a28 100%);}
+  /* 取り消し系（待った・投了）は控えめな紫枠に降格 */
+  #undo, #reset{
+    background:linear-gradient(160deg,#3a2f5e,#2a2148); border-color:rgba(224,86,63,.55); color:#f0b9ad;
+    box-shadow:0 0 0 1px rgba(224,86,63,.25), 0 3px 0 rgba(15,10,30,.8), 0 5px 10px rgba(0,0,0,.3),
+      inset 0 2px 0 rgba(255,255,255,.08), inset 0 -3px 6px rgba(0,0,0,.3);
+  }
+  /* 注記のコントラスト改善（3.2:1 → 5.4:1） */
+  .board-setup .bs-note, .rule-note, .sub{color:#9c8fc7 !important;}
+  /* 音・BGMトグルの2列グリッド行 */
+  .controls.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;width:100%;max-width:430px;}
+  .controls.grid2 button{width:100%;}
+  /* プレイヤー札：手番側が金色に光る */
+  .captured{transition:box-shadow .3s, border-color .3s;}
+  .captured .lbl{font-weight:700;letter-spacing:.14em;}
+  .captured.turn-active{border-color:rgba(245,207,107,.85);
+    box-shadow:0 0 0 1px rgba(245,207,107,.5), 0 0 18px rgba(245,207,107,.3), inset 0 1px 0 rgba(255,255,255,.1);}
+  .captured.turn-active .lbl{color:var(--gold);}
+  .captured.turn-active .lbl::after{content:"の番";font-size:.85em;opacity:.9;}
+  /* 棋譜が無いときリプレイパネルを減光 */
+  .replay-panel.empty{opacity:.5;filter:saturate(.6);}
+  /* パネルの二重枠（金の内側ライン） */
+  .acc{position:relative;}
+  .acc::after{content:"";position:absolute;inset:3px;border:1px solid rgba(245,207,107,.16);border-radius:9px;pointer-events:none;}
+  .captured{position:relative;}
+  /* 背景に薄い青海波風テクスチャ */
+  body::after{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;opacity:.05;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='40'%3E%3Cg fill='none' stroke='%23c9b6ff' stroke-width='1'%3E%3Ccircle cx='20' cy='40' r='18'/%3E%3Ccircle cx='20' cy='40' r='12'/%3E%3Ccircle cx='20' cy='40' r='6'/%3E%3Ccircle cx='60' cy='40' r='18'/%3E%3Ccircle cx='60' cy='40' r='12'/%3E%3Ccircle cx='60' cy='40' r='6'/%3E%3Ccircle cx='0' cy='20' r='18'/%3E%3Ccircle cx='40' cy='20' r='18'/%3E%3Ccircle cx='40' cy='20' r='12'/%3E%3Ccircle cx='80' cy='20' r='18'/%3E%3C/g%3E%3C/svg%3E");
+    background-size:80px 40px;}
+  /* 会心の一撃：画面全体の白フラッシュ */
+  .fx-critflash{position:fixed;inset:0;z-index:390;pointer-events:none;
+    background:radial-gradient(circle at 50% 42%, rgba(255,255,255,.98), rgba(255,240,200,.75) 45%, rgba(255,220,150,.25) 75%, transparent);
+    animation:critFlash .4s ease-out forwards;}
+  @keyframes critFlash{0%{opacity:0;} 15%{opacity:1;} 100%{opacity:0;}}
+  /* 取った駒が持ち駒トレイへ飛んでいく */
+  .fx-fly{position:fixed;z-index:200;pointer-events:none;will-change:transform,opacity;
+    transition:transform .55s cubic-bezier(.3,.6,.4,1), opacity .55s ease-in;}
+  .fx-fly .koma{width:100%;height:100%;}
 </style>
 </head>
 <body>
@@ -584,7 +640,10 @@
     <button id="autoYou">あなた：手動</button>
     <button id="autoEnemy">相手：CPU</button>
     <button id="speed">速度：標準</button>
+  </div>
+  <div class="controls grid2">
     <button id="sfxToggle">🔊 音・演出：ON</button>
+    <button id="bgmToggle">🎵 BGM：OFF</button>
   </div>
   <div class="controls">
     <button class="primary" id="playPause">▶ 開始</button>
@@ -2266,6 +2325,10 @@ function render(){
   }
   renderCap('capYou',capYou,1);
   renderCap('capEnemy',capEnemy,-1);
+  // 手番側のプレイヤー札を金色に光らせる
+  const cy=document.getElementById('capYou'), ce=document.getElementById('capEnemy');
+  if(cy) cy.classList.toggle('turn-active', !gameOver && !editing && !replaying && turn===1);
+  if(ce) ce.classList.toggle('turn-active', !gameOver && !editing && !replaying && turn===-1);
   if(pendingFx){ const d=pendingFx; pendingFx=null; requestAnimationFrame(()=>applyFx(d)); } // 着手演出
 }
 function renderCap(id,arr,p){
@@ -3102,7 +3165,17 @@ function endGame(winner,reason){
                : isCap?'△ あなたの負け…自分の駒を全て取られました'
                : '△ あなたの負け…王を取られました';
   setStatus(winner===1?winMsg:loseMsg, winner===1?'win':'lose');
-  showResult(winner===1?'win':'lose', winner===1?'勝利！':'敗北…', (winner===1?winMsg:loseMsg).replace(/^[▲△]\s*/,''));
+  const rec=addRecord(winner===1?'w':'l');
+  showResult(winner===1?'win':'lose', winner===1?'勝利！':'敗北…',
+    (winner===1?winMsg:loseMsg).replace(/^[▲△]\s*/,'') + '\n通算 '+rec.w+'勝'+rec.l+'敗'+(rec.d?rec.d+'分':''));
+}
+// 戦績（localStorageに通算勝敗を保存）
+function addRecord(kind){
+  let rec={w:0,l:0,d:0};
+  try{ rec=Object.assign(rec, JSON.parse(localStorage.getItem('shogiRecord')||'{}')); }catch(_){}
+  if(kind) rec[kind]=(rec[kind]||0)+1;
+  try{ localStorage.setItem('shogiRecord', JSON.stringify(rec)); }catch(_){}
+  return rec;
 }
 function setStatus(t,cls){
   const s=document.getElementById('status');
@@ -3112,7 +3185,8 @@ function setStatus(t,cls){
 function endDraw(msg){
   gameOver=true; stopAutoLoop(); render(); updateReplayUI();
   setStatus('持将棋（引き分け）'+(msg?'：'+msg:''),'think');
-  showResult('draw','引き分け', '持将棋'+(msg?'：'+msg:''));
+  const rec=addRecord('d');
+  showResult('draw','引き分け', '持将棋'+(msg?'：'+msg:'')+'\n通算 '+rec.w+'勝'+rec.l+'敗'+rec.d+'分');
 }
 
 /* ===== 効果音（Web Audioで合成・アセット不要） ===== */
@@ -3120,7 +3194,7 @@ const SFX = (function(){
   let ctx=null, master=null, on=true;
   function ensure(){
     if(!ctx){ try{ const AC=window.AudioContext||window.webkitAudioContext; ctx=new AC();
-      master=ctx.createGain(); master.gain.value=0.45; master.connect(ctx.destination);
+      master=ctx.createGain(); master.gain.value=0.6; master.connect(ctx.destination);
     }catch(e){ ctx=null; } }
     if(ctx && ctx.state==='suspended'){ try{ctx.resume();}catch(_){} }
     return ctx;
@@ -3161,20 +3235,76 @@ const SFX = (function(){
     play(name){
       if(!on || !ensure()) return; const t=ctx.currentTime;
       switch(name){
-        case 'move': tone(300,t,0.07,'triangle',0.2); noise(t,0.04,0.1,900); break;
-        case 'drop': tone(230,t,0.09,'triangle',0.22); noise(t,0.05,0.12,700); break;
-        case 'capture': noise(t,0.13,0.5,650); tone(150,t,0.16,'sawtooth',0.26,70); tone(88,t+0.02,0.22,'sine',0.3,44); break;
-        case 'slash': /* シャキン！：高域→中域へ走るノイズ＋金属の残響ピング */
-          noiseSweep(t,0.15,0.5,7000,1200);
-          tone(3600,t+0.012,0.1,'sine',0.11,700);
-          tone(5200,t+0.03,0.06,'sine',0.06,1800);
+        case 'move': /* パチッと乾いた駒音 */
+          tone(310,t,0.06,'triangle',0.3); tone(620,t,0.03,'sine',0.14); noise(t,0.045,0.2,1400); break;
+        case 'drop': /* トンッと重めの打ち込み */
+          tone(220,t,0.1,'triangle',0.34); tone(110,t,0.12,'sine',0.24,70); noise(t,0.06,0.22,900); break;
+        case 'capture': /* ドスン！：サブベース＋轟音＋破片 */
+          tone(58,t,0.3,'sine',0.5,32);
+          tone(150,t,0.18,'sawtooth',0.34,55);
+          noise(t,0.18,0.65,700);
+          noise(t+0.08,0.1,0.25,2600); /* 破片のカラカラ */
           break;
-        case 'promote': [523,659,784,1047].forEach((f,i)=>tone(f,t+i*0.06,0.18,'triangle',0.2)); break;
-        case 'flip': tone(520,t,0.09,'sine',0.16,1000); noise(t,0.05,0.08,1600); break;
-        case 'check': tone(880,t,0.12,'square',0.14); tone(1174,t+0.09,0.12,'square',0.12); break;
-        case 'win': [523,659,784,1047,1319].forEach((f,i)=>tone(f,t+i*0.09,0.3,'triangle',0.24)); break;
-        case 'lose': [440,392,330,247].forEach((f,i)=>tone(f,t+i*0.13,0.36,'sine',0.22)); break;
-        case 'draw': [523,523,415].forEach((f,i)=>tone(f,t+i*0.13,0.3,'sine',0.18)); break;
+        case 'slash': /* シャキーン！：二重スイープ＋鋭い金属リング */
+          noiseSweep(t,0.16,0.6,8000,1100);
+          noiseSweep(t+0.02,0.12,0.35,5200,900);
+          tone(3600,t+0.012,0.12,'sine',0.16,650);
+          tone(5200,t+0.03,0.08,'sine',0.1,1600);
+          tone(7000,t+0.045,0.05,'sine',0.06,2400);
+          break;
+        case 'crit': /* 会心の一撃：溜め上昇→大爆発＋鐘 */
+          tone(300,t,0.09,'sawtooth',0.22,1300);
+          tone(46,t+0.1,0.5,'sine',0.6,26);
+          noise(t+0.1,0.3,0.7,500);
+          noiseSweep(t+0.1,0.2,0.5,6000,700);
+          tone(2093,t+0.12,0.4,'triangle',0.2);
+          tone(2637,t+0.16,0.35,'triangle',0.14);
+          break;
+        case 'promote': /* 成り：きらびやかな上昇アルペジオ＋シャラララ */
+          [523,659,784,1047,1319,1568].forEach((f,i)=>tone(f,t+i*0.05,0.22,'triangle',0.24));
+          noiseSweep(t+0.05,0.35,0.16,3000,9000);
+          break;
+        case 'flip': tone(520,t,0.1,'sine',0.22,1050); tone(780,t+0.05,0.08,'sine',0.14,1300); noise(t,0.05,0.12,1800); break;
+        case 'check': /* 王手：不協和ブラスのスティング＋ドン */
+          tone(880,t,0.3,'sawtooth',0.16);
+          tone(932,t,0.3,'sawtooth',0.16);
+          tone(440,t,0.3,'square',0.1);
+          tone(90,t+0.02,0.25,'sine',0.3,50);
+          break;
+        case 'win': /* 勝利ファンファーレ：3連コード＋シンバル */
+          [[523,659,784],[698,880,1047],[784,988,1175,1568]].forEach((chord,ci)=>{
+            chord.forEach(f=>{ tone(f,t+ci*0.22,ci===2?0.7:0.2,'triangle',0.22); tone(f/2,t+ci*0.22,ci===2?0.7:0.2,'sawtooth',0.08); });
+          });
+          noiseSweep(t+0.44,0.6,0.18,6000,10000); /* シンバル */
+          break;
+        case 'lose': /* 敗北：重い下降＋低い鐘 */
+          [440,392,330,247].forEach((f,i)=>{ tone(f,t+i*0.15,0.4,'sine',0.26); tone(f/2,t+i*0.15,0.4,'triangle',0.12); });
+          tone(65,t+0.6,0.8,'sine',0.3,40);
+          break;
+        case 'draw': [523,523,415].forEach((f,i)=>tone(f,t+i*0.13,0.3,'sine',0.2)); break;
+      }
+    },
+    // ===== BGM：五音音階の琴風アルペジオ（合成・既定OFF） =====
+    bgm:{
+      playing:false, timer:null,
+      start(){ if(this.playing || !ensure()) return; this.playing=true; this._loop(); },
+      stop(){ this.playing=false; if(this.timer){clearTimeout(this.timer); this.timer=null;} },
+      _pluck(f,t0,g){ if(!ctx)return; const o=ctx.createOscillator(),o2=ctx.createOscillator(),gn=ctx.createGain();
+        o.type='triangle'; o.frequency.value=f; o2.type='sine'; o2.frequency.value=f*2.005;
+        gn.gain.setValueAtTime(0.0001,t0); gn.gain.exponentialRampToValueAtTime(g,t0+0.015);
+        gn.gain.exponentialRampToValueAtTime(0.0001,t0+1.3);
+        o.connect(gn); o2.connect(gn); gn.connect(master); o.start(t0); o2.start(t0); o.stop(t0+1.4); o2.stop(t0+1.4);
+      },
+      _loop(){
+        if(!this.playing || !ctx) return;
+        const scale=[261.6,293.7,329.6,392,440,523.3,587.3,659.3]; // 陽音階寄りのペンタ＋α
+        const t=ctx.currentTime;
+        // 2小節ぶん（8ステップ）をまとめて予約
+        for(let i=0;i<8;i++){
+          if(Math.random()<0.72){ this._pluck(scale[Math.floor(Math.random()*scale.length)], t+i*0.55, 0.055); }
+          if(i%4===0){ this._pluck(scale[0]/2, t+i*0.55, 0.045); } // 低音の根音
+        }
+        this.timer=setTimeout(()=>this._loop(), 8*550-120);
       }
     }
   };
@@ -3193,7 +3323,11 @@ function computeFx(prev, side, m, promo){
     const wasEnemy=a.p!==side, changed=!b||b.t!==a.t||b.p!==a.p;
     if(wasEnemy && changed) caps.push({r,c,code:a.t,p:a.p});
   }
-  return {caps, flips, moveTo:(m&&m.tr!==undefined?[m.tr,m.tc]:null), drop:!!(m&&m.drop), promo:!!promo};
+  // 会心の一撃：飛車・角クラス以上（v>=560）か royal を取ったとき
+  const crit = caps.some(cp=> isRoyal(cp.code) || ((VALUE[cp.code]||0)>=560));
+  return {caps, flips, moveTo:(m&&m.tr!==undefined?[m.tr,m.tc]:null),
+    moveFrom:(m&&!m.drop&&m.fr!==undefined?[m.fr,m.fc]:null),
+    drop:!!(m&&m.drop), promo:!!promo, side, crit};
 }
 function applyFx(d){
   if(!SFX.on) return;
@@ -3201,22 +3335,52 @@ function applyFx(d){
   if(!bd||!fx) return;
   const fxRect=fx.getBoundingClientRect();
   const cellAt=(r,c)=>bd.querySelector('.cell[data-r="'+r+'"][data-c="'+c+'"]');
-  // 音：取りは「シャキン！（斬撃）→ ドスン（衝撃）」の2段。それ以外は従来どおり
-  if(d.caps.length){ SFX.play('slash'); setTimeout(()=>SFX.play('capture'),110); }
+  // 音：取りは「シャキン！→ドスン」、会心はさらに轟音。それ以外は従来どおり
+  if(d.caps.length){
+    SFX.play('slash');
+    if(d.crit){ setTimeout(()=>SFX.play('crit'),90); }
+    else setTimeout(()=>SFX.play('capture'),110);
+  }
   else if(d.drop) SFX.play('drop'); else SFX.play('move');
   if(d.flips.length) setTimeout(()=>SFX.play('flip'),40);
   if(d.promo) setTimeout(()=>SFX.play('promote'),160);
-  // 着地インパクト
-  if(d.moveTo){ const cell=cellAt(d.moveTo[0],d.moveTo[1]);
+  // 移動スライド：移動元→先へ駒が滑る（打つ手・居喰いは除く）
+  if(d.moveFrom && d.moveTo && !(d.moveFrom[0]===d.moveTo[0]&&d.moveFrom[1]===d.moveTo[1])){
+    const fromCell=cellAt(d.moveFrom[0],d.moveFrom[1]), toCell=cellAt(d.moveTo[0],d.moveTo[1]);
+    const mover=toCell&&toCell.querySelector('.koma, .othello-disc, .go-disc');
+    if(fromCell&&toCell&&mover){
+      const fr=fromCell.getBoundingClientRect(), tr2=toCell.getBoundingClientRect();
+      const dx=fr.left-tr2.left, dy=fr.top-tr2.top;
+      if(Math.hypot(dx,dy)>4){
+        mover.style.transition='none';
+        mover.style.transform=(mover.classList.contains('enemy')?'rotate(180deg) ':'')+'translate('+(mover.classList.contains('enemy')?-dx:dx)+'px,'+(mover.classList.contains('enemy')?-dy:dy)+'px)';
+        requestAnimationFrame(()=>{ requestAnimationFrame(()=>{
+          mover.style.transition='transform .13s cubic-bezier(.2,.8,.3,1)';
+          mover.style.transform=mover.classList.contains('enemy')?'rotate(180deg)':'';
+          setTimeout(()=>{ mover.style.transition=''; mover.classList.add('landed'); },140);
+        });});
+      } else { mover.classList.add('landed'); }
+    }
+  }
+  // 着地インパクト（打つ手）
+  else if(d.moveTo){ const cell=cellAt(d.moveTo[0],d.moveTo[1]);
     if(cell){ const k=cell.querySelector('.koma'); if(k) k.classList.add('landed');
       const gd=cell.querySelector('.go-disc'); if(gd&&d.drop) gd.classList.add('drop-in'); } }
   // オセロ裏返り
   d.flips.forEach(f=>{ const cell=cellAt(f.r,f.c); if(cell){ const disc=cell.querySelector('.othello-disc'); if(disc) disc.classList.add('flip'); } });
-  // 取った駒：RPG風の斬撃 → ヒット（白閃光・盤揺れ・バイブ）→ 倒れて散る
+  // 取った駒：RPG風の斬撃 → ヒット（白閃光・盤揺れ・バイブ）→ 倒れて散る → 持ち駒へ飛ぶ
   if(d.caps.length){
+    // 会心の一撃（大駒・royal取り）：全画面フラッシュ＋カットイン＋強バイブ
+    if(d.crit){
+      setTimeout(()=>{
+        const cf=document.createElement('div'); cf.className='fx-critflash';
+        document.body.appendChild(cf); setTimeout(()=>cf.remove(),420);
+        cutIn('会心の一撃！','danger');
+      },100);
+    }
     // ヒットのタイミング（斬線が走り終わる頃）に衝撃系をまとめる
     setTimeout(()=>{
-      if(navigator.vibrate){ try{navigator.vibrate(d.caps.length>1?[30,40,30]:30);}catch(_){} }
+      if(navigator.vibrate){ try{navigator.vibrate(d.crit?[50,50,80]:(d.caps.length>1?[30,40,30]:30));}catch(_){} }
       const wrap=document.querySelector('.board-wrap');
       if(wrap){ wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake'); setTimeout(()=>wrap.classList.remove('shake'),340); }
     },110);
@@ -3225,11 +3389,12 @@ function applyFx(d){
       const cr=cell.getBoundingClientRect();
       const x=cr.left-fxRect.left, y=cr.top-fxRect.top, w=cr.width, h=cr.height;
       const cx=x+w/2, cy=y+h/2;
-      // 1) 斬撃：白い斬線が2本、X字に走る（ドラクエの攻撃エフェクト風）
-      [[-52,0],[38,70]].forEach(([ang,delay])=>{
+      // 1) 斬撃：白い斬線がX字に走る（会心は3本）
+      const slashes = d.crit ? [[-52,0],[38,60],[-8,120]] : [[-52,0],[38,70]];
+      slashes.forEach(([ang,delay])=>{
         setTimeout(()=>{
           const s=document.createElement('div'); s.className='fx-slash';
-          s.style.cssText='left:'+cx+'px;top:'+cy+'px;width:'+(w*2.1)+'px;--ang:'+ang+'deg;';
+          s.style.cssText='left:'+cx+'px;top:'+cy+'px;width:'+(w*(d.crit?2.6:2.1))+'px;--ang:'+ang+'deg;';
           fx.appendChild(s); setTimeout(()=>s.remove(),240);
         }, delay);
       });
@@ -3249,6 +3414,27 @@ function applyFx(d){
         else { fillKoma(k, cap.code); gh.appendChild(k); }
         fx.appendChild(gh); setTimeout(()=>gh.remove(),700);
       },130);
+      // 3.5) 取った駒が自分の持ち駒トレイへ飛んでいく（持ち駒ルールON時）
+      if(RULES.drops && !isRoyal(cap.code)){
+        setTimeout(()=>{
+          const tray=document.getElementById(d.side===1?'capYou':'capEnemy');
+          if(!tray) return;
+          const trr=tray.getBoundingClientRect();
+          const fly=document.createElement('div'); fly.className='fx-fly';
+          fly.style.cssText='left:'+cr.left+'px;top:'+cr.top+'px;width:'+cr.width+'px;height:'+cr.height+'px;';
+          const k=document.createElement('div'); k.className='koma';
+          if(isGo(cap.code)){ const g=document.createElement('div'); g.className='go-disc '+(cap.code==='GOB'?'black':'white'); g.style.cssText='width:100%;height:100%'; fly.appendChild(g); }
+          else if(cap.code==='OTH'){ const o=document.createElement('div'); o.className='othello-disc black'; o.style.cssText='width:100%;height:100%'; fly.appendChild(o); }
+          else { fillKoma(k, demoteOf(cap.code)); fly.appendChild(k); }
+          document.body.appendChild(fly);
+          const tx=(trr.left+28)-cr.left, ty=(trr.top+trr.height/2)-(cr.top+cr.height/2);
+          requestAnimationFrame(()=>{ requestAnimationFrame(()=>{
+            fly.style.transform='translate('+tx+'px,'+ty+'px) scale(.45) rotate(360deg)';
+            fly.style.opacity='0.15';
+          });});
+          setTimeout(()=>fly.remove(),620);
+        },420);
+      }
       // 4) リング＋粒子（ヒットの飛沫）
       setTimeout(()=>{
         const ring=document.createElement('div'); ring.className='fx-ring';
@@ -3298,8 +3484,16 @@ function cutIn(text, kind){
 (function(){
   const btn=document.getElementById('sfxToggle');
   const upd=()=>{ if(btn){ btn.textContent=(SFX.on?'🔊':'🔇')+' 音・演出：'+(SFX.on?'ON':'OFF'); btn.classList.toggle('on',SFX.on); } };
-  if(btn) btn.onclick=()=>{ SFX.on=!SFX.on; if(SFX.on) SFX.resume(); upd(); };
+  if(btn) btn.onclick=()=>{ SFX.on=!SFX.on; if(SFX.on) SFX.resume(); else SFX.bgm.stop(); updBgm(); upd(); };
   upd();
+  const bgmBtn=document.getElementById('bgmToggle');
+  const updBgm=()=>{ if(bgmBtn){ const onB=SFX.bgm.playing; bgmBtn.textContent='🎵 BGM：'+(onB?'ON':'OFF'); bgmBtn.classList.toggle('on',onB); } };
+  if(bgmBtn) bgmBtn.onclick=()=>{
+    if(SFX.bgm.playing){ SFX.bgm.stop(); }
+    else { if(!SFX.on){ SFX.on=true; upd(); } SFX.resume(); SFX.bgm.start(); }
+    updBgm();
+  };
+  updBgm();
   const rb=document.getElementById('resultBanner');
   const hide=()=>{ if(rb){ rb.classList.remove('show'); rb.querySelectorAll('.confetti').forEach(c=>c.remove()); } };
   const cl=document.getElementById('rbClose'); if(cl) cl.onclick=hide;
@@ -3479,6 +3673,8 @@ function updateReplayUI(){
   const seek=document.getElementById('rpSeek');
   if(cnt) cnt.textContent = (replaying? replayIdx+'/'+kifu.length : kifu.length)+'手';
   if(seek){ seek.max=kifu.length; seek.value=replaying?replayIdx:kifu.length; }
+  const pnl=document.querySelector('.replay-panel');
+  if(pnl) pnl.classList.toggle('empty', kifu.length===0 && !replaying); // 棋譜なしは減光
 }
 // リプレイUI配線
 (function wireReplay(){
