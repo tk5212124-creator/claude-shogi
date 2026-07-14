@@ -475,6 +475,33 @@
     background:radial-gradient(circle, rgba(255,255,255,.95), rgba(255,240,200,.5) 55%, transparent 75%);
     animation:fxFlash .26s ease-out forwards;}
   @keyframes fxFlash{0%{opacity:0; transform:scale(.6);} 30%{opacity:1; transform:scale(1.15);} 100%{opacity:0; transform:scale(1.3);}}
+  /* 成り演出：金の光柱が立ち昇る */
+  .fx-pillar{position:absolute; pointer-events:none; transform-origin:50% 100%;
+    background:linear-gradient(to top, rgba(255,228,150,.95), rgba(255,242,200,.6) 42%, rgba(255,246,220,.25) 72%, transparent);
+    box-shadow:0 0 26px rgba(255,214,110,.85), 0 0 60px rgba(255,190,80,.4);
+    border-radius:38% 38% 0 0 / 10% 10% 0 0;
+    animation:fxPillar .8s ease-out forwards;}
+  @keyframes fxPillar{0%{transform:scaleY(0);opacity:0;} 22%{transform:scaleY(1.05);opacity:1;}
+    65%{transform:scaleY(1);opacity:.95;} 100%{transform:scaleY(1.12);opacity:0;}}
+  /* 成り演出：舞い上がる輝きの粒（✦） */
+  .fx-spark{position:absolute; pointer-events:none; color:#ffe08a; font-size:14px; line-height:1;
+    text-shadow:0 0 8px rgba(255,214,110,.95), 0 0 18px rgba(255,180,60,.6);
+    will-change:transform,opacity; animation:fxSpark 1s ease-out forwards;}
+  @keyframes fxSpark{0%{transform:translate(0,0) scale(.5) rotate(0);opacity:0;}
+    15%{opacity:1;} 100%{transform:translate(var(--dx),var(--dy)) scale(1.15) rotate(160deg);opacity:0;}}
+  /* 成り演出：駒の変身ポップ（白く光って大きく弾む。敵駒は180°回転を維持） */
+  .koma.promo-pop{animation:promoPop .65s cubic-bezier(.3,1.5,.4,1);}
+  .koma.enemy.promo-pop{animation:promoPopE .65s cubic-bezier(.3,1.5,.4,1);}
+  @keyframes promoPop{0%{transform:scale(.3);filter:brightness(3) drop-shadow(0 0 14px rgba(255,214,110,1));}
+    45%{transform:scale(1.3);filter:brightness(1.7) drop-shadow(0 0 10px rgba(255,214,110,.9));}
+    100%{transform:none;filter:none;}}
+  @keyframes promoPopE{0%{transform:rotate(180deg) scale(.3);filter:brightness(3) drop-shadow(0 0 14px rgba(255,214,110,1));}
+    45%{transform:rotate(180deg) scale(1.3);filter:brightness(1.7) drop-shadow(0 0 10px rgba(255,214,110,.9));}
+    100%{transform:rotate(180deg);filter:none;}}
+  /* 成りの金カットイン */
+  #cutIn.gold{background:linear-gradient(90deg, transparent, rgba(214,160,30,.94) 18%, rgba(255,206,84,.96) 50%, rgba(214,160,30,.94) 82%, transparent);
+    box-shadow:0 0 30px rgba(245,207,107,.75);}
+  #cutIn.gold #cutInText{color:#3a2504; text-shadow:0 1px 0 rgba(255,255,255,.55), 0 0 16px rgba(255,240,190,.9);}
   .fx-ring{position:absolute; border-radius:50%; border:3px solid rgba(255,210,120,.95);
     box-shadow:0 0 16px rgba(255,170,80,.8); animation:fxRing .5s ease-out forwards;}
   @keyframes fxRing{0%{transform:scale(.2);opacity:.95;} 100%{transform:scale(1.9);opacity:0;}}
@@ -559,7 +586,8 @@
   @media (prefers-reduced-motion: reduce){
     body::before,.board-wrap,h1,button.primary::after,.rb-rays{animation:none !important;}
     .koma.landed,.koma.enemy.landed,.othello-disc.flip,.go-disc.drop-in{animation:none !important;}
-    .fx-slash,.fx-flash{animation-duration:.01s !important;}
+    .fx-slash,.fx-flash,.fx-pillar,.fx-spark{animation-duration:.01s !important;}
+    .koma.promo-pop,.koma.enemy.promo-pop{animation:none !important;}
   }
 
   /* ===== デザイン改善パック（評価①〜⑥反映） ===== */
@@ -3260,9 +3288,15 @@ const SFX = (function(){
           tone(2093,t+0.12,0.4,'triangle',0.2);
           tone(2637,t+0.16,0.35,'triangle',0.14);
           break;
-        case 'promote': /* 成り：きらびやかな上昇アルペジオ＋シャラララ */
-          [523,659,784,1047,1319,1568].forEach((f,i)=>tone(f,t+i*0.05,0.22,'triangle',0.24));
-          noiseSweep(t+0.05,0.35,0.16,3000,9000);
+        case 'promote': /* 成り：ハープの上昇グリス＋輝きの鐘＋暖かいパッド */
+          [392,523,587,659,784,880,1047,1175,1319].forEach((f,i)=>{ /* 速い上昇グリス */
+            tone(f,t+i*0.038,0.3,'triangle',0.2);
+            tone(f*2,t+i*0.038,0.2,'sine',0.07);
+          });
+          tone(1568,t+0.36,0.55,'triangle',0.26);  /* 頂点の鐘 */
+          tone(2093,t+0.4,0.5,'sine',0.14);
+          tone(130.8,t,0.7,'sine',0.16);           /* 低音の暖かいパッド */
+          noiseSweep(t+0.06,0.5,0.18,3000,10000);  /* シャラララ */
           break;
         case 'flip': tone(520,t,0.1,'sine',0.22,1050); tone(780,t+0.05,0.08,'sine',0.14,1300); noise(t,0.05,0.12,1800); break;
         case 'check': /* 王手：不協和ブラスのスティング＋ドン */
@@ -3343,7 +3377,32 @@ function applyFx(d){
   }
   else if(d.drop) SFX.play('drop'); else SFX.play('move');
   if(d.flips.length) setTimeout(()=>SFX.play('flip'),40);
-  if(d.promo) setTimeout(()=>SFX.play('promote'),160);
+  // 成り演出：金の光柱＋輝きの粒＋変身ポップ＋金カットイン（取りと重なる時は斬撃の後に）
+  if(d.promo && d.moveTo){
+    const pDelay = d.caps.length ? 340 : 170;
+    setTimeout(()=>{
+      SFX.play('promote');
+      const cell=cellAt(d.moveTo[0],d.moveTo[1]); if(!cell) return;
+      const cr2=cell.getBoundingClientRect();
+      const x=cr2.left-fxRect.left, y=cr2.top-fxRect.top, w=cr2.width, h=cr2.height;
+      // 光柱（マスの2.6倍の高さで立ち昇る）
+      const pl=document.createElement('div'); pl.className='fx-pillar';
+      pl.style.cssText='left:'+(x+w*0.08)+'px;top:'+(y-h*1.7)+'px;width:'+(w*0.84)+'px;height:'+(h*2.7)+'px;';
+      fx.appendChild(pl); setTimeout(()=>pl.remove(),850);
+      // 変身ポップ（駒が白く光って弾む）
+      const k=cell.querySelector('.koma');
+      if(k){ k.classList.remove('landed'); void k.offsetWidth; k.classList.add('promo-pop'); }
+      // 輝きの粒 ✦ が舞い上がる
+      for(let i=0;i<10;i++){
+        const sp=document.createElement('div'); sp.className='fx-spark'; sp.textContent=(i%3===0?'✦':'✧');
+        const dx=(Math.random()*2-1)*w*1.3, dy=-(h*(0.9+Math.random()*1.8));
+        sp.style.cssText='left:'+(x+w*(0.15+Math.random()*0.7))+'px;top:'+(y+h*(0.3+Math.random()*0.5))+'px;'+
+          'font-size:'+(9+Math.random()*10)+'px;--dx:'+dx+'px;--dy:'+dy+'px;animation-delay:'+(Math.random()*0.18)+'s;';
+        fx.appendChild(sp); setTimeout(()=>sp.remove(),1250);
+      }
+      cutIn('成り！','gold');
+    }, pDelay);
+  }
   // 移動スライド：移動元→先へ駒が滑る（打つ手・居喰いは除く）
   if(d.moveFrom && d.moveTo && !(d.moveFrom[0]===d.moveTo[0]&&d.moveFrom[1]===d.moveTo[1])){
     const fromCell=cellAt(d.moveFrom[0],d.moveFrom[1]), toCell=cellAt(d.moveTo[0],d.moveTo[1]);
