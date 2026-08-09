@@ -876,6 +876,7 @@
       <label class="rule-row"><input type="checkbox" id="rKeep"> 取った駒は成ったまま持ち駒にする</label>
       <label class="rule-row"><input type="checkbox" id="rNifu"> 二歩を禁止する</label>
       <label class="rule-row"><input type="checkbox" id="rSennichite"> 千日手（同一局面4回）で引き分け</label>
+      <label class="rule-row"><input type="checkbox" id="rBanSennichite"> 千日手を避ける（同一局面が4回目になる手は指せない＝前と同じ手を繰り返せない）</label>
       <label class="rule-row"><input type="checkbox" id="rRankless"> 格なしの駒（チェス駒・成駒・はさみ駒）を一般駒として扱う（範囲攻撃で取られる）</label>
       <label class="rule-row"><input type="checkbox" id="rRandSpecial"> ランダム置換の候補にはさみ駒・オセロ駒を含める</label>
       <label class="rule-row"><input type="checkbox" id="rRepromote"> 成り条件をもう一度満たすと、もう一度成れる（成駒の成駒。例：敵駒を取ると成るルールなら、再度敵駒を取ると更に成る）</label>
@@ -1978,7 +1979,8 @@ const RULES={
   promoOnCapture:false, // 敵駒を取ったら成れる（3つとも外すと成り自体が無くなる）
   drawNoMove:true,   // どこにも動けない・打てなくなったら持将棋（引き分け）。初期ON
   drawBothEnter:false,// 双方の王が敵陣に入ったら持将棋（引き分け）。初期OFF
-  captureAll:false   // 相手の駒を全て取り切るまで戦う（王の有無に関係なく勝敗判定）。囲碁/オセロ/はさみ向け
+  captureAll:false,  // 相手の駒を全て取り切るまで戦う（王の有無に関係なく勝敗判定）。囲碁/オセロ/はさみ向け
+  banSennichite:true // 千日手回避：同一局面が4回目になる手を禁じる（＝千日手が成立しない）
 };
 let posCount={};     // 局面出現回数（千日手判定用）
 const SPEEDS=[
@@ -2287,6 +2289,8 @@ function dropTargets(b,t,p){
 // 着手mが手番pにとって合法か（手動・CPU共通の唯一の判定）。盤bを指定可（既定は実盤）。
 function isLegalMove(m, p, b){
   const bd = b || board;
+  // 千日手回避ルール：同一局面が4回目になる手は指せない（人間・CPU共通の判定）
+  if(!(b && b!==board) && wouldRepeat(p, m)) return false;
   if(m.drop){
     return dropTargets(bd, m.drop, p).some(([r,c])=>r===m.tr&&c===m.tc);
   }
@@ -2298,6 +2302,24 @@ function isLegalMove(m, p, b){
     return lionMoves(bd, m.fr, m.fc).some(x=>x.tr===m.tr&&x.tc===m.tc && sig(x.caps)===sig(m.caps));
   }
   return moves(bd, m.fr, m.fc).some(([r,c])=>r===m.tr&&c===m.tc);
+}
+// 局面キー（盤＋手番＋持ち駒）。任意の局面に使える共通形式。
+function posKeyOf(b, tn, cy, ce){
+  let s='';
+  for(let r=0;r<b.length;r++){ const row=b[r]||[];
+    for(let c=0;c<row.length;c++){ const pc=row[c]; s+= pc?(pc.t+(pc.p>0?'+':'-')):'.'; s+=','; } }
+  s+='|'+tn+'|'+[...cy].sort().join('')+'|'+[...ce].sort().join('');
+  return s;
+}
+// この着手を指すと同一局面が4回目（＝千日手成立）になるか。
+// 実盤に対してのみ判定し、探索中の仮想盤では判定しない（読みの内部では無効）。
+function wouldRepeat(side, m){
+  if(!RULES.banSennichite || !m) return false;
+  try{
+    const s=simulate(board, m, side, capYou, capEnemy);
+    if(!s || !s.nb) return false;
+    return (posCount[posKeyOf(s.nb, side, s.ncy, s.nce)]||0) >= 3;
+  }catch(_){ return false; }
 }
 
 /* ===== 成り判定 ===== */
@@ -2354,12 +2376,15 @@ function render(){
   bd.classList.toggle('bigboard', Math.max(NR,NC)>=13);
   let movable=new Set();
   if(sel){
-    if(sel.drop){ dropTargets(board,sel.t,sel.p||turn).forEach(([r,c])=>movable.add(r+'_'+c)); }
+    // 可動表示も合法判定と同じゲートを通す（千日手回避で禁じられた手は光らせない）
+    if(sel.drop){ const sp=sel.p||turn;
+      dropTargets(board,sel.t,sp).forEach(([r,c])=>{ if(isLegalMove({drop:sel.t,tr:r,tc:c},sp)) movable.add(r+'_'+c); }); }
     else {
-      moves(board,sel.r,sel.c).forEach(([r,c])=>movable.add(r+'_'+c));
+      const mv=board[sel.r][sel.c], mp=mv?mv.p:turn;
+      moves(board,sel.r,sel.c).forEach(([r,c])=>{ if(isLegalMove({fr:sel.r,fc:sel.c,tr:r,tc:c},mp)) movable.add(r+'_'+c); });
       // 獅子型：2歩先・取って戻る先なども可動表示
       const lp=board[sel.r][sel.c];
-      if(lp&&hasLion(lp.t)) lionMoves(board,sel.r,sel.c).forEach(m=>{ if(!(m.tr===sel.r&&m.tc===sel.c)) movable.add(m.tr+'_'+m.tc); });
+      if(lp&&hasLion(lp.t)) lionMoves(board,sel.r,sel.c).forEach(m=>{ if(!(m.tr===sel.r&&m.tc===sel.c) && isLegalMove(m,lp.p)) movable.add(m.tr+'_'+m.tc); });
       // キャスリング候補
       const k=board[sel.r][sel.c];
       if(k&&k.t==='cK'&&!k.moved){
@@ -2563,6 +2588,8 @@ function onCell(r,c){
   if(sel){
     if(sel.drop){
       if(dropTargets(board,sel.t,me).some(([a,b])=>a===r&&b===c)){
+        // 合法判定は人間・CPU共通の isLegalMove を必ず通す（千日手回避を含む）
+        if(!isLegalMove({drop:sel.t,tr:r,tc:c}, me)){ setStatus('千日手になるため、その手は指せません','think'); return; }
         doDrop(sel.t,r,c,me); sel=null; afterPlayer(); return;
       }
     } else {
@@ -2576,6 +2603,7 @@ function onCell(r,c){
       const cast=castlingMove(sel.r,sel.c,r,c);
       if(cast){ doCastling(sel.r,sel.c,r,c,cast,me); sel=null; afterPlayer(); return; }
       if(moves(board,sel.r,sel.c).some(([a,b])=>a===r&&b===c)){
+        if(!isLegalMove({fr:sel.r,fc:sel.c,tr:r,tc:c}, me)){ setStatus('千日手になるため、その手は指せません','think'); return; }
         attemptMove(sel.r,sel.c,r,c); return;
       }
     }
@@ -3122,8 +3150,10 @@ function search(b,cy,ce,depth,side,alpha,beta){
 // side=-1(相手) or 1(あなた) の最善手を選ぶ。評価は常に相手(-1)視点なので
 // side=-1は最大化、side=1は最小化したい手を選ぶ。
 function cpuPickMove(side, depth){
-  const list=genMoves(board,side,capYou,capEnemy);
-  if(!list.length) return null;
+  let list=genMoves(board,side,capYou,capEnemy);
+  // 実際に指す手は人間と同じ合法判定を通す（千日手回避で禁じた手は候補から除く）
+  if(RULES.banSennichite) list=list.filter(m=>isLegalMove(m,side));
+  if(!list.length) return null;  // 指せる手が無い＝手詰まり（呼び出し側が持将棋/詰みとして解決）
   let DEPTH = depth!=null ? depth : (SPEEDS[speedIdx].depth||3);
   // 大盤は合法手・分岐が爆発するためCPUを簡易化（探索を浅くする割り切り）
   const BMAX=Math.max(NR,NC);
@@ -3677,16 +3707,22 @@ function cutIn(text, kind){
 })();
 // side が動かせる駒・打てる持ち駒を1つでも持つか（最初に見つけたら即true）
 function hasAnyLegalMove(side){
+  // 判定は人間・CPUと同じ isLegalMove を通す（千日手回避で禁じた手は「指せる手」に数えない）
   for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
     const pc=board[r][c];
     if(pc&&pc.p===side){
-      if(moves(board,r,c).length) return true;
-      if(hasLion(pc.t) && lionMoves(board,r,c).length>1) return true;
+      const ms=moves(board,r,c);
+      for(const [tr,tc] of ms){ if(isLegalMove({fr:r,fc:c,tr,tc},side)) return true; }
+      if(hasLion(pc.t)){
+        for(const lm of lionMoves(board,r,c)){ if(!(lm.tr===r&&lm.tc===c) && isLegalMove(lm,side)) return true; }
+      }
     }
   }
   if(RULES.drops){
     const cap=side===1?capYou:capEnemy;
-    for(const t of new Set(cap)){ if(dropTargets(board,t,side).length) return true; }
+    for(const t of new Set(cap)){
+      for(const [tr,tc] of dropTargets(board,t,side)){ if(isLegalMove({drop:t,tr,tc},side)) return true; }
+    }
   }
   return false;
 }
@@ -3713,12 +3749,7 @@ function resolveNoMove(side){
   else endGame(-side);
 }
 // 局面ハッシュ（盤＋手番＋持ち駒）
-function boardHash(){
-  let s='';
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){const pc=board[r][c]; s+= pc?(pc.t+(pc.p>0?'+':'-')):'.'; s+=',';}
-  s+='|'+turn+'|'+[...capYou].sort().join('')+'|'+[...capEnemy].sort().join('');
-  return s;
-}
+function boardHash(){ return posKeyOf(board, turn, capYou, capEnemy); }
 function checkSennichite(){
   if(!RULES.sennichite || gameOver) return;
   const h=boardHash();
@@ -4479,6 +4510,7 @@ function openRuleModal(){
   document.getElementById('rKeep').checked=RULES.keepPromoted;
   document.getElementById('rNifu').checked=RULES.nifu;
   document.getElementById('rSennichite').checked=RULES.sennichite;
+  document.getElementById('rBanSennichite').checked=RULES.banSennichite;
   document.getElementById('rRankless').checked=RULES.ranklessAsGeneral;
   document.getElementById('rRandSpecial').checked=RULES.randomIncludeSpecial;
   document.getElementById('rRepromote').checked=RULES.repromote;
@@ -4498,6 +4530,7 @@ document.getElementById('rDrops').onchange=e=>RULES.drops=e.target.checked;
 document.getElementById('rKeep').onchange=e=>RULES.keepPromoted=e.target.checked;
 document.getElementById('rNifu').onchange=e=>RULES.nifu=e.target.checked;
 document.getElementById('rSennichite').onchange=e=>RULES.sennichite=e.target.checked;
+document.getElementById('rBanSennichite').onchange=e=>{ RULES.banSennichite=e.target.checked; render(); };
 document.getElementById('rRankless').onchange=e=>{ RULES.ranklessAsGeneral=e.target.checked; POWER_CACHE_clear(); render(); };
 document.getElementById('rRandSpecial').onchange=e=>{ RULES.randomIncludeSpecial=e.target.checked; };
 document.getElementById('rRepromote').onchange=e=>{ RULES.repromote=e.target.checked; };
