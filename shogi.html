@@ -2891,7 +2891,7 @@ function doAutoMove(){
     if(!legal.length){ resolveNoMove(turn); return false; }
     m=legal[Math.floor(Math.random()*legal.length)];
   }
-  applyMoveSilent(turn,m, sp.turbo); // 超高速は描画を間引く
+  applyMoveSilent(turn,m); // 描画の間引き・演出可否は速度/音設定から自動判定（人間の手と同一経路）
   if(gameOver){ render(); return true; }
   turn=-turn;
   return true;
@@ -3150,12 +3150,21 @@ function cpuPickMove(side, depth){
   return best||cand[0]||list[0];
 }
 
-// side の手を盤に反映。玉を取ったらその場で勝敗確定。silent=trueで描画抑制。
+// 演出を行うかは「音・演出トグル」と「速度（超高速）」だけで決める。
+// 指し手が人間かCPUかでは絶対に分岐させない（機構を手番主体で変えないための共通判定）。
+function fxEnabled(){
+  return SFX.on && !(SPEEDS[speedIdx] && SPEEDS[speedIdx].turbo);
+}
+// 描画の間引きも「速度設定（超高速）」だけで決める。呼び出し側（人間/CPU）では分岐させない。
+function renderThrottled(){ return !!(SPEEDS[speedIdx] && SPEEDS[speedIdx].turbo); }
+// side の手を盤に反映。玉を取ったらその場で勝敗確定。
+// 第3引数は後方互換のため受け取るが使用しない（機構は指し手の主体で変わらない）。
 function applyMove(side,m){ applyMoveSilent(side,m,false); }
-function applyMoveSilent(side,m,silent){
+function applyMoveSilent(side,m,_legacySilent){
+  const silent = renderThrottled();
   pushHistory();
   if(typeof redoStack!=='undefined') redoStack.length=0; // 新しい着手でやり直し履歴は無効
-  const _fxPrev = silent ? null : board.map(row=>row.map(x=>x?{...x}:null)); // 演出用に着手前を控える
+  const _fxPrev = fxEnabled() ? board.map(row=>row.map(x=>x?{...x}:null)) : null; // 演出用に着手前を控える
   let _fxPromo=false;
   const cap = side===-1? capEnemy : capYou;
   if(m.drop){
@@ -3465,7 +3474,7 @@ function computeFx(prev, side, m, promo){
     drop:!!(m&&m.drop), promo:!!promo, side, crit};
 }
 function applyFx(d){
-  if(!SFX.on) return;
+  if(!fxEnabled()) return;   // 判定は設定のみ（人間/CPUで分岐しない）
   const bd=document.getElementById('board'), fx=document.getElementById('fxLayer');
   if(!bd||!fx) return;
   const fxRect=fx.getBoundingClientRect();
