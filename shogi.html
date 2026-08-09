@@ -2864,7 +2864,7 @@ function nextTurn(){
     else{
       setStatus(who+'の番です');
       // 手番があなたに移ったときだけ「あなたの番」カットイン（連続発火は抑止）
-      if(turn===1 && lastRibbonTurn!==turn && history.length>0) cutIn('YOUR TURN','turn');
+      if(turn===1 && lastRibbonTurn!==turn && history.length>0 && Date.now()>fxCutHoldUntil) cutIn('YOUR TURN','turn');
     }
     lastRibbonTurn=turn;
   }
@@ -3481,6 +3481,7 @@ function applyFx(d){
   // 成り演出：金の光柱＋輝きの粒＋変身ポップ＋金カットイン（取りと重なる時は斬撃の後に）
   if(d.promo && d.moveTo){
     const pDelay = d.caps.length ? 340 : 170;
+    fxCutHoldUntil = Date.now() + pDelay + 1100;  // 成りカットインが手番表示に潰されないよう予約
     setTimeout(()=>{
       SFX.play('promote');
       const cell=cellAt(d.moveTo[0],d.moveTo[1]); if(!cell) return;
@@ -3501,7 +3502,8 @@ function applyFx(d){
           'font-size:'+(9+Math.random()*10)+'px;--dx:'+dx+'px;--dy:'+dy+'px;animation-delay:'+(Math.random()*0.18)+'s;';
         fx.appendChild(sp); setTimeout(()=>sp.remove(),1250);
       }
-      cutIn('成り！','gold');
+      // どちら側の成りかを明示（相手の成りを自分の手柄と誤認しないように）
+      cutIn(d.side===1?'成り！':'相手が成り', d.side===1?'gold':'danger');
     }, pDelay);
   }
   // 移動スライド：移動元→先へ駒が滑る（打つ手・居喰いは除く）
@@ -3532,10 +3534,12 @@ function applyFx(d){
   if(d.caps.length){
     // 会心の一撃（大駒・royal取り）：全画面フラッシュ＋カットイン＋強バイブ
     if(d.crit){
+      fxCutHoldUntil = Date.now() + 1200;   // 会心/痛恨のカットインを優先
       setTimeout(()=>{
         const cf=document.createElement('div'); cf.className='fx-critflash';
         document.body.appendChild(cf); setTimeout(()=>cf.remove(),420);
-        cutIn('会心の一撃！','danger');
+        // 自分が大駒を取れば「会心の一撃！」、取られた側なら「痛恨の一撃！」
+        cutIn(d.side===1?'会心の一撃！':'痛恨の一撃！','danger');
       },100);
     }
     // ヒットのタイミング（斬線が走り終わる頃）に衝撃系をまとめる
@@ -3624,7 +3628,8 @@ function showResult(kind, title, sub){
   }
 }
 // カットイン（王手！／あなたの番）：盤の上を帯が横切るソシャゲ風演出
-let cutInTimer=null;
+// fxCutHoldUntil：成り・会心など重要なカットインの予約中は「YOUR TURN」を出さない（ちらつき防止）
+let cutInTimer=null, fxCutHoldUntil=0;
 function cutIn(text, kind){
   if(!SFX.on) return;
   let el=document.getElementById('cutIn');
