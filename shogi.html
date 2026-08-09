@@ -99,7 +99,7 @@
     border:1px solid rgba(245,207,107,.25);pointer-events:none;
   }
   .board{
-    display:grid;
+    display:grid;position:relative;
     grid-template-columns:repeat(9,minmax(0,1fr));
     grid-template-rows:repeat(9,minmax(0,1fr));
     width:min(92vw,410px);height:min(92vw,410px);
@@ -134,6 +134,13 @@
   .cell.sel{background:radial-gradient(circle,rgba(98,209,160,.55),rgba(98,209,160,.2));}
   .cell.last{background:rgba(224,86,63,.18);}
   /* 編集モードのドラッグ移動 */
+  /* 九宮（宮殿）：枠と対角線を盤に描く */
+  .palace-layer{position:absolute;inset:0;z-index:4;pointer-events:none;}
+  .palace-box{position:absolute;box-sizing:border-box;
+    border:2px solid rgba(107,74,30,.6);
+    background:rgba(107,74,30,.05);}
+  .palace-box svg{width:100%;height:100%;display:block;}
+  .palace-box line{stroke:rgba(107,74,30,.6);stroke-width:2;vector-effect:non-scaling-stroke;}
   .cell.drag-src{opacity:.3;}
   .cell.drag-over{outline:2px solid var(--glow);outline-offset:-2px;background:rgba(139,107,255,.22);}
   .drag-ghost{position:fixed;z-index:9999;pointer-events:none;transform:translate(-50%,-50%);
@@ -771,6 +778,7 @@
     </div>
     <div class="replay-row" style="margin-top:6px;margin-bottom:0;">
       <button id="rpExit">対局に戻る</button>
+      <button id="rpCopy">📋 デバッグ情報をコピー</button>
     </div>
   </div>
 
@@ -2018,6 +2026,83 @@ const RULES={
   palace:false,        // 九宮：帥/將・仕/士は宮殿から出られない（シャンチー）
   xiangqiSennichite:false // シャンチー式の千日手判定（連続王手の反復は攻撃側の負け）
 };
+// ===== デバッグ情報の書き出し（棋譜・初期配置・ルール・現局面をテキスト化） =====
+// 盤を人が読める図に（. は空きマス。相手駒は括弧付き）
+function boardToText(b){
+  if(!b||!b.length) return '(なし)';
+  return b.map(row=>row.map(pc=>{
+    if(!pc) return '・';
+    const k=(typeof KANJI!=='undefined'&&KANJI[pc.t])?KANJI[pc.t]:pc.t;
+    return (pc.p===1?'▲':'△')+k;
+  }).join(' ')).join('\n');
+}
+function kifuToText(){
+  if(!kifu.length) return '(まだ指し手がありません)';
+  return kifu.map((k,i)=>{
+    const who=k.side===1?'▲':'△';
+    const to='('+(k.to?(k.to[0]+1)+'行'+(k.to[1]+1)+'列':'?')+')';
+    if(k.drop) return (i+1)+'. '+who+((KANJI[k.drop]||k.drop))+' 打 '+to;
+    const from=k.from?('('+(k.from[0]+1)+'行'+(k.from[1]+1)+'列)'):'';
+    const nm=KANJI[k.code]||k.code;
+    const pr=k.promo?(' 成→'+(KANJI[k.promoTo]||k.promoTo||'')):'';
+    const cap=k.cap?(' 取:'+(KANJI[k.cap]||k.cap)):'';
+    return (i+1)+'. '+who+nm+' '+from+'→'+to+pr+cap;
+  }).join('\n');
+}
+function debugReport(){
+  const L=[];
+  L.push('===== 将棋アプリ デバッグ情報 =====');
+  L.push('盤サイズ: '+NR+' 行 × '+NC+' 列 ／ 成りゾーン(PZ): '+PZ);
+  L.push('手番: '+(turn===1?'あなた':'相手')+' ／ 先手: '+(youAreSente?'あなた':'相手')+
+         ' ／ 対局終了: '+gameOver+' ／ 手数: '+kifu.length);
+  L.push('自動: あなた='+(autoYou?'CPU':'手動')+' 相手='+(autoEnemy?'CPU':'手動')+
+         ' ／ 速度: '+(SPEEDS[speedIdx]?SPEEDS[speedIdx].n:speedIdx));
+  L.push('');
+  L.push('--- ルール設定 ---');
+  Object.keys(RULES).forEach(k=>L.push('  '+k+' = '+JSON.stringify(RULES[k])));
+  L.push('');
+  L.push('--- 初期配置（最初の一手を指す直前）---');
+  L.push(gameStartSnap? boardToText(gameStartSnap.board) : boardToText(board)+'\n(まだ一手も指していないため現在の盤)');
+  if(gameStartSnap){
+    L.push('  持ち駒 あなた: '+(gameStartSnap.capYou.map(t=>KANJI[t]||t).join(',')||'なし'));
+    L.push('  持ち駒 相手  : '+(gameStartSnap.capEnemy.map(t=>KANJI[t]||t).join(',')||'なし'));
+  }
+  L.push('');
+  L.push('--- 現在の盤 ---');
+  L.push(boardToText(board));
+  L.push('  持ち駒 あなた: '+(capYou.map(t=>KANJI[t]||t).join(',')||'なし'));
+  L.push('  持ち駒 相手  : '+(capEnemy.map(t=>KANJI[t]||t).join(',')||'なし'));
+  L.push('');
+  L.push('--- 棋譜 ---');
+  L.push(kifuToText());
+  L.push('');
+  L.push('--- 生データ(JSON) ---');
+  try{
+    L.push(JSON.stringify({NR,NC,PZ,turn,youAreSente,gameOver,RULES,
+      board:board.map(r=>r.map(x=>x?{t:x.t,p:x.p,o:x.o||undefined}:null)),
+      capYou, capEnemy,
+      start: gameStartSnap? {board:gameStartSnap.board.map(r=>r.map(x=>x?{t:x.t,p:x.p}:null)),
+                             capYou:gameStartSnap.capYou, capEnemy:gameStartSnap.capEnemy}:null,
+      kifu}));
+  }catch(e){ L.push('(JSON化に失敗: '+e.message+')'); }
+  return L.join('\n');
+}
+// クリップボードへコピー（非対応環境ではテキスト選択でフォールバック）
+async function copyDebugReport(){
+  const text=debugReport();
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(text); }
+    else throw new Error('no clipboard api');
+    setStatus('デバッグ情報をコピーしました（'+text.length+'文字）','win');
+  }catch(_){
+    const ta=document.createElement('textarea');
+    ta.value=text; ta.style.cssText='position:fixed;left:0;top:0;opacity:0;';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    let ok=false; try{ ok=document.execCommand('copy'); }catch(__){}
+    ta.remove();
+    setStatus(ok?'デバッグ情報をコピーしました（'+text.length+'文字）':'コピーに失敗しました', ok?'win':'lose');
+  }
+}
 // 千日手の扱いはモードひとつで決め、内部フラグはそこから導出する（設定の一元化）
 function setSennichiteMode(mode){
   RULES.sennichiteMode = mode;
@@ -2529,6 +2614,7 @@ function render(){
     }
     bd.appendChild(cell);
   }
+  renderPalace(bd);   // 九宮（宮殿）の枠と対角線を盤に描く
   renderCap('capYou',capYou,1);
   renderCap('capEnemy',capEnemy,-1);
   // 手番側のプレイヤー札を金色に光らせる
@@ -2536,6 +2622,22 @@ function render(){
   if(cy) cy.classList.toggle('turn-active', !gameOver && !editing && !replaying && turn===1);
   if(ce) ce.classList.toggle('turn-active', !gameOver && !editing && !replaying && turn===-1);
   if(pendingFx){ const d=pendingFx; pendingFx=null; requestAnimationFrame(()=>applyFx(d)); } // 着手演出
+}
+// 九宮（宮殿）を盤に描画。両陣ぶん、枠＋対角線（シャンチーの盤と同じ見た目）。
+function renderPalace(bd){
+  if(!bd || !RULES.palace) return;
+  const s=Math.min(palaceSize(), NR, NC);
+  const c0=Math.floor((NC-s)/2);
+  const layer=document.createElement('div'); layer.className='palace-layer';
+  [NR-s, 0].forEach(r0=>{   // 下（あなた側）と上（相手側）
+    const d=document.createElement('div'); d.className='palace-box';
+    d.style.cssText='left:'+(c0/NC*100)+'%;top:'+(r0/NR*100)+'%;'+
+                    'width:'+(s/NC*100)+'%;height:'+(s/NR*100)+'%;';
+    d.innerHTML='<svg viewBox="0 0 100 100" preserveAspectRatio="none">'+
+                '<line x1="0" y1="0" x2="100" y2="100"/><line x1="100" y1="0" x2="0" y2="100"/></svg>';
+    layer.appendChild(d);
+  });
+  bd.appendChild(layer);
 }
 function renderCap(id,arr,p){
   const el=document.getElementById(id);
@@ -4015,6 +4117,7 @@ function updateReplayUI(){
   bind('rpNext',()=>{ if(!replaying)enterReplay(); pauseReplay(); gotoStep(replayIdx+1); });
   bind('rpStart',()=>{ if(!replaying)enterReplay(); pauseReplay(); gotoStep(0); });
   bind('rpEnd',()=>{ if(!replaying)enterReplay(); pauseReplay(); gotoStep(kifu.length); });
+  bind('rpCopy',()=>copyDebugReport());
   bind('rpExit',()=>{ exitReplay(); render();
     if(!gameOver&&!editing&&isAuto(turn)) nextTurn();
     else setStatus(gameOver?'':'対局に戻りました'); });
