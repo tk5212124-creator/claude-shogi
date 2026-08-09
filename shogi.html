@@ -335,6 +335,9 @@
   .board-setup .edit-bar-row button,.board-setup .bs-row button{font-size:.78rem;padding:7px 10px;}
   .board-setup .bs-size{font-size:.82rem;color:#ece3ff;font-variant-numeric:tabular-nums;}
   .board-setup .bs-note{font-size:.62rem;color:#7d6e57;line-height:1.4;}
+  .board-setup .bs-check{align-items:flex-start;gap:8px;cursor:pointer;}
+  .board-setup .bs-check input{width:18px;height:18px;accent-color:var(--glow);flex:none;margin-top:1px;}
+  .board-setup .bs-check span{font-size:.72rem;color:#cfc4ee;line-height:1.4;}
   /* 大盤：マスと駒名を縮小して収める */
   .board.bigboard .koma{font-size:min(2.2vw,10px);border-radius:0;}
   .board.bigboard .koma-name{font-size:min(2vw,9px);}
@@ -726,6 +729,8 @@
       <button id="applySizeBtn">作成</button>
     </div>
     <div class="bs-row"><span id="sizeVal" class="bs-size">9 行 × 9 列</span></div>
+    <label class="bs-row bs-check"><input type="checkbox" id="bsPalace">
+      <span>九宮をつくる（シャンチー用。帥・将／仕・士は宮殿から出られない。列数が奇数なら3×3、偶数なら2×2）</span></label>
     <div class="bs-note">プリセット適用や行・列の数値を変えて「作成」で盤が作り直されます（編集ツールで駒を配置）。大盤・大局将棋等はCPUを簡易化します。各将棋の初期配置は出典に基づく正確な配置です（大型将棋の一部の希少駒は動きを近縁駒で近似）。</div>
    </div>
   </div>
@@ -889,7 +894,6 @@
       </div>
       <p class="rule-note" style="margin:6px 0 2px;">シャンチー（中国象棋）</p>
       <label class="rule-row"><input type="checkbox" id="rFlyingGeneral"> 王不見王（帥と将を同じ筋で相対させる手は指せない。全ての手が相対になる場合は負け）</label>
-      <label class="rule-row"><input type="checkbox" id="rPalace"> 九宮（帥・将／仕・士は宮殿から出られない。列数が奇数なら3×3、偶数なら2×2）</label>
       <label class="rule-row"><input type="checkbox" id="rRankless"> 格なしの駒（チェス駒・成駒・はさみ駒）を一般駒として扱う（範囲攻撃で取られる）</label>
       <label class="rule-row"><input type="checkbox" id="rRandSpecial"> ランダム置換の候補にはさみ駒・オセロ駒を含める</label>
       <label class="rule-row"><input type="checkbox" id="rRepromote"> 成り条件をもう一度満たすと、もう一度成れる（成駒の成駒。例：敵駒を取ると成るルールなら、再度敵駒を取ると更に成る）</label>
@@ -4088,6 +4092,13 @@ function syncSizeUI(){
   if(rR) rR.value=NR;
   if(cR) cR.value=NC;
   if(val) val.textContent=NR+' 行 × '+NC+' 列';
+  // 九宮は盤の形に関わる設定なので、盤の設定側に置いてここで同期する
+  const pl=document.getElementById('bsPalace');
+  if(pl){ pl.checked=RULES.palace;
+    const s=(NC%2===1)?'3×3':'2×2';
+    const lb=pl.parentElement&&pl.parentElement.querySelector('span');
+    if(lb) lb.textContent='九宮をつくる（シャンチー用。帥・将／仕・士は宮殿から出られない。現在の盤では '+s+'）';
+  }
 }
 // 現在の盤・持ち駒・サイズを「初期配置」として記憶（初期配置に戻す で使用）
 let rememberedSetup=null;
@@ -4137,6 +4148,8 @@ document.getElementById('applyPresetBtn').onclick=()=>{
   if(key==='go'||key==='othello'||key==='hasami') RULES.captureAll=true;
   // シャンチーは持ち駒（打ち込み）が無いゲームなので自動OFF
   if(key==='xiangqi'){ RULES.drops=false; RULES.flyingGeneral=true; RULES.palace=true; setSennichiteMode('xiangqi'); }
+  else RULES.palace=false;  // 九宮は盤ごとの設定。シャンチー以外の盤ではOFFに戻す
+  syncSizeUI(); render();   // 盤の設定のチェック表示（九宮）を実際の設定に合わせる
   const label = PRESET_LABELS[key] || ('空盤 '+NR+'×'+NC);
   const extra = (key==='go'||key==='othello'||key==='hasami') ? '（ルール「取り切るまで戦う」を自動ON）'
               : (key==='xiangqi') ? '（持ち駒OFF・王不見王・九宮・シャンチー式千日手を自動ON）' : '';
@@ -4625,7 +4638,6 @@ function openRuleModal(){
   document.getElementById('rNifu').checked=RULES.nifu;
   document.getElementById('rSennichiteMode').value=RULES.sennichiteMode;
   document.getElementById('rFlyingGeneral').checked=RULES.flyingGeneral;
-  document.getElementById('rPalace').checked=RULES.palace;
   document.getElementById('rRankless').checked=RULES.ranklessAsGeneral;
   document.getElementById('rRandSpecial').checked=RULES.randomIncludeSpecial;
   document.getElementById('rRepromote').checked=RULES.repromote;
@@ -4646,7 +4658,7 @@ document.getElementById('rKeep').onchange=e=>RULES.keepPromoted=e.target.checked
 document.getElementById('rNifu').onchange=e=>RULES.nifu=e.target.checked;
 document.getElementById('rSennichiteMode').onchange=e=>{ setSennichiteMode(e.target.value); render(); };
 document.getElementById('rFlyingGeneral').onchange=e=>{ RULES.flyingGeneral=e.target.checked; render(); };
-document.getElementById('rPalace').onchange=e=>{ RULES.palace=e.target.checked; render(); };
+document.getElementById('bsPalace').onchange=e=>{ RULES.palace=e.target.checked; render(); };
 document.getElementById('rRankless').onchange=e=>{ RULES.ranklessAsGeneral=e.target.checked; POWER_CACHE_clear(); render(); };
 document.getElementById('rRandSpecial').onchange=e=>{ RULES.randomIncludeSpecial=e.target.checked; };
 document.getElementById('rRepromote').onchange=e=>{ RULES.repromote=e.target.checked; };
