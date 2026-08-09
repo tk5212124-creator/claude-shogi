@@ -877,6 +877,10 @@
       <label class="rule-row"><input type="checkbox" id="rNifu"> 二歩を禁止する</label>
       <label class="rule-row"><input type="checkbox" id="rSennichite"> 千日手（同一局面4回）で引き分け</label>
       <label class="rule-row"><input type="checkbox" id="rBanSennichite"> 千日手を避ける（同一局面が4回目になる手は指せない＝前と同じ手を繰り返せない）</label>
+      <p class="rule-note" style="margin:6px 0 2px;">シャンチー（中国象棋）</p>
+      <label class="rule-row"><input type="checkbox" id="rFlyingGeneral"> 王不見王（帥と将を同じ筋で相対させる手は指せない。全ての手が相対になる場合は負け）</label>
+      <label class="rule-row"><input type="checkbox" id="rPalace"> 九宮（帥・将／仕・士は宮殿から出られない。列数が奇数なら3×3、偶数なら2×2）</label>
+      <label class="rule-row"><input type="checkbox" id="rXiangqiSennichite"> シャンチー式の千日手（連続王手の反復は攻撃側の負け。双方なら引き分け）</label>
       <label class="rule-row"><input type="checkbox" id="rRankless"> 格なしの駒（チェス駒・成駒・はさみ駒）を一般駒として扱う（範囲攻撃で取られる）</label>
       <label class="rule-row"><input type="checkbox" id="rRandSpecial"> ランダム置換の候補にはさみ駒・オセロ駒を含める</label>
       <label class="rule-row"><input type="checkbox" id="rRepromote"> 成り条件をもう一度満たすと、もう一度成れる（成駒の成駒。例：敵駒を取ると成るルールなら、再度敵駒を取ると更に成る）</label>
@@ -1592,6 +1596,21 @@ const BASIC_LIST=['hP','hL','hN','hS','hG','hB','hR','hK','hKw'];
 
 // 駒のひとこと補足（任意・自動説明を補強）
 const DESC={
+  // シャンチー（紅／黒で字が異なる同じ駒。説明に両方を併記）
+  XK:'シャンチーの王【紅：帥／黒：將】。九宮内を縦横1マス。相手の帥・将と同じ筋で相対できない（王不見王）。取られたら負け。',
+  XKb:'シャンチーの王【黒：將／紅：帥】。九宮内を縦横1マス。相手の帥・将と同じ筋で相対できない（王不見王）。取られたら負け。',
+  XA:'シャンチーの士【紅：仕／黒：士】。斜め1マス。九宮から出られない。',
+  XAb:'シャンチーの士【黒：士／紅：仕】。斜め1マス。九宮から出られない。',
+  XE:'シャンチーの象【紅：相／黒：象】。斜め2マスへ跳ぶ。',
+  XEb:'シャンチーの象【黒：象／紅：相】。斜め2マスへ跳ぶ。',
+  XH:'シャンチーの馬【紅：傌／黒：馬】。桂馬型に8方向へ跳ぶ。',
+  XHb:'シャンチーの馬【黒：馬／紅：傌】。桂馬型に8方向へ跳ぶ。',
+  XR:'シャンチーの車【紅：俥／黒：車】。縦横にどこまでも走る（最強の駒）。',
+  XRb:'シャンチーの車【黒：車／紅：俥】。縦横にどこまでも走る（最強の駒）。',
+  XC:'シャンチーの砲【紅：炮／黒：砲】。移動は空マスのみ。取る時だけ間の駒1枚を跳び越えてその先の敵を取る。',
+  XCb:'シャンチーの砲【黒：砲／紅：炮】。移動は空マスのみ。取る時だけ間の駒1枚を跳び越えてその先の敵を取る。',
+  XP:'シャンチーの兵【紅：兵／黒：卒】。前に1マス。河を渡ると横にも動ける（後退はできない）。',
+  XPb:'シャンチーの兵【黒：卒／紅：兵】。前に1マス。河を渡ると横にも動ける（後退はできない）。',
   P:'最も基本の駒。前に1マス。',
   L:'前方にどこまでも直進。',
   N:'前2・横1へ飛び越して跳ねる。',
@@ -1954,7 +1973,7 @@ function initState(keepBoard){
   sel=null; history=[]; gameOver=false; pendingPromo=null;
   turn = youAreSente ? 1 : -1; // 先手から開始（1=あなた, -1=相手）
   kifu=[]; gameStartSnap=null; // 棋譜とリプレイ起点
-  posCount={};
+  posCount={}; repLog=[];
   updateSenteLabel();
 }
 // 棋譜・リプレイ・自動モード状態
@@ -1980,9 +1999,13 @@ const RULES={
   drawNoMove:true,   // どこにも動けない・打てなくなったら持将棋（引き分け）。初期ON
   drawBothEnter:false,// 双方の王が敵陣に入ったら持将棋（引き分け）。初期OFF
   captureAll:false,  // 相手の駒を全て取り切るまで戦う（王の有無に関係なく勝敗判定）。囲碁/オセロ/はさみ向け
-  banSennichite:true // 千日手回避：同一局面が4回目になる手を禁じる（＝千日手が成立しない）
+  banSennichite:true,  // 千日手回避：同一局面が4回目になる手を禁じる（＝千日手が成立しない）
+  flyingGeneral:false, // 王不見王：帥と将を同じ筋で相対させる手は指せない（シャンチー）
+  palace:false,        // 九宮：帥/將・仕/士は宮殿から出られない（シャンチー）
+  xiangqiSennichite:false // シャンチー式の千日手判定（連続王手の反復は攻撃側の負け）
 };
 let posCount={};     // 局面出現回数（千日手判定用）
+let repLog=[];       // 各手の {局面キー, 指した側, 王手か}（シャンチー式千日手の判定用）
 const SPEEDS=[
   {n:'低速',ms:700,depth:3},
   {n:'標準',ms:250,depth:3},
@@ -2134,7 +2157,44 @@ function moves(b,r,c){
   }
   // 鉤行型：直進後に直角に曲がって走る到達先を追加
   if(isHook(pc.t)) hookMoves(b,r,c).forEach(([a,bb])=>res.push([a,bb]));
+  // 九宮（宮殿）：帥/將・仕/士は九宮の外へ出られない
+  if(RULES.palace && isPalaceBound(pc.t)) return res.filter(([tr,tc])=>inPalace(tr,tc,p));
   return res;
+}
+// ===== シャンチーの九宮（宮殿） =====
+// 列数が奇数なら3×3、偶数なら2×2。各陣の最終段側に作る。
+function palaceSize(){ return (NC%2===1)?3:2; }
+function isPalaceBound(t){ return t==='XK'||t==='XKb'||t==='XA'||t==='XAb'; }
+function inPalace(r,c,side){
+  const s=Math.min(palaceSize(), NR, NC);
+  const c0=Math.floor((NC-s)/2), c1=c0+s-1;
+  const r0 = side===1 ? NR-s : 0, r1 = side===1 ? NR-1 : s-1;
+  return r>=r0 && r<=r1 && c>=c0 && c<=c1;
+}
+// ===== 王不見王（帥と将を相対させない） =====
+function isXGeneral(t){ return t==='XK'||t==='XKb'; }
+// 盤 b 上で、同じ筋に居る敵味方のroyalが「間に駒なし」で相対しているか。
+// 帥/將が絡む場合のみ成立（他のroyal同士だけなら発生しない）。
+function generalsFacing(b){
+  const rows=b.length, cols=b[0]?b[0].length:0;
+  for(let c=0;c<cols;c++){
+    let prev=null;
+    for(let r=0;r<rows;r++){
+      const pc=b[r]&&b[r][c]; if(!pc) continue;
+      if(prev && prev.p!==pc.p && isRoyal(prev.t) && isRoyal(pc.t)
+         && (isXGeneral(prev.t)||isXGeneral(pc.t))) return true;
+      prev=pc; // 直前の駒。間に駒があれば相対にならない
+    }
+  }
+  return false;
+}
+// この着手で「王不見王」の状態になるか（実盤のみ判定）
+function wouldFaceGenerals(side, m){
+  if(!RULES.flyingGeneral || !m) return false;
+  try{
+    const s=simulate(board, m, side, capYou, capEnemy);
+    return !!(s && s.nb && generalsFacing(s.nb));
+  }catch(_){ return false; }
 }
 
 /* ===== 獅子型の動き（大局将棋ルール） =====
@@ -2289,8 +2349,11 @@ function dropTargets(b,t,p){
 // 着手mが手番pにとって合法か（手動・CPU共通の唯一の判定）。盤bを指定可（既定は実盤）。
 function isLegalMove(m, p, b){
   const bd = b || board;
-  // 千日手回避ルール：同一局面が4回目になる手は指せない（人間・CPU共通の判定）
-  if(!(b && b!==board) && wouldRepeat(p, m)) return false;
+  // 実盤に対する着手後条件の判定（人間・CPU共通）。探索の仮想盤では判定しない。
+  if(!(b && b!==board)){
+    if(wouldRepeat(p, m)) return false;        // 千日手回避：同一局面4回目の手は指せない
+    if(wouldFaceGenerals(p, m)) return false;  // 王不見王：帥と将を相対させる手は指せない
+  }
   if(m.drop){
     return dropTargets(bd, m.drop, p).some(([r,c])=>r===m.tr&&c===m.tc);
   }
@@ -3295,13 +3358,18 @@ function squareAttackedBy(tr,tc,by){
 function endGame(winner,reason,detail){
   gameOver=true; render(); updateReplayUI();
   const isTry = reason==='try', isCap = reason==='capture', isPts = reason==='points';
+  const isPer = reason==='perpetual', isStuck = reason==='stuck';
   const winMsg = isTry?'▲ あなたの勝ち！トライ成功（ライオンが敵陣の最奥へ到達）'
                : isCap?'▲ あなたの勝ち！相手の駒を全て取り切りました'
                : isPts?'▲ あなたの勝ち！持将棋の点数計算（24点法）で勝利'
+               : isPer?'▲ あなたの勝ち！相手の連続王手の千日手は禁じ手（長将）'
+               : isStuck?'▲ あなたの勝ち！相手は指せる手がありません（困斃）'
                : '▲ あなたの勝ち！相手の王を攻め取りました';
   const loseMsg= isTry?'△ あなたの負け…相手のライオンがトライ成功'
                : isCap?'△ あなたの負け…自分の駒を全て取られました'
                : isPts?'△ あなたの負け…持将棋の点数計算（24点法）で敗北'
+               : isPer?'△ あなたの負け…連続王手の千日手は禁じ手（長将）'
+               : isStuck?'△ あなたの負け…指せる手がありません（困斃）'
                : '△ あなたの負け…王を取られました';
   setStatus((winner===1?winMsg:loseMsg)+(detail?'（'+detail+'）':''), winner===1?'win':'lose');
   const rec=addRecord(winner===1?'w':'l');
@@ -3745,19 +3813,48 @@ function royalInEnemyCamp(side){
 // 手番 side に合法手が無いときの決着：王手でない＆ルールONなら持将棋、さもなくば負け（詰み）
 function resolveNoMove(side){
   const inCheck=checkInfo(side).check;
+  // シャンチー系（王不見王ON かつ その側に帥/將が居る）では、手が無いのは「困斃」で負け
+  if(RULES.flyingGeneral && hasXGeneral(side)){ endGame(-side,'stuck'); return; }
   if(!inCheck && RULES.drawNoMove){ resolveJishogi((side===1?'あなた':'相手')+'は動かせる駒も打てる場所もありません'); }
   else endGame(-side);
+}
+// side の帥/將が盤上に居るか
+function hasXGeneral(side){
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===side&&isXGeneral(pc.t)) return true; }
+  return false;
 }
 // 局面ハッシュ（盤＋手番＋持ち駒）
 function boardHash(){ return posKeyOf(board, turn, capYou, capEnemy); }
 function checkSennichite(){
-  if(!RULES.sennichite || gameOver) return;
+  if(gameOver) return;
+  if(!RULES.sennichite && !RULES.xiangqiSennichite) return;
   const h=boardHash();
   posCount[h]=(posCount[h]||0)+1;
-  if(posCount[h]>=4){
+  // 直前に指した側（この時点で turn はまだ反転前）が相手に王手をかけたか
+  let gaveCheck=false; try{ gaveCheck=checkInfo(-turn).check; }catch(_){}
+  repLog.push({key:h, side:turn, check:gaveCheck});
+  // シャンチー式：同一局面3回目で判定（連続王手の反復は攻撃側の負け）
+  if(RULES.xiangqiSennichite && posCount[h]>=3){ judgeXiangqiRepetition(h); return; }
+  if(RULES.sennichite && posCount[h]>=4){
     gameOver=true; render(); updateReplayUI();
     setStatus('千日手：引き分け','think');
+    const rec=addRecord('d');
+    showResult('draw','引き分け','千日手\n通算 '+rec.w+'勝'+rec.l+'敗'+rec.d+'分');
   }
+}
+// シャンチーの千日手（長将）判定：繰り返し区間で片側の手が全て王手なら、その側の負け。
+// 双方が連続王手なら引き分け（和棋）。それ以外の反復も引き分け。
+// ※本来は「殺」「捉」を含む非常に複雑な規定のため、連続王手（長将）に絞った簡略実装。
+function judgeXiangqiRepetition(key){
+  let first=-1;
+  for(let i=0;i<repLog.length;i++){ if(repLog[i].key===key){ first=i; break; } }
+  const seg = first>=0 ? repLog.slice(first+1) : repLog.slice();
+  const allCheck=(s)=>{ const mine=seg.filter(e=>e.side===s); return mine.length>0 && mine.every(e=>e.check); };
+  const you=allCheck(1), foe=allCheck(-1);
+  if(you && foe) endDraw('双方が連続王手の千日手（和棋）');
+  else if(you) endGame(-1,'perpetual');
+  else if(foe) endGame(1,'perpetual');
+  else endDraw('千日手（和棋）');
 }
 
 /* ===== 棋譜リプレイ ===== */
@@ -3994,7 +4091,7 @@ function restoreSetup(){
     capYou=[...gameStartSnap.capYou]; capEnemy=[...gameStartSnap.capEnemy];
     // PZ・youAreSente は対局開始から不変なので現状維持
   }
-  sel=null; history=[]; gameOver=false; pendingPromo=null; kifu=[]; gameStartSnap=null; posCount={};
+  sel=null; history=[]; gameOver=false; pendingPromo=null; kifu=[]; gameStartSnap=null; posCount={}; repLog=[];
   turn = youAreSente ? 1 : -1;
   if(typeof redoStack!=='undefined') redoStack.length=0;
   updateSenteLabel(); syncSizeUI();
@@ -4009,7 +4106,7 @@ function newGameWithBoard(builder){
   builder();
   sel=null; history=[]; gameOver=false; pendingPromo=null;
   turn = youAreSente ? 1 : -1;
-  kifu=[]; gameStartSnap=null; posCount={};
+  kifu=[]; gameStartSnap=null; posCount={}; repLog=[];
   if(typeof redoStack!=='undefined') redoStack.length=0;
   rememberSetup();          // このプリセット/配置を「初期配置」として記憶
   updateSenteLabel(); syncSizeUI();
@@ -4022,10 +4119,10 @@ document.getElementById('applyPresetBtn').onclick=()=>{
   // 囲碁・オセロ・はさみ将棋は王を置かない代わりに「取り切るまで戦う」を自動ON
   if(key==='go'||key==='othello'||key==='hasami') RULES.captureAll=true;
   // シャンチーは持ち駒（打ち込み）が無いゲームなので自動OFF
-  if(key==='xiangqi') RULES.drops=false;
+  if(key==='xiangqi'){ RULES.drops=false; RULES.flyingGeneral=true; RULES.palace=true; RULES.xiangqiSennichite=true; }
   const label = PRESET_LABELS[key] || ('空盤 '+NR+'×'+NC);
   const extra = (key==='go'||key==='othello'||key==='hasami') ? '（ルール「取り切るまで戦う」を自動ON）'
-              : (key==='xiangqi') ? '（持ち駒ルールを自動OFF。炮は駒を1枚跳び越えて取ります）' : '';
+              : (key==='xiangqi') ? '（持ち駒OFF・王不見王・九宮・シャンチー式千日手を自動ON）' : '';
   setStatus(label+'を準備しました'+extra+'。▶ 開始 で対局（編集ツールで駒も置けます）');
 };
 (function wireSizeRange(){
@@ -4511,6 +4608,9 @@ function openRuleModal(){
   document.getElementById('rNifu').checked=RULES.nifu;
   document.getElementById('rSennichite').checked=RULES.sennichite;
   document.getElementById('rBanSennichite').checked=RULES.banSennichite;
+  document.getElementById('rFlyingGeneral').checked=RULES.flyingGeneral;
+  document.getElementById('rPalace').checked=RULES.palace;
+  document.getElementById('rXiangqiSennichite').checked=RULES.xiangqiSennichite;
   document.getElementById('rRankless').checked=RULES.ranklessAsGeneral;
   document.getElementById('rRandSpecial').checked=RULES.randomIncludeSpecial;
   document.getElementById('rRepromote').checked=RULES.repromote;
@@ -4531,6 +4631,9 @@ document.getElementById('rKeep').onchange=e=>RULES.keepPromoted=e.target.checked
 document.getElementById('rNifu').onchange=e=>RULES.nifu=e.target.checked;
 document.getElementById('rSennichite').onchange=e=>RULES.sennichite=e.target.checked;
 document.getElementById('rBanSennichite').onchange=e=>{ RULES.banSennichite=e.target.checked; render(); };
+document.getElementById('rFlyingGeneral').onchange=e=>{ RULES.flyingGeneral=e.target.checked; render(); };
+document.getElementById('rPalace').onchange=e=>{ RULES.palace=e.target.checked; render(); };
+document.getElementById('rXiangqiSennichite').onchange=e=>{ RULES.xiangqiSennichite=e.target.checked; };
 document.getElementById('rRankless').onchange=e=>{ RULES.ranklessAsGeneral=e.target.checked; POWER_CACHE_clear(); render(); };
 document.getElementById('rRandSpecial').onchange=e=>{ RULES.randomIncludeSpecial=e.target.checked; };
 document.getElementById('rRepromote').onchange=e=>{ RULES.repromote=e.target.checked; };
