@@ -352,6 +352,10 @@
   .rule-row{display:flex;align-items:center;gap:10px;padding:10px 6px;font-size:.86rem;color:#ece3ff;
     border-bottom:1px solid rgba(139,107,255,.15);cursor:pointer;}
   .rule-row input{width:18px;height:18px;accent-color:var(--glow);}
+  .rule-row.rule-sel{flex-direction:column;align-items:stretch;gap:6px;}
+  .rule-row.rule-sel>span{font-size:.82rem;color:var(--gold);letter-spacing:.08em;}
+  .rule-row.rule-sel select{width:100%;font-size:.8rem;padding:8px 10px;border-radius:9px;
+    background:#2a2142;color:#ece3ff;border:1px solid rgba(139,107,255,.45);}
   .rule-note{font-size:.72rem;color:#b3a8d8;line-height:1.5;margin:10px 0;}
   .side-toggle{flex:1;}
   .side-toggle.on{background:linear-gradient(160deg,#6a5a8a,#473a63);border-color:#8d7ab0;color:#ece3ff;}
@@ -875,12 +879,17 @@
       <label class="rule-row"><input type="checkbox" id="rDrops"> 持ち駒を使う（取った駒を打てる）</label>
       <label class="rule-row"><input type="checkbox" id="rKeep"> 取った駒は成ったまま持ち駒にする</label>
       <label class="rule-row"><input type="checkbox" id="rNifu"> 二歩を禁止する</label>
-      <label class="rule-row"><input type="checkbox" id="rSennichite"> 千日手（同一局面4回）で引き分け</label>
-      <label class="rule-row"><input type="checkbox" id="rBanSennichite"> 千日手を避ける（同一局面が4回目になる手は指せない＝前と同じ手を繰り返せない）</label>
+      <div class="rule-row rule-sel"><span>千日手の扱い</span>
+        <select id="rSennichiteMode">
+          <option value="avoid">千日手を避ける（4回目になる手は指せない）</option>
+          <option value="draw">同一局面4回で引き分け（本将棋の標準）</option>
+          <option value="xiangqi">シャンチー式（連続王手の反復は攻撃側の負け／双方なら引き分け）</option>
+          <option value="none">制限なし（千日手でも続行）</option>
+        </select>
+      </div>
       <p class="rule-note" style="margin:6px 0 2px;">シャンチー（中国象棋）</p>
       <label class="rule-row"><input type="checkbox" id="rFlyingGeneral"> 王不見王（帥と将を同じ筋で相対させる手は指せない。全ての手が相対になる場合は負け）</label>
       <label class="rule-row"><input type="checkbox" id="rPalace"> 九宮（帥・将／仕・士は宮殿から出られない。列数が奇数なら3×3、偶数なら2×2）</label>
-      <label class="rule-row"><input type="checkbox" id="rXiangqiSennichite"> シャンチー式の千日手（連続王手の反復は攻撃側の負け。双方なら引き分け）</label>
       <label class="rule-row"><input type="checkbox" id="rRankless"> 格なしの駒（チェス駒・成駒・はさみ駒）を一般駒として扱う（範囲攻撃で取られる）</label>
       <label class="rule-row"><input type="checkbox" id="rRandSpecial"> ランダム置換の候補にはさみ駒・オセロ駒を含める</label>
       <label class="rule-row"><input type="checkbox" id="rRepromote"> 成り条件をもう一度満たすと、もう一度成れる（成駒の成駒。例：敵駒を取ると成るルールなら、再度敵駒を取ると更に成る）</label>
@@ -1988,7 +1997,8 @@ const RULES={
   drops:true,        // 持ち駒を使う
   keepPromoted:false,// 取った駒が成ったまま持ち駒に入る
   nifu:true,         // 二歩禁止
-  sennichite:true,   // 千日手（同一局面4回）で引き分け
+  sennichiteMode:'avoid', // 千日手の扱い：'avoid'|'draw'|'xiangqi'|'none'（下の3フラグはここから導出）
+  sennichite:false,  // 千日手（同一局面4回）で引き分け
   ranklessAsGeneral:true, // 格なし駒（チェス駒・本将棋成駒・はさみ駒）を通常の一般駒（格5）として扱う。範囲攻撃で取れる対象になる。
   randomIncludeSpecial:true, // ランダム置換（完全・強さ近い・同じ格）の候補に、はさみ駒・オセロ駒を含める。
   repromote:false,   // 敵陣に入りなおすともう一度成れる（成駒の成駒に成れる）
@@ -2004,6 +2014,13 @@ const RULES={
   palace:false,        // 九宮：帥/將・仕/士は宮殿から出られない（シャンチー）
   xiangqiSennichite:false // シャンチー式の千日手判定（連続王手の反復は攻撃側の負け）
 };
+// 千日手の扱いはモードひとつで決め、内部フラグはそこから導出する（設定の一元化）
+function setSennichiteMode(mode){
+  RULES.sennichiteMode = mode;
+  RULES.sennichite       = (mode==='draw');
+  RULES.banSennichite    = (mode==='avoid');
+  RULES.xiangqiSennichite= (mode==='xiangqi');
+}
 let posCount={};     // 局面出現回数（千日手判定用）
 let repLog=[];       // 各手の {局面キー, 指した側, 王手か}（シャンチー式千日手の判定用）
 const SPEEDS=[
@@ -3827,7 +3844,7 @@ function hasXGeneral(side){
 function boardHash(){ return posKeyOf(board, turn, capYou, capEnemy); }
 function checkSennichite(){
   if(gameOver) return;
-  if(!RULES.sennichite && !RULES.xiangqiSennichite) return;
+  if(RULES.sennichiteMode==='none') return;
   const h=boardHash();
   posCount[h]=(posCount[h]||0)+1;
   // 直前に指した側（この時点で turn はまだ反転前）が相手に王手をかけたか
@@ -4119,7 +4136,7 @@ document.getElementById('applyPresetBtn').onclick=()=>{
   // 囲碁・オセロ・はさみ将棋は王を置かない代わりに「取り切るまで戦う」を自動ON
   if(key==='go'||key==='othello'||key==='hasami') RULES.captureAll=true;
   // シャンチーは持ち駒（打ち込み）が無いゲームなので自動OFF
-  if(key==='xiangqi'){ RULES.drops=false; RULES.flyingGeneral=true; RULES.palace=true; RULES.xiangqiSennichite=true; }
+  if(key==='xiangqi'){ RULES.drops=false; RULES.flyingGeneral=true; RULES.palace=true; setSennichiteMode('xiangqi'); }
   const label = PRESET_LABELS[key] || ('空盤 '+NR+'×'+NC);
   const extra = (key==='go'||key==='othello'||key==='hasami') ? '（ルール「取り切るまで戦う」を自動ON）'
               : (key==='xiangqi') ? '（持ち駒OFF・王不見王・九宮・シャンチー式千日手を自動ON）' : '';
@@ -4606,11 +4623,9 @@ function openRuleModal(){
   document.getElementById('rDrops').checked=RULES.drops;
   document.getElementById('rKeep').checked=RULES.keepPromoted;
   document.getElementById('rNifu').checked=RULES.nifu;
-  document.getElementById('rSennichite').checked=RULES.sennichite;
-  document.getElementById('rBanSennichite').checked=RULES.banSennichite;
+  document.getElementById('rSennichiteMode').value=RULES.sennichiteMode;
   document.getElementById('rFlyingGeneral').checked=RULES.flyingGeneral;
   document.getElementById('rPalace').checked=RULES.palace;
-  document.getElementById('rXiangqiSennichite').checked=RULES.xiangqiSennichite;
   document.getElementById('rRankless').checked=RULES.ranklessAsGeneral;
   document.getElementById('rRandSpecial').checked=RULES.randomIncludeSpecial;
   document.getElementById('rRepromote').checked=RULES.repromote;
@@ -4629,11 +4644,9 @@ document.getElementById('ruleModal').onclick=(e)=>{ if(e.target.id==='ruleModal'
 document.getElementById('rDrops').onchange=e=>RULES.drops=e.target.checked;
 document.getElementById('rKeep').onchange=e=>RULES.keepPromoted=e.target.checked;
 document.getElementById('rNifu').onchange=e=>RULES.nifu=e.target.checked;
-document.getElementById('rSennichite').onchange=e=>RULES.sennichite=e.target.checked;
-document.getElementById('rBanSennichite').onchange=e=>{ RULES.banSennichite=e.target.checked; render(); };
+document.getElementById('rSennichiteMode').onchange=e=>{ setSennichiteMode(e.target.value); render(); };
 document.getElementById('rFlyingGeneral').onchange=e=>{ RULES.flyingGeneral=e.target.checked; render(); };
 document.getElementById('rPalace').onchange=e=>{ RULES.palace=e.target.checked; render(); };
-document.getElementById('rXiangqiSennichite').onchange=e=>{ RULES.xiangqiSennichite=e.target.checked; };
 document.getElementById('rRankless').onchange=e=>{ RULES.ranklessAsGeneral=e.target.checked; POWER_CACHE_clear(); render(); };
 document.getElementById('rRandSpecial').onchange=e=>{ RULES.randomIncludeSpecial=e.target.checked; };
 document.getElementById('rRepromote').onchange=e=>{ RULES.repromote=e.target.checked; };
@@ -4716,6 +4729,7 @@ document.getElementById('playPause').onclick=()=>{
 };
 document.getElementById('stepFwd').onclick=stepForward;
 
+setSennichiteMode(RULES.sennichiteMode);
 newGame();
 rememberSetup(); // 起動時の本将棋配置を初期配置として記憶
 paused=true; updatePlayPauseLabel();
