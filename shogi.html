@@ -55,7 +55,7 @@
 
   .captured{
     width:100%;max-width:430px;
-    min-height:42px;
+    min-height:42px;transition:min-height .2s;
     background:linear-gradient(160deg,var(--panel2),var(--panel));
     border:1px solid rgba(139,107,255,.3);border-radius:12px;
     padding:7px 9px;margin:6px 0;
@@ -341,9 +341,11 @@
   .board-setup .edit-bar-row button,.board-setup .bs-row button{font-size:.78rem;padding:7px 10px;}
   .board-setup .bs-size{font-size:.82rem;color:#ece3ff;font-variant-numeric:tabular-nums;}
   .board-setup .bs-note{font-size:.62rem;color:#7d6e57;line-height:1.4;}
-  .board-setup .bs-check{align-items:flex-start;gap:8px;cursor:pointer;}
-  .board-setup .bs-check input{width:18px;height:18px;accent-color:var(--glow);flex:none;margin-top:1px;}
-  .board-setup .bs-check span{font-size:.72rem;color:#cfc4ee;line-height:1.4;}
+  .board-setup .bs-check{align-items:flex-start;gap:10px;cursor:pointer;flex-wrap:nowrap;
+    padding:6px 2px;min-height:44px;} /* タップ領域を確保 */
+  .board-setup .bs-check input{width:20px;height:20px;accent-color:var(--glow);
+    flex:0 0 20px;margin:2px 0 0;} /* 潰れない・1行目に揃える */
+  .board-setup .bs-check span{flex:1 1 auto;font-size:.72rem;color:#cfc4ee;line-height:1.45;}
   /* 大盤：マスと駒名を縮小して収める */
   .board.bigboard .koma{font-size:min(2.2vw,10px);border-radius:0;}
   .board.bigboard .koma-name{font-size:min(2vw,9px);}
@@ -358,9 +360,10 @@
     box-shadow:0 4px 16px rgba(98,209,160,.3);
   }
   .multi-bar span{font-size:.84rem;color:#dff5ec;font-weight:700;}
-  .rule-row{display:flex;align-items:center;gap:10px;padding:10px 6px;font-size:.86rem;color:#ece3ff;
-    border-bottom:1px solid rgba(139,107,255,.15);cursor:pointer;}
-  .rule-row input{width:18px;height:18px;accent-color:var(--glow);}
+  .rule-row{display:flex;align-items:flex-start;gap:10px;padding:11px 6px;font-size:.86rem;color:#ece3ff;
+    border-bottom:1px solid rgba(139,107,255,.15);cursor:pointer;min-height:44px;}
+  .rule-row input{width:20px;height:20px;accent-color:var(--glow);
+    flex:0 0 20px;margin:1px 0 0;} /* flexで潰れず、テキスト1行目に揃う */
   .rule-row.rule-sel{flex-direction:column;align-items:stretch;gap:6px;}
   .rule-row.rule-sel>span{font-size:.82rem;color:var(--gold);letter-spacing:.08em;}
   .rule-row.rule-sel select{width:100%;font-size:.8rem;padding:8px 10px;border-radius:9px;
@@ -631,6 +634,7 @@
   }
   /* 注記のコントラスト改善（3.2:1 → 5.4:1） */
   .board-setup .bs-note, .rule-note, .sub{color:#9c8fc7 !important;}
+  .board-setup .bs-pending{color:var(--gold) !important;}
   /* 音・BGMトグルの2列グリッド行 */
   .controls.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;width:100%;max-width:430px;}
   .controls.grid2 button{width:100%;}
@@ -641,6 +645,10 @@
     box-shadow:0 0 0 1px rgba(245,207,107,.5), 0 0 18px rgba(245,207,107,.3), inset 0 1px 0 rgba(255,255,255,.1);}
   .captured.turn-active .lbl{color:var(--gold);}
   .captured.turn-active .lbl::after{content:"の番";font-size:.85em;opacity:.9;}
+  /* 持ち駒が無いときは箱を詰めて盤のスペースを確保 */
+  .captured.is-empty{min-height:0;padding:5px 9px;}
+  .captured.is-empty .lbl{opacity:.75;}
+  .captured .cap-count{font-size:.68rem;color:#cfc4ee;letter-spacing:.04em;margin-left:2px;}
   /* 棋譜が無いときリプレイパネルを減光 */
   .replay-panel.empty{opacity:.5;filter:saturate(.6);}
   /* パネルの二重枠（金の内側ライン） */
@@ -665,7 +673,7 @@
 <body>
   <h1>将棋</h1>
   <div class="sub" id="senteLabel">対 局 ・ 先 手 が あ な た</div>
-  <div class="sub" style="font-size:.62rem;color:#7d6e57;margin-top:-8px;">編集モードで大局将棋 全209種＋成92種が使えます</div>
+  <div class="sub" style="font-size:.62rem;color:#7d6e57;margin-top:-8px;">「編集ツール」で大局将棋 全209種＋成92種を配置できます</div>
 
   <div class="captured" id="capEnemy"><span class="lbl">相手</span></div>
   <div class="board-wrap"><div class="board" id="board"></div><div id="fxLayer"></div></div>
@@ -737,7 +745,8 @@
     <div class="bs-row"><span id="sizeVal" class="bs-size">9 行 × 9 列</span></div>
     <label class="bs-row bs-check"><input type="checkbox" id="bsPalace">
       <span>九宮をつくる（シャンチー用。帥・将／仕・士は宮殿から出られない。列数が奇数なら3×3、偶数なら2×2）</span></label>
-    <div class="bs-note">プリセット適用や行・列の数値を変えて「作成」で盤が作り直されます（編集ツールで駒を配置）。大盤・大局将棋等はCPUを簡易化します。各将棋の初期配置は出典に基づく正確な配置です（大型将棋の一部の希少駒は動きを近縁駒で近似）。</div>
+    <div class="bs-note bs-pending" id="bsPalaceNote" style="display:none;">※ 九宮の変更は「適用」または「作成」を押すと反映されます</div>
+    <div class="bs-note">「適用」「作成」で盤を作り直します（駒は編集ツールで配置）。初期配置は出典に基づく正確な配置です。</div>
    </div>
   </div>
   <div class="acc" id="accEdit">
@@ -772,8 +781,10 @@
       <input type="range" id="rpSpeed" min="1" max="10" value="1">
       <span id="rpSpeedVal">1倍</span>
     </div>
-    <div class="replay-seek-wrap">
+    <div class="replay-row speed-row">
+      <span class="spd-lbl">手数</span>
       <input type="range" id="rpSeek" min="0" max="0" value="0">
+      <span id="rpSeekVal">0/0</span>
     </div>
     <div class="replay-row" style="margin-top:6px;margin-bottom:0;">
       <button id="rpExit">対局に戻る</button>
@@ -1508,12 +1519,15 @@ function splitLabel(t){
 // 駒名は縦書き。3文字までは1列、4文字以上は2列（前半・後半に分割し、各列を縦書き）。
 // 縦書きは右→左に読むため、駒名列を右側に、「(大局)」接尾辞をその左に配置する。
 function fillKoma(el, t){
-  const p=dispParts(t);
+  let p=dispParts(t);   // 大盤では駒名を省略するため再代入する
   // 将棋系の駒だけ将棋駒の五角形にする（チェス駒は対象外。囲碁・オセロは別要素で描画）
   const isChessKoma=(((typeof TP!=='undefined'&&TP[t])?TP[t].fl:null)||[]).includes('chess');
   el.classList.toggle('shogi-koma', !isChessKoma);
-  const nameChars=[...p.name];
+  let nameChars=[...p.name];
+  // 大盤（36×36等）はマスが極小なので駒名を1文字に省略して潰れを防ぐ
+  if(typeof NC!=='undefined' && Math.max(NR,NC)>=20 && nameChars.length>1) nameChars=[nameChars[0]];
   const nameLen=nameChars.length;
+  p={...p, name:nameChars.join('')};
   // 駒名を列に分割（3文字までは1列、4文字以上は2列でバランス配分）
   let cols;
   if(nameLen<=3) cols=[p.name];
@@ -2641,6 +2655,7 @@ function renderPalace(bd){
 function renderCap(id,arr,p){
   const el=document.getElementById(id);
   el.innerHTML='<span class="lbl">'+(p===1?'あなた':'相手')+'</span>';
+  el.classList.toggle('is-empty', arr.length===0 && !editing); // 空なら箱を詰める
   const counts={};
   arr.forEach(t=>counts[t]=(counts[t]||0)+1);
   Object.keys(counts).forEach(t=>{
@@ -2650,6 +2665,8 @@ function renderCap(id,arr,p){
     if(isGo(t)){ const g=document.createElement('div'); g.className='go-disc '+(t==='GOB'?'black':'white'); d.appendChild(g); }
     else fillKoma(d, t);
     if(counts[t]>1){const b=document.createElement('span');b.className='ct';b.textContent=counts[t];d.appendChild(b);}
+    // 碁石・オセロ牌は駒面に文字が無いため、名前と枚数をテキストでも示す
+    const needLabel = isGo(t) || t==='OTH';
     if(editing){
       // 編集中：タップで説明、「−」で1枚減らす
       d.title='タップで説明／−で1枚減らす';
@@ -2665,6 +2682,11 @@ function renderCap(id,arr,p){
         sel=(sel&&sel.drop&&sel.t===t)?null:{drop:true,t,p}; render(); };
     }
     el.appendChild(d);
+    if(needLabel){
+      const lb=document.createElement('span'); lb.className='cap-count';
+      lb.textContent=(KANJI[t]||t)+' ×'+counts[t];
+      el.appendChild(lb);
+    }
   });
   if(editing){
     // 編集中：＋ボタンで持ち駒を追加
@@ -4097,8 +4119,13 @@ function updateReplayUI(){
   const seek=document.getElementById('rpSeek');
   if(cnt) cnt.textContent = (replaying? replayIdx+'/'+kifu.length : kifu.length)+'手';
   if(seek){ seek.max=kifu.length; seek.value=replaying?replayIdx:kifu.length; }
+  const sv=document.getElementById('rpSeekVal');
+  if(sv) sv.textContent=(replaying?replayIdx:kifu.length)+'/'+kifu.length;
   const pnl=document.querySelector('.replay-panel');
-  if(pnl) pnl.classList.toggle('empty', kifu.length===0 && !replaying); // 棋譜なしは減光
+  const empty = kifu.length===0 && !replaying;
+  if(pnl) pnl.classList.toggle('empty', empty); // 棋譜なしは減光
+  const play=document.getElementById('rpPlay');
+  if(play) play.classList.toggle('primary', !empty); // 0手のときは金CTAにしない
 }
 // リプレイUI配線
 (function wireReplay(){
@@ -4201,6 +4228,7 @@ function syncSizeUI(){
     const lb=pl.parentElement&&pl.parentElement.querySelector('span');
     if(lb) lb.textContent='九宮をつくる（シャンチー用。帥・将／仕・士は宮殿から出られない。現在の盤では '+s+'）';
   }
+  if(typeof updatePalacePending==='function') updatePalacePending();
 }
 // 現在の盤・持ち駒・サイズを「初期配置」として記憶（初期配置に戻す で使用）
 let rememberedSetup=null;
@@ -4245,7 +4273,9 @@ function newGameWithBoard(builder){
 }
 document.getElementById('applyPresetBtn').onclick=()=>{
   const key=document.getElementById('presetSel').value;
+  const wantPalace=document.getElementById('bsPalace').checked; // 押した時点の指定を先に読む
   newGameWithBoard(()=>applyPreset(key));
+  RULES.palace = (key==='xiangqi') ? true : wantPalace;         // ここで初めて反映
   // 囲碁・オセロ・はさみ将棋は王を置かない代わりに「取り切るまで戦う」を自動ON
   if(key==='go'||key==='othello'||key==='hasami') RULES.captureAll=true;
   // シャンチーは持ち駒（打ち込み）が無いゲームなので自動OFF
@@ -4273,7 +4303,9 @@ document.getElementById('applyPresetBtn').onclick=()=>{
   const rebuild=()=>{
     const rows=clampN(rR.value), cols=clampN(cR.value);
     rR.value=rows; cR.value=cols;
+    const wantPalace=document.getElementById('bsPalace').checked; // 押した時点の指定
     newGameWithBoard(()=>makeEmptyBoard(rows, cols));
+    RULES.palace=wantPalace; syncSizeUI(); render();
     const sel=document.getElementById('presetSel'); if(sel) sel.value='empty';
     setStatus('空盤 '+NR+' 行 × '+NC+' 列 を作りました（編集ツールで駒を配置）');
   };
@@ -4303,7 +4335,11 @@ function setEditing(on){
   if(on===editing){ updateEditBar(); return; }
   if(replaying) exitReplay();
   editing=on; sel=null; multiSel=[]; updateMultiBar(); stopAutoLoop(); updateEditBar();
-  if(editing){ render(); setStatus('編集中：盤のマスをタップ（説明／変更／プリセット配置）'); }
+  if(editing){ render(); setStatus('編集中：盤のマスをタップ（説明／変更／プリセット配置）');
+    // 盤が画面外だと何を編集するのか分からないため、盤までスクロールする
+    const bw=document.querySelector('.board-wrap');
+    if(bw) setTimeout(()=>{ try{ bw.scrollIntoView({behavior:'smooth', block:'center'}); }catch(_){ bw.scrollIntoView(); } },60);
+  }
   else {
     // 編集後の配置は「記憶した配置に戻す」用にだけ保存する。
     // ※「初期配置に戻す」の対象（rememberedSetup）は、編集では上書きしない
@@ -4759,7 +4795,13 @@ document.getElementById('rKeep').onchange=e=>RULES.keepPromoted=e.target.checked
 document.getElementById('rNifu').onchange=e=>RULES.nifu=e.target.checked;
 document.getElementById('rSennichiteMode').onchange=e=>{ setSennichiteMode(e.target.value); render(); };
 document.getElementById('rFlyingGeneral').onchange=e=>{ RULES.flyingGeneral=e.target.checked; render(); };
-document.getElementById('bsPalace').onchange=e=>{ RULES.palace=e.target.checked; render(); };
+// 九宮は盤の設定なので、チェックしただけでは反映しない（「適用」または「作成」で確定）
+document.getElementById('bsPalace').onchange=()=>updatePalacePending();
+function updatePalacePending(){
+  const cb=document.getElementById('bsPalace'), note=document.getElementById('bsPalaceNote');
+  if(!cb||!note) return;
+  note.style.display = (cb.checked!==RULES.palace) ? '' : 'none';
+}
 document.getElementById('rRankless').onchange=e=>{ RULES.ranklessAsGeneral=e.target.checked; POWER_CACHE_clear(); render(); };
 document.getElementById('rRandSpecial').onchange=e=>{ RULES.randomIncludeSpecial=e.target.checked; };
 document.getElementById('rRepromote').onchange=e=>{ RULES.repromote=e.target.checked; };
