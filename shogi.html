@@ -4271,19 +4271,25 @@ function newGameWithBoard(builder){
   refreshAutoLabels(); refreshEditLabel(); updateMultiBar(); updateEditBar(); updateReplayUI();
   paused=true; render(); updatePlayPauseLabel();
 }
+// プリセットを選ぶと、そのゲームの推奨値に九宮チェックを切り替える（適用前なので変更可能）
+document.getElementById('presetSel').onchange=()=>{
+  const key=document.getElementById('presetSel').value;
+  const cb=document.getElementById('bsPalace');
+  if(cb){ cb.checked=(key==='xiangqi'); updatePalacePending(); }
+};
 document.getElementById('applyPresetBtn').onclick=()=>{
   const key=document.getElementById('presetSel').value;
   const wantPalace=document.getElementById('bsPalace').checked; // 押した時点の指定を先に読む
   newGameWithBoard(()=>applyPreset(key));
-  RULES.palace = (key==='xiangqi') ? true : wantPalace;         // ここで初めて反映
+  RULES.palace = wantPalace;   // 常にチェックどおり（プリセットでも上書きしない）
   // 囲碁・オセロ・はさみ将棋は王を置かない代わりに「取り切るまで戦う」を自動ON
   if(key==='go'||key==='othello'||key==='hasami') RULES.captureAll=true;
   // シャンチーは持ち駒（打ち込み）が無いゲームなので自動OFF
-  if(key==='xiangqi'){ RULES.drops=false; RULES.flyingGeneral=true; RULES.palace=true; setSennichiteMode('xiangqi'); }
+  if(key==='xiangqi'){ RULES.drops=false; RULES.flyingGeneral=true; setSennichiteMode('xiangqi'); }
   syncSizeUI(); render();   // 盤の設定のチェック表示（九宮）を実際の設定に合わせる
   const label = PRESET_LABELS[key] || ('空盤 '+NR+'×'+NC);
   const extra = (key==='go'||key==='othello'||key==='hasami') ? '（ルール「取り切るまで戦う」を自動ON）'
-              : (key==='xiangqi') ? '（持ち駒OFF・王不見王・九宮・シャンチー式千日手を自動ON）' : '';
+              : (key==='xiangqi') ? '（持ち駒OFF・王不見王・シャンチー式千日手を自動ON。九宮はチェックどおり）' : '';
   setStatus(label+'を準備しました'+extra+'。▶ 開始 で対局（編集ツールで駒も置けます）');
 };
 (function wireSizeRange(){
