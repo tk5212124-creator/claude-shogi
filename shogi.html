@@ -139,7 +139,7 @@
   .em-diag{width:100%;padding:6px 0 0;border-top:1px solid rgba(139,107,255,.25);}
   .em-diag-lbl{display:block;font-size:.66rem;color:var(--gold);letter-spacing:.08em;margin-bottom:4px;text-align:center;}
   .em-diag-row{display:flex;gap:6px;justify-content:center;}
-  .em-diag-row button{flex:0 0 auto;width:46px;min-height:32px;font-size:.8rem;padding:4px 0;line-height:1;}
+  .em-diag-row button{flex:0 0 auto;width:56px;min-height:40px;font-size:.82rem;padding:4px 2px;line-height:1;white-space:nowrap;}
   .em-diag-row button.on{background:linear-gradient(160deg,#2f7d5e,#1f5e44);border-color:var(--sel);color:#dff5ec;}
   .cell-diag{position:absolute;inset:0;z-index:0;pointer-events:none;}
   .cell-diag svg{width:100%;height:100%;display:block;}
@@ -379,12 +379,13 @@
   .board.bigboard .koma-suffix{display:none;}
   .multi-bar{
     width:100%;max-width:430px;margin-top:10px;
-    display:flex;gap:8px;align-items:center;justify-content:space-between;
+    display:flex;gap:6px;align-items:center;justify-content:space-between;flex-wrap:wrap;
     background:linear-gradient(160deg,#2f7d5e,#1f5e44);
-    border:1px solid var(--sel);border-radius:12px;padding:8px 12px;
+    border:1px solid var(--sel);border-radius:12px;padding:8px 10px;
     box-shadow:0 4px 16px rgba(98,209,160,.3);
   }
   .multi-bar span{font-size:.84rem;color:#dff5ec;font-weight:700;}
+  .multi-bar button{font-size:.76rem;padding:6px 8px;min-height:34px;flex:1 1 auto;}
   .rule-row{display:flex;align-items:flex-start;gap:10px;padding:11px 6px;font-size:.86rem;color:#ece3ff;
     border-bottom:1px solid rgba(139,107,255,.15);cursor:pointer;min-height:44px;}
   .rule-row input{width:20px;height:20px;accent-color:var(--glow);
@@ -707,6 +708,7 @@
   <div class="multi-bar" id="multiBar" style="display:none;">
     <span id="multiCount">0マス選択中</span>
     <button class="primary" id="multiChange">まとめて変更</button>
+    <button id="multiDiag">宮マス変更</button>
     <button id="multiClear">選択解除</button>
   </div>
 
@@ -923,16 +925,24 @@
         <button id="emInfo">説明を見る</button>
         <button class="primary" id="emChange">この駒を変更</button>
         <button id="emSelectAdd">複数選択に追加</button>
-        <div class="em-diag">
-          <span class="em-diag-lbl">このマスの斜め線</span>
-          <div class="em-diag-row">
-            <button id="emDiagR" data-d="r">／</button>
-            <button id="emDiagL" data-d="l">＼</button>
-            <button id="emDiagX" data-d="x">×</button>
-            <button id="emDiagN" data-d="">なし</button>
-          </div>
-        </div>
+        <button id="emDiagOpen">宮マス変更</button>
         <button id="emCancel">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="promo-modal" id="diagModal">
+    <div class="promo-box">
+      <p id="diagTitle">宮マス変更</p>
+      <div class="opts" style="flex-direction:column;gap:10px;">
+        <span class="em-diag-lbl">このマスの斜め線</span>
+        <div class="em-diag-row">
+          <button id="emDiagR" data-d="r">／</button>
+          <button id="emDiagL" data-d="l">＼</button>
+          <button id="emDiagX" data-d="x">×</button>
+          <button id="emDiagN" data-d="">なし</button>
+        </div>
+        <button id="diagClose">閉じる</button>
       </div>
     </div>
   </div>
@@ -4702,7 +4712,6 @@ function openEditMenu(r,c){
     pc ? (KANJI[pc.t]+'（'+(pc.p===1?'あなた':'相手')+'）') : '空きマス';
   document.getElementById('emInfo').style.display = pc?'':'none';
   document.getElementById('editMenuModal').classList.add('show');
-  if(typeof syncDiagButtons==='function') syncDiagButtons();
 }
 function closeEditMenu(){ document.getElementById('editMenuModal').classList.remove('show'); menuCell=null; }
 document.getElementById('emCancel').onclick=closeEditMenu;
@@ -4718,23 +4727,44 @@ document.getElementById('emChange').onclick=()=>{
 document.getElementById('emSelectAdd').onclick=()=>{
   if(menuCell){ toggleMultiSel(menuCell.r,menuCell.c); } closeEditMenu();
 };
-// マスの斜め線属性（／ ＼ × なし）を設定する
+// マスの斜め線属性（／ ＼ × なし）を設定する「宮マス変更」
+let diagCells=[]; // 変更対象のマス（単一マス／複数選択のどちらでも使う）
+function openDiagModal(cells,label){
+  diagCells=cells.map(s=>({r:s.r,c:s.c}));
+  document.getElementById('diagTitle').textContent='宮マス変更';
+  const lbl=document.querySelector('#diagModal .em-diag-lbl');
+  if(lbl) lbl.textContent=label||'このマスの斜め線';
+  syncDiagButtons();
+  document.getElementById('diagModal').classList.add('show');
+}
+function closeDiagModal(){ document.getElementById('diagModal').classList.remove('show'); diagCells=[]; }
 function syncDiagButtons(){
-  const cur = menuCell ? (getDiag(menuCell.r,menuCell.c)||'') : '';
+  // 対象が1マスの時だけ現在値をハイライトする（複数選択では値がばらつくため）
+  const cur = diagCells.length===1 ? (getDiag(diagCells[0].r,diagCells[0].c)||'') : null;
   ['emDiagR','emDiagL','emDiagX','emDiagN'].forEach(id=>{
     const b=document.getElementById(id); if(!b) return;
-    b.classList.toggle('on', (b.getAttribute('data-d')||'')===cur);
+    b.classList.toggle('on', cur!==null && (b.getAttribute('data-d')||'')===cur);
   });
 }
 ['emDiagR','emDiagL','emDiagX','emDiagN'].forEach(id=>{
   const b=document.getElementById(id); if(!b) return;
   b.onclick=()=>{
-    if(!menuCell) return;
-    setDiag(menuCell.r, menuCell.c, b.getAttribute('data-d')||null);
+    if(!diagCells.length) return;
+    const v=b.getAttribute('data-d')||null;
+    const n=diagCells.length;
+    diagCells.forEach(s=>setDiag(s.r,s.c,v));
     syncDiagButtons(); render();
-    setStatus('マスの斜め線を設定しました（'+(b.textContent)+'）');
+    setStatus(n>1 ? (n+'マスの斜め線を設定しました（'+b.textContent+'）')
+                  : ('マスの斜め線を設定しました（'+b.textContent+'）'));
   };
 });
+document.getElementById('diagClose').onclick=closeDiagModal;
+document.getElementById('diagModal').onclick=(e)=>{ if(e.target.id==='diagModal') closeDiagModal(); };
+document.getElementById('emDiagOpen').onclick=()=>{
+  if(!menuCell) return;
+  const cell={...menuCell}; closeEditMenu();
+  openDiagModal([cell],'このマスの斜め線');
+};
 
 // 複数選択
 function toggleMultiSel(r,c){
@@ -4907,6 +4937,9 @@ function updateMultiBar(){
   else bar.style.display='none';
 }
 document.getElementById('multiChange').onclick=()=>{ if(multiSel.length>0){ infoOnly=false; openPickList(); } };
+document.getElementById('multiDiag').onclick=()=>{
+  if(multiSel.length>0) openDiagModal(multiSel,'選択した'+multiSel.length+'マスの斜め線');
+};
 document.getElementById('multiClear').onclick=()=>{ clearMultiSel(); setStatus('選択を解除しました'); };
 
 // 編集ツールバー
