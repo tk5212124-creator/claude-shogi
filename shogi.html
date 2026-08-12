@@ -137,10 +137,13 @@
   /* 九宮（宮殿）：枠と対角線を盤に描く */
   /* マスの斜め線属性（九宮など）：マス目と同じ線を、そのマスの中に描く。駒より背面 */
   .em-diag{width:100%;padding:6px 0 0;border-top:1px solid rgba(139,107,255,.25);}
-  .em-diag-lbl{display:block;font-size:.66rem;color:var(--gold);letter-spacing:.08em;margin-bottom:4px;text-align:center;}
-  .em-diag-row{display:flex;gap:6px;justify-content:center;}
-  .em-diag-row button{flex:0 0 auto;width:56px;min-height:40px;font-size:.82rem;padding:4px 2px;line-height:1;white-space:nowrap;}
-  .em-diag-row button.on{background:linear-gradient(160deg,#2f7d5e,#1f5e44);border-color:var(--sel);color:#dff5ec;}
+  .em-diag-lbl{display:block;font-size:.72rem;color:var(--gold);letter-spacing:.08em;margin-bottom:2px;text-align:center;}
+  /* 4つ並べても箱からはみ出さないよう、.promo-box .opts button より強い指定にする */
+  .promo-box .opts .em-diag-row{display:flex;gap:8px;justify-content:center;width:100%;flex-wrap:wrap;}
+  .promo-box .opts .em-diag-row button{
+    flex:0 0 auto;width:60px;min-width:60px;min-height:44px;
+    font-size:1rem;padding:6px 2px;line-height:1;white-space:nowrap;box-sizing:border-box;}
+  .promo-box .opts .em-diag-row button.on{background:linear-gradient(160deg,#2f7d5e,#1f5e44);border-color:var(--sel);color:#dff5ec;}
   .cell-diag{position:absolute;inset:0;z-index:0;pointer-events:none;}
   .cell-diag svg{width:100%;height:100%;display:block;}
   .cell-diag line{stroke:rgba(107,74,30,.55);stroke-width:.5;vector-effect:non-scaling-stroke;}
@@ -963,8 +966,9 @@
       </div>
       <p class="rule-note" style="margin:6px 0 2px;">シャンチー（中国象棋）</p>
       <label class="rule-row"><input type="checkbox" id="rFlyingGeneral"> 王不見王（帥と将を同じ筋で相対させる手は指せない。全ての手が相対になる場合は負け）</label>
+      <label class="rule-row"><input type="checkbox" id="rPalaceEscape"> 九宮の駒（帥・將／仕・士）が宮マスの外にも出られるようにする（九宮ONのときだけ効きます）</label>
       <label class="rule-row"><input type="checkbox" id="rRankless"> 格なしの駒（チェス駒・成駒・はさみ駒）を一般駒として扱う（範囲攻撃で取られる）</label>
-      <label class="rule-row"><input type="checkbox" id="rRandSpecial"> ランダム置換の候補にはさみ駒・オセロ駒を含める</label>
+      <label class="rule-row"><input type="checkbox" id="rRandSpecial"> ランダム置換の候補に囲碁石・オセロ駒・はさみ駒（動きが特殊な駒）も含める ※将棋・チェス・シャンチー・チャンギ・どうぶつしょうぎの駒は常に候補です</label>
       <label class="rule-row"><input type="checkbox" id="rRepromote"> 成り条件をもう一度満たすと、もう一度成れる（成駒の成駒。例：敵駒を取ると成るルールなら、再度敵駒を取ると更に成る）</label>
       <label class="rule-row"><input type="checkbox" id="rRandomPromote"> 成り先のない駒は、成るとき全駒からランダムな駒に変化する（王将・玉将はroyalな駒へ）</label>
       <label class="rule-row"><input type="checkbox" id="rCaptureAll"> 相手の駒を全て取る（取り切る）まで戦う（王の有無に関係なく勝敗判定。囲碁・オセロ・はさみ将棋向け）</label>
@@ -2151,7 +2155,8 @@ const RULES={
   sennichiteMode:'avoid', // 千日手の扱い：'avoid'|'draw'|'xiangqi'|'none'（下の3フラグはここから導出）
   sennichite:false,  // 千日手（同一局面4回）で引き分け
   ranklessAsGeneral:true, // 格なし駒（チェス駒・本将棋成駒・はさみ駒）を通常の一般駒（格5）として扱う。範囲攻撃で取れる対象になる。
-  randomIncludeSpecial:true, // ランダム置換（完全・強さ近い・同じ格）の候補に、はさみ駒・オセロ駒を含める。
+  randomIncludeSpecial:true, // ランダム置換の候補に、動きが特殊な駒（囲碁石・オセロ駒・はさみ駒）も含める。
+                             // 将棋・チェス・シャンチー・チャンギ・どうぶつしょうぎの駒は常に候補。
   repromote:false,   // 敵陣に入りなおすともう一度成れる（成駒の成駒に成れる）
   randomPromote:false, // 成り先のない駒は、成るとき全駒からランダムな駒に変化する
   promoOnZone:true,  // 敵陣に入ったら成れる（本将棋の標準）
@@ -2163,6 +2168,7 @@ const RULES={
   banSennichite:true,  // 千日手回避：同一局面が4回目になる手を禁じる（＝千日手が成立しない）
   flyingGeneral:false, // 王不見王：帥と将を同じ筋で相対させる手は指せない（シャンチー）
   palace:false,        // 九宮：帥/將・仕/士は宮殿から出られない（シャンチー）
+  palaceEscape:false,  // 九宮があっても、帥/將・仕/士が宮の外へ出られるようにする
   xiangqiSennichite:false // シャンチー式の千日手判定（連続王手の反復は攻撃側の負け）
 };
 // ===== デバッグ情報の書き出し（棋譜・初期配置・ルール・現局面をテキスト化） =====
@@ -2424,9 +2430,10 @@ function moves(b,r,c){
   if(isHook(pc.t)) hookMoves(b,r,c).forEach(([a,bb])=>res.push([a,bb]));
   // 九宮（宮殿）：帥/將・仕/士は九宮の外へ出られない
   if(RULES.palace && isPalaceBound(pc.t)){
-    if(!isPalaceCell(r,c)) return [];                            // 宮の外に居る場合は動けない
     // チャンギの王・士は宮の斜め線に沿っても動ける
     if(isJPalaceBound(pc.t)) res.push(...janggiDiagMoves(b,r,c,p,'step'));
+    if(RULES.palaceEscape) return res;                           // 宮の外にも出られる設定
+    if(!isPalaceCell(r,c)) return [];                            // 宮の外に居る場合は動けない
     return res.filter(([tr,tc])=>isPalaceCell(tr,tc));           // 宮のマスへだけ動ける
   }
   // チャンギの車は宮の斜め線に沿って走れる
@@ -4409,6 +4416,20 @@ const PRESET_LABELS={
   doubutsu:'どうぶつしょうぎ（3×4）', xiangqi:'シャンチー（9×10）',
   janggi:'チャンギ（9×10）', empty:'空盤'
 };
+// 敵陣の深さ（成りゾーン）の選択肢を、いま選ばれている行数まで作り直す。
+// 「行」プルダウンを変えた直後（＝まだ適用していない）でもその行数まで選べるようにする。
+function syncPZOptions(want){
+  const pz=document.getElementById('pzSel'); if(!pz) return;
+  const rR=document.getElementById('rowRange');
+  const rows=Math.max(1, (rR&&+rR.value) ? +rR.value : NR);   // 選択中の行数を上限にする
+  const keep=(want!==undefined&&want!==null)?want:(pz.value!==''?+pz.value:PZ);
+  if(pz.options.length!==rows+1){
+    pz.innerHTML='';
+    for(let i=0;i<=rows;i++){ const o=document.createElement('option'); o.value=i;
+      o.textContent=(i===0?'なし（成りゾーン無し）':i+' 段'); pz.appendChild(o); }
+  }
+  pz.value=Math.max(0, Math.min(keep, rows));
+}
 // サイズUI（行・列スライダーと表示）を現在のNR/NCに同期
 function syncSizeUI(){
   const rR=document.getElementById('rowRange'), cR=document.getElementById('colRange'), val=document.getElementById('sizeVal');
@@ -4416,16 +4437,7 @@ function syncSizeUI(){
   if(cR) cR.value=NC;
   if(val) val.textContent=NR+' 行 × '+NC+' 列';
   // 敵陣の深さ（成りゾーン）も盤の設定として同期する
-  const pz=document.getElementById('pzSel');
-  if(pz){
-    const want=Math.min(PZ, NR);
-    if(pz.options.length!==NR+1){
-      pz.innerHTML='';
-      for(let i=0;i<=NR;i++){ const o=document.createElement('option'); o.value=i;
-        o.textContent=(i===0?'なし（成りゾーン無し）':i+' 段'); pz.appendChild(o); }
-    }
-    pz.value=want;
-  }
+  syncPZOptions(Math.min(PZ, NR));
   // 九宮は盤の形に関わる設定なので、盤の設定側に置いてここで同期する
   const pl=document.getElementById('bsPalace');
   if(pl){ pl.checked=RULES.palace;
@@ -4518,7 +4530,11 @@ document.getElementById('applyPresetBtn').onclick=()=>{
   rR.value=NR; cR.value=NC;
   // 選択中は表示だけ更新（盤の作り直しは「作成」ボタンで確定）
   const clampN=v=>Math.max(3,Math.min(40, Math.round(+v)||3));
-  const showLive=()=>{ if(val) val.textContent=clampN(rR.value)+' 行 × '+clampN(cR.value)+' 列'; };
+  const showLive=()=>{
+    if(val) val.textContent=clampN(rR.value)+' 行 × '+clampN(cR.value)+' 列';
+    syncPZOptions();   // 敵陣の深さも、選び直した行数まで選べるようにする
+    if(typeof updatePalacePending==='function') updatePalacePending();
+  };
   rR.onchange=showLive; cR.onchange=showLive;
   const rebuild=()=>{
     const rows=clampN(rR.value), cols=clampN(cR.value);
@@ -4739,8 +4755,12 @@ function openDiagModal(cells,label){
 }
 function closeDiagModal(){ document.getElementById('diagModal').classList.remove('show'); diagCells=[]; }
 function syncDiagButtons(){
-  // 対象が1マスの時だけ現在値をハイライトする（複数選択では値がばらつくため）
-  const cur = diagCells.length===1 ? (getDiag(diagCells[0].r,diagCells[0].c)||'') : null;
+  // 対象マスの値が全て同じならその値をハイライトする（複数選択でもバラバラでなければ光る）
+  let cur=null;
+  if(diagCells.length){
+    cur=getDiag(diagCells[0].r,diagCells[0].c)||'';
+    for(const s of diagCells){ if((getDiag(s.r,s.c)||'')!==cur){ cur=null; break; } }
+  }
   ['emDiagR','emDiagL','emDiagX','emDiagN'].forEach(id=>{
     const b=document.getElementById(id); if(!b) return;
     b.classList.toggle('on', cur!==null && (b.getAttribute('data-d')||'')===cur);
@@ -4966,14 +4986,18 @@ document.getElementById('copyToEnemy').onclick=()=>{
 };
 // ランダム置換：強さが近い別駒に
 const ROYAL_LIST=['K','CP','cK']; // 玉将・太子・キング
+// 盤上に置ける駒はすべて候補にする（本将棋・大型将棋・チェス・シャンチー・チャンギ・
+// どうぶつしょうぎ・囲碁石・オセロ石・はさみ駒。新しい駒を足しても自動で候補に入る）。
+// 囲碁石／オセロ石／はさみ駒は動き方が特殊なので、ルールのチェックで除外できるようにする。
+function isSpecialRandomPiece(t){ return t==='OTH'||t==='HASA'||isGo(t); }
+function randomPool(){
+  let pool=Object.keys(TP);
+  if(!RULES.randomIncludeSpecial) pool=pool.filter(t=>!isSpecialRandomPiece(t));
+  return pool;
+}
 function randomReplace(mode){
   if(!editing)return;
-  let pool = BASIC_LIST.concat(TBASE.filter(t=>!BASIC_LIST.includes(t)), (typeof TPROM!=='undefined'?TPROM:[]), (typeof CHESS_LIST!=='undefined'?CHESS_LIST:[]));
-  // ルールON時、ランダム置換の候補にはさみ駒・オセロ駒を含める（全モード共通）
-  if(RULES.randomIncludeSpecial){
-    if(typeof HASAMI_LIST!=='undefined') pool=pool.concat(HASAMI_LIST);
-    if(typeof OTHELLO_LIST!=='undefined') pool=pool.concat(OTHELLO_LIST);
-  }
+  const pool = randomPool();
   const nonRoyal = pool.filter(t=>!isRoyal(t));
   for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
     const pc=board[r][c];
@@ -5041,6 +5065,7 @@ function openRuleModal(){
   document.getElementById('rNifu').checked=RULES.nifu;
   document.getElementById('rSennichiteMode').value=RULES.sennichiteMode;
   document.getElementById('rFlyingGeneral').checked=RULES.flyingGeneral;
+  document.getElementById('rPalaceEscape').checked=RULES.palaceEscape;
   document.getElementById('rRankless').checked=RULES.ranklessAsGeneral;
   document.getElementById('rRandSpecial').checked=RULES.randomIncludeSpecial;
   document.getElementById('rRepromote').checked=RULES.repromote;
@@ -5061,6 +5086,7 @@ document.getElementById('rKeep').onchange=e=>RULES.keepPromoted=e.target.checked
 document.getElementById('rNifu').onchange=e=>RULES.nifu=e.target.checked;
 document.getElementById('rSennichiteMode').onchange=e=>{ setSennichiteMode(e.target.value); render(); };
 document.getElementById('rFlyingGeneral').onchange=e=>{ RULES.flyingGeneral=e.target.checked; render(); };
+document.getElementById('rPalaceEscape').onchange=e=>{ RULES.palaceEscape=e.target.checked; render(); };
 // 九宮は盤の設定なので、チェックしただけでは反映しない（「適用」または「作成」で確定）
 document.getElementById('bsPalace').onchange=()=>updatePalacePending();
 document.getElementById('pzSel').onchange=e=>{ e.target.dataset.touched='1'; updatePalacePending(); };
@@ -5155,6 +5181,7 @@ document.getElementById('stepFwd').onclick=stepForward;
 
 setSennichiteMode(RULES.sennichiteMode);
 newGame();
+syncSizeUI();    // 盤の設定（行・列・敵陣の深さ・九宮）の表示を起動時から実際の値に合わせる
 rememberSetup(); // 起動時の本将棋配置を初期配置として記憶
 paused=true; updatePlayPauseLabel();
 setStatus('▶ 開始 で対局を始めます（あなたが手動なら盤をタップ）');
