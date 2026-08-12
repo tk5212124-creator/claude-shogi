@@ -730,6 +730,7 @@
     <button class="primary" id="playPause">▶ 開始</button>
     <button id="stepFwd">▶❘ 1手進める</button>
     <button class="primary" id="undo">◀ 待った</button>
+    <button id="passBtn" style="display:none;">⏭ パス</button>
   </div>
   <div class="controls">
     <button id="ruleBtn">ルール設定</button>
@@ -964,14 +965,26 @@
           <option value="none">制限なし（千日手でも続行）</option>
         </select>
       </div>
-      <p class="rule-note" style="margin:6px 0 2px;">シャンチー（中国象棋）</p>
-      <label class="rule-row"><input type="checkbox" id="rFlyingGeneral"> 王不見王（帥と将を同じ筋で相対させる手は指せない。全ての手が相対になる場合は負け）</label>
-      <label class="rule-row"><input type="checkbox" id="rPalaceEscape"> 九宮の駒（帥・將／仕・士）が宮マスの外にも出られるようにする（九宮ONのときだけ効きます）</label>
+      <label class="rule-row"><input type="checkbox" id="rAllowPass"> パス（着手放棄）を認める ※盤の下に「⏭ パス」ボタンが出ます。CPUも同じ手として使います</label>
       <label class="rule-row"><input type="checkbox" id="rRankless"> 格なしの駒（チェス駒・成駒・はさみ駒）を一般駒として扱う（範囲攻撃で取られる）</label>
-      <label class="rule-row"><input type="checkbox" id="rRandSpecial"> ランダム置換の候補に囲碁石・オセロ駒・はさみ駒（動きが特殊な駒）も含める ※将棋・チェス・シャンチー・チャンギ・どうぶつしょうぎの駒は常に候補です</label>
+      <label class="rule-row"><input type="checkbox" id="rRandSpecial"> ランダム置換・ランダム成りの候補に囲碁石・オセロ駒・はさみ駒（動きが特殊な駒）も含める ※将棋・チェス・シャンチー・チャンギ・どうぶつしょうぎの駒は常に候補です</label>
       <label class="rule-row"><input type="checkbox" id="rRepromote"> 成り条件をもう一度満たすと、もう一度成れる（成駒の成駒。例：敵駒を取ると成るルールなら、再度敵駒を取ると更に成る）</label>
       <label class="rule-row"><input type="checkbox" id="rRandomPromote"> 成り先のない駒は、成るとき全駒からランダムな駒に変化する（王将・玉将はroyalな駒へ）</label>
       <label class="rule-row"><input type="checkbox" id="rCaptureAll"> 相手の駒を全て取る（取り切る）まで戦う（王の有無に関係なく勝敗判定。囲碁・オセロ・はさみ将棋向け）</label>
+      <p class="rule-note" style="margin:6px 0 2px;">シャンチー（中国象棋）</p>
+      <label class="rule-row"><input type="checkbox" id="rFlyingGeneral"> 王不見王（帥と将を同じ筋で相対させる手は指せない。全ての手が相対になる場合は負け）</label>
+      <label class="rule-row"><input type="checkbox" id="rPalaceEscape"> 九宮の駒（帥・將／仕・士）が宮マスの外にも出られるようにする（九宮ONのときだけ効きます）</label>
+      <p class="rule-note" style="margin:6px 0 2px;">チャンギ（韓国将棋）</p>
+      <label class="rule-row"><input type="checkbox" id="rBikjang"> ビッチャングン（漢・楚が相対したら、相手はそれを解消する手しか指せない。解消できなければ引き分け）</label>
+      <div class="rule-row rule-sel"><span>チャンギの馬・象の並び</span>
+        <select id="rJanggiSetup">
+          <option value="std">標準（車馬象士｜士象馬車）</option>
+          <option value="in">馬が内側（車象馬士｜士馬象車）</option>
+          <option value="left">左だけ入替（車象馬士｜士象馬車）</option>
+          <option value="right">右だけ入替（車馬象士｜士馬象車）</option>
+        </select>
+      </div>
+      <p class="rule-note" style="margin:2px 0 6px;">※ 並びを変えたら「盤の設定」でチャンギのプリセットを適用し直してください。車も入れ替える北朝鮮ルールは編集ツールで自由に組めます。</p>
       <p class="rule-note" style="margin:6px 0 2px;">引き分け（持将棋）</p>
       <label class="rule-row"><input type="checkbox" id="rDrawNoMove"> どこにも動けない・打てなくなったら持将棋（引き分け）にする</label>
       <label class="rule-row"><input type="checkbox" id="rDrawBothEnter"> 双方の王が敵陣に入ったら持将棋（引き分け）にする</label>
@@ -1391,6 +1404,19 @@ TP['JCb']={n:'Cannon(Janggi)',k:'包',pr:null,v:450,fl:['janggi','jcannon'],m:[[
 TP['JP']={n:'Soldier(Janggi)',k:'兵',pr:null,v:120,fl:['janggi','jpawn'],m:[[-1,0,1],[0,-1,1],[0,1,1]]};
 TP['JPb']={n:'Soldier(Janggi)',k:'卒',pr:null,v:120,fl:['janggi','jpawn'],m:[[-1,0,1],[0,-1,1],[0,1,1]]};
 const JANGGI_LIST=['JK','JA','JE','JH','JR','JC','JP','JKb','JAb','JEb','JHb','JRb','JCb','JPb'];
+// シャンチー・チャンギの馬／象は「途中のマス」に駒があると動けない（飛び越えられない）。
+// 戻り値は空でなければならない中間マスの相対座標。該当しない駒は null。
+function blockCellsFor(t,dr,dc){
+  const fl=(TP[t]&&TP[t].fl)||[];
+  if(!(fl.includes('xiangqi')||fl.includes('janggi'))) return null;
+  const sr=Math.sign(dr), sc=Math.sign(dc), ar=Math.abs(dr), ac=Math.abs(dc);
+  if(ar===2&&ac===1) return [[sr,0]];            // 馬：縦2横1 → 縦1マス目が塞がると不可
+  if(ar===1&&ac===2) return [[0,sc]];            // 馬：横2縦1 → 横1マス目が塞がると不可
+  if(ar===2&&ac===2) return [[sr,sc]];           // シャンチーの象：斜め2 → 斜め1マス目
+  if(ar===3&&ac===2) return [[sr,0],[2*sr,sc]];  // チャンギの象：縦1＋斜め2 → 途中2マス
+  if(ar===2&&ac===3) return [[0,sc],[sr,2*sc]];  // チャンギの象：横1＋斜め2 → 途中2マス
+  return null;
+}
 function isJCannon(t){ return t==='JC'||t==='JCb'; }
 function isJPawn(t){ return t==='JP'||t==='JPb'; }
 function isJPalaceBound(t){ return t==='JK'||t==='JKb'||t==='JA'||t==='JAb'; }
@@ -1656,15 +1682,13 @@ function moveVecs(t){
 function promoteCode(t){
   return TP[t] && TP[t].pr ? TP[t].pr : null;
 }
-// 全駒からランダムな成り先を選ぶ。royal駒が成る場合は royal駒の中から選ぶ（王の資格を保つ）。
-let RANDOM_PROMO_POOL=null, RANDOM_ROYAL_POOL=null;
+// ランダムな成り先を選ぶ。候補はランダム置換と同じ randomPool()（＝ルールの
+// 「特殊駒を含める」チェックが両方に効く）。royal駒が成る場合は royal駒の中から選ぶ。
 function randomPromoCode(royal){
-  if(!RANDOM_PROMO_POOL){
-    RANDOM_PROMO_POOL=Object.keys(TP).filter(t=>!isRoyal(t)&&t!=='OTH'&&!isGo(t));
-    RANDOM_ROYAL_POOL=Object.keys(TP).filter(t=>isRoyal(t));
-  }
-  const pool=(royal && RANDOM_ROYAL_POOL.length)? RANDOM_ROYAL_POOL : RANDOM_PROMO_POOL;
-  return pool[Math.floor(Math.random()*pool.length)];
+  const all=randomPool();
+  const pool=royal ? all.filter(isRoyal) : all.filter(t=>!isRoyal(t));
+  const use=pool.length?pool:all;
+  return use[Math.floor(Math.random()*use.length)];
 }
 // 成る時の新コード：定義された成り先があればそれ。無くてランダム成りONなら無作為（royalはroyalへ）。
 function resolvePromoCode(t){
@@ -2024,10 +2048,9 @@ function setupOthello(){
 }
 // はさみ将棋（9×9）。駒を持ち駒として最大限保持し、打って動かす。
 function setupHasami(){
+  // 本来のはさみ将棋は駒の打ち込みが無い（取った駒は使えない）ので持ち駒は持たせない
   NR=NC=9; PZ=0; emptyBoard();
   for(let c=0;c<NC;c++){ board[0][c]={t:'HASA',p:-1}; board[NR-1][c]={t:'HASA',p:1}; }
-  const n=Math.floor(NR*NC/2);
-  capYou.push(...fill('HASA',n)); capEnemy.push(...fill('HASA',n));
 }
 // 囲碁（19×19）。碁石を持ち駒として最大限保持し、空点に打つ。
 function setupGo(){
@@ -2058,7 +2081,12 @@ function setupXiangqi(){
 // チャンギ（韓国将棋 9×10）。楚＝相手（上）、漢＝あなた（下）。標準初期配置（象・馬は内側配置）。
 function setupJanggi(){
   NR=10; NC=9; PZ=0; emptyBoard();
-  const back=['R','H','E','A',null,'A','E','H','R'];   // 車馬象士 ・ 士象馬車（標準配置）
+  // チャンギは対局前に馬と象の位置を入れ替えられる（設定 janggiSetup）。
+  // 車も入れ替える北朝鮮ルールは、編集ツールで自由に組み替えて再現できる。
+  const s=RULES.janggiSetup||'std';
+  const L=(s==='in'||s==='left') ? ['E','H'] : ['H','E'];   // 左側 (2列目・3列目)
+  const R=(s==='in'||s==='right') ? ['H','E'] : ['E','H'];  // 右側 (7列目・8列目)
+  const back=['R',L[0],L[1],'A',null,'A',R[0],R[1],'R'];
   for(let c=0;c<9;c++){
     const t=back[c]; if(!t) continue;
     board[0][c]={t:'J'+t+'b',p:-1};
@@ -2167,8 +2195,11 @@ const RULES={
   captureAll:false,  // 相手の駒を全て取り切るまで戦う（王の有無に関係なく勝敗判定）。囲碁/オセロ/はさみ向け
   banSennichite:true,  // 千日手回避：同一局面が4回目になる手を禁じる（＝千日手が成立しない）
   flyingGeneral:false, // 王不見王：帥と将を同じ筋で相対させる手は指せない（シャンチー）
+  allowPass:false,     // パス（着手放棄）を認める。チャンギは既定でON
   palace:false,        // 九宮：帥/將・仕/士は宮殿から出られない（シャンチー）
   palaceEscape:false,  // 九宮があっても、帥/將・仕/士が宮の外へ出られるようにする
+  bikjang:false,       // ビッチャングン（チャンギ）：漢・楚が相対したまま解消できなければ引き分け
+  janggiSetup:'std',   // チャンギの馬・象の並び：'std'|'in'|'left'|'right'
   xiangqiSennichite:false // シャンチー式の千日手判定（連続王手の反復は攻撃側の負け）
 };
 // ===== デバッグ情報の書き出し（棋譜・初期配置・ルール・現局面をテキスト化） =====
@@ -2185,6 +2216,7 @@ function kifuToText(){
   if(!kifu.length) return '(まだ指し手がありません)';
   return kifu.map((k,i)=>{
     const who=k.side===1?'▲':'△';
+    if(k.pass) return (i+1)+'. '+who+'パス（着手放棄）';
     const to='('+(k.to?(k.to[0]+1)+'行'+(k.to[1]+1)+'列':'?')+')';
     if(k.drop) return (i+1)+'. '+who+((KANJI[k.drop]||k.drop))+' 打 '+to;
     const from=k.from?('('+(k.from[0]+1)+'行'+(k.from[1]+1)+'列)'):'';
@@ -2388,6 +2420,10 @@ function moves(b,r,c){
     if(v.r==='jump'){
       const nr=r+dr, nc=c+dc;
       if(nr<0||nr>=NR||nc<0||nc>=NC)continue;
+      // シャンチー・チャンギの馬／象は駒を飛び越えられない（蹩馬腿・塞象眼）
+      const bl=blockCellsFor(pc.t,dr,dc);
+      if(bl && bl.some(([br,bc])=>{ const rr=r+br, cc=c+bc;
+        return rr>=0&&rr<NR&&cc>=0&&cc<NC&&b[rr][cc]; })) continue;
       const tg=b[nr][nc];
       if(tg&&tg.p===p)continue;
       res.push([nr,nc]);
@@ -2517,6 +2553,32 @@ function wouldFaceGenerals(side, m){
   try{
     const s=simulate(board, m, side, capYou, capEnemy);
     return !!(s && s.nb && generalsFacing(s.nb));
+  }catch(_){ return false; }
+}
+// ===== ビッチャングン（チャンギ）=====
+// 漢・楚が同じ筋で間に駒なく相対した状態。シャンチーの王不見王と違い「作ってよい」が、
+// 相手がこれを解消できなければ引き分けになる。
+function isJGeneral(t){ return t==='JK'||t==='JKb'; }
+function jGeneralsFacing(b){
+  const rows=b.length, cols=b[0]?b[0].length:0;
+  for(let c=0;c<cols;c++){
+    let prev=null;
+    for(let r=0;r<rows;r++){
+      const pc=b[r]&&b[r][c]; if(!pc) continue;
+      if(prev && prev.p!==pc.p && isJGeneral(prev.t) && isJGeneral(pc.t)) return true;
+      prev=pc; // 間に駒があれば相対にならない
+    }
+  }
+  return false;
+}
+function bikjangNow(){ return !!(RULES.bikjang && jGeneralsFacing(board)); }
+// 相対中は「相対を解消する手」しか指せない（解消できる手が1つも無ければ引き分け）
+function wouldKeepBikjang(side, m){
+  if(!RULES.bikjang || !m) return false;
+  if(!jGeneralsFacing(board)) return false;   // いま相対していなければ制限なし
+  try{
+    const s=simulate(board, m, side, capYou, capEnemy);
+    return !!(s && s.nb && jGeneralsFacing(s.nb));
   }catch(_){ return false; }
 }
 
@@ -2676,7 +2738,9 @@ function isLegalMove(m, p, b){
   if(!(b && b!==board)){
     if(wouldRepeat(p, m)) return false;        // 千日手回避：同一局面4回目の手は指せない
     if(wouldFaceGenerals(p, m)) return false;  // 王不見王：帥と将を相対させる手は指せない
+    if(wouldKeepBikjang(p, m)) return false;   // ビッチャングン：相対を解消しない手は指せない
   }
+  if(m.pass) return !!RULES.allowPass;         // パスはルールONのときだけ指せる
   if(m.drop){
     return dropTargets(bd, m.drop, p).some(([r,c])=>r===m.tr&&c===m.tc);
   }
@@ -2838,6 +2902,7 @@ function render(){
   const cy=document.getElementById('capYou'), ce=document.getElementById('capEnemy');
   if(cy) cy.classList.toggle('turn-active', !gameOver && !editing && !replaying && turn===1);
   if(ce) ce.classList.toggle('turn-active', !gameOver && !editing && !replaying && turn===-1);
+  if(typeof updatePassBtn==='function') updatePassBtn();  // ⏭ パスの表示・可否
   if(pendingFx){ const d=pendingFx; pendingFx=null; requestAnimationFrame(()=>applyFx(d)); } // 着手演出
 }
 // 九宮（宮殿）を盤に描画。両陣ぶん、枠＋対角線（シャンチーの盤と同じ見た目）。
@@ -3273,6 +3338,7 @@ function nextTurn(){
   stopAutoLoop();
   render();
   updatePlayPauseLabel();
+  if(typeof updatePassBtn==='function') updatePassBtn();
   if(gameOver||replaying||editing)return;
   // 取り切るまで戦う：どちらかの駒が全滅したら決着（勝ち優先）
   if(RULES.captureAll){
@@ -3281,6 +3347,8 @@ function nextTurn(){
   }
   // 双方入玉で持将棋（ルールON時）
   if(RULES.drawBothEnter && royalInEnemyCamp(1) && royalInEnemyCamp(-1)){ resolveJishogi('双方入玉'); return; }
+  // ビッチャングン：相対を解消できないなら引き分け（チャンギ）
+  if(bikjangNow() && !hasAnyLegalMove(turn)){ endDraw('ビッチャングン（漢・楚の相対を解消できません）'); return; }
   // 手番側が動けない・打てない → 持将棋 or 詰み
   if(!hasAnyLegalMove(turn)){ resolveNoMove(turn); return; }
   if(isAuto(turn) && paused){
@@ -3374,6 +3442,21 @@ function afterPlayer(){
   turn=-turn;
   nextTurn();
 }
+// ⏭ パス：手動側の着手放棄。CPUと同じ {pass:true} を同じ applyMoveSilent に通す。
+function updatePassBtn(){
+  const b=document.getElementById('passBtn'); if(!b) return;
+  const usable = RULES.allowPass && !gameOver && !replaying && !editing && !isAuto(turn);
+  b.style.display = RULES.allowPass ? '' : 'none';
+  b.disabled = !usable;
+}
+document.getElementById('passBtn').onclick=()=>{
+  if(!RULES.allowPass || gameOver || replaying || editing) return;
+  if(isAuto(turn)){ setStatus('CPUの手番です'); return; }
+  const m={pass:true};
+  if(!isLegalMove(m, turn)){ setStatus('いまはパスできません（千日手回避などで禁じられています）'); return; }
+  applyMoveSilent(turn, m);
+  sel=null; afterPlayer();
+};
 
 /* ===== 相手AI：αβ探索 ===== */
 // 玉の位置を探す
@@ -3406,6 +3489,8 @@ function dropTargetsRaw(b,t,p){ return dropTargets(b,t,p); } // 後方互換の�
 function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻り値 {nb,ncy,nce,king}
   const nb=b.map(row=>row.map(x=>x?{...x}:null));
   const ncy=[...cy], nce=[...ce];
+  if(m&&m.pass) return {nb,ncy,nce,king:false};   // パスは盤面を変えない
+
   const myCap = p===-1? nce : ncy;
   let king=false;
   // コピー盤nb上でオセロ裏返しを行う（8方向・全種類を自軍に裏返す。royalを裏返したらking扱い）
@@ -3520,6 +3605,7 @@ function genMoves(b,p,cy,ce){
       dropTargets(b,t,p).forEach(([tr,tc])=>list.push({drop:t,tr,tc}));
     });
   }
+  if(RULES.allowPass) list.push({pass:true});  // パス（着手放棄）。人間・CPU共通の手として扱う
   return list;
 }
 
@@ -3604,6 +3690,13 @@ function applyMoveSilent(side,m,_legacySilent){
   const _fxPrev = fxEnabled() ? board.map(row=>row.map(x=>x?{...x}:null)) : null; // 演出用に着手前を控える
   let _fxPromo=false;
   const cap = side===-1? capEnemy : capYou;
+  if(m.pass){
+    // パス：盤面は変えない。棋譜には残し、手番だけ進める（人間・CPU共通の経路）
+    recordKifu({side,pass:true});
+    if(!silent) render();
+    checkSennichite();
+    return;
+  }
   if(m.drop){
     recordKifu({side,drop:m.drop,to:[m.tr,m.tc]});
     // 囲碁の駒は固有の色（所有者）で盤に出る＝相手の碁石を打つと相手の駒になる
@@ -4120,6 +4213,7 @@ function cutIn(text, kind){
 // side が動かせる駒・打てる持ち駒を1つでも持つか（最初に見つけたら即true）
 function hasAnyLegalMove(side){
   // 判定は人間・CPUと同じ isLegalMove を通す（千日手回避で禁じた手は「指せる手」に数えない）
+  if(RULES.allowPass && isLegalMove({pass:true},side)) return true;  // パスできるなら手詰まりではない
   for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
     const pc=board[r][c];
     if(pc&&pc.p===side){
@@ -4209,6 +4303,7 @@ function snapRestore(snap){
 }
 // kifu[i] を現在の盤へ適用（表示専用。勝敗判定なし）
 function applyKifuStep(rec){
+  if(rec.pass){ return; }          // パスは盤面を変えない
   if(rec.drop){
     board[rec.to[0]][rec.to[1]]={t:rec.drop,p:isGo(rec.drop)?goOwner(rec.drop):rec.side};
     const cap=rec.side===1?capYou:capEnemy;
@@ -4263,7 +4358,7 @@ function gotoStep(n){
   n=Math.max(0,Math.min(n,kifu.length));
   snapRestore(gameStartSnap);
   let lastTo=null;
-  for(let i=0;i<n;i++){ applyKifuStep(kifu[i]); lastTo=kifu[i].to; }
+  for(let i=0;i<n;i++){ applyKifuStep(kifu[i]); if(kifu[i].to) lastTo=kifu[i].to; }
   replayIdx=n;
   // 直前手ハイライト用にhistoryを偽装
   history=lastTo?[{to:lastTo}]:[];
@@ -4509,13 +4604,21 @@ document.getElementById('applyPresetBtn').onclick=()=>{
   applyPalaceDiag();           // 九宮の斜め線をマス属性として書き込む
   // 囲碁・オセロ・はさみ将棋は王を置かない代わりに「取り切るまで戦う」を自動ON
   if(key==='go'||key==='othello'||key==='hasami') RULES.captureAll=true;
+  // はさみ将棋は取った駒を打てない（打ち込みの無いゲーム）
+  if(key==='hasami') RULES.drops=false;
   // シャンチーは持ち駒（打ち込み）が無いゲームなので自動OFF
   if(key==='xiangqi'){ RULES.drops=false; RULES.flyingGeneral=true; setSennichiteMode('xiangqi'); }
-  if(key==='janggi'){ RULES.drops=false; }
+  // チャンギ：打ち込み無し／王不見王ではなくビッチャングン／パスは既定で可能
+  if(key==='janggi'){ RULES.drops=false; RULES.flyingGeneral=false; RULES.bikjang=true; }
+  else RULES.bikjang=false;
+  RULES.allowPass = (key==='janggi');   // パスが標準なのはチャンギだけ
+  updatePassBtn();
   syncSizeUI(); render();   // 盤の設定のチェック表示（九宮）を実際の設定に合わせる
   const label = PRESET_LABELS[key] || ('空盤 '+NR+'×'+NC);
-  const extra = (key==='go'||key==='othello'||key==='hasami') ? '（ルール「取り切るまで戦う」を自動ON）'
-              : (key==='xiangqi') ? '（持ち駒OFF・王不見王・シャンチー式千日手を自動ON。九宮はチェックどおり）' : '';
+  const extra = (key==='hasami') ? '（ルール「取り切るまで戦う」を自動ON・持ち駒OFF）'
+              : (key==='go'||key==='othello') ? '（ルール「取り切るまで戦う」を自動ON）'
+              : (key==='xiangqi') ? '（持ち駒OFF・王不見王・シャンチー式千日手を自動ON。九宮はチェックどおり）'
+              : (key==='janggi') ? '（持ち駒OFF・ビッチャングン・パス可を自動ON。九宮はチェックどおり）' : '';
   setStatus(label+'を準備しました'+extra+'。▶ 開始 で対局（編集ツールで駒も置けます）');
 };
 (function wireSizeRange(){
@@ -5066,6 +5169,9 @@ function openRuleModal(){
   document.getElementById('rSennichiteMode').value=RULES.sennichiteMode;
   document.getElementById('rFlyingGeneral').checked=RULES.flyingGeneral;
   document.getElementById('rPalaceEscape').checked=RULES.palaceEscape;
+  document.getElementById('rAllowPass').checked=RULES.allowPass;
+  document.getElementById('rBikjang').checked=RULES.bikjang;
+  document.getElementById('rJanggiSetup').value=RULES.janggiSetup;
   document.getElementById('rRankless').checked=RULES.ranklessAsGeneral;
   document.getElementById('rRandSpecial').checked=RULES.randomIncludeSpecial;
   document.getElementById('rRepromote').checked=RULES.repromote;
@@ -5087,6 +5193,9 @@ document.getElementById('rNifu').onchange=e=>RULES.nifu=e.target.checked;
 document.getElementById('rSennichiteMode').onchange=e=>{ setSennichiteMode(e.target.value); render(); };
 document.getElementById('rFlyingGeneral').onchange=e=>{ RULES.flyingGeneral=e.target.checked; render(); };
 document.getElementById('rPalaceEscape').onchange=e=>{ RULES.palaceEscape=e.target.checked; render(); };
+document.getElementById('rAllowPass').onchange=e=>{ RULES.allowPass=e.target.checked; updatePassBtn(); render(); };
+document.getElementById('rBikjang').onchange=e=>{ RULES.bikjang=e.target.checked; render(); };
+document.getElementById('rJanggiSetup').onchange=e=>{ RULES.janggiSetup=e.target.value; };
 // 九宮は盤の設定なので、チェックしただけでは反映しない（「適用」または「作成」で確定）
 document.getElementById('bsPalace').onchange=()=>updatePalacePending();
 document.getElementById('pzSel').onchange=e=>{ e.target.dataset.touched='1'; updatePalacePending(); };
