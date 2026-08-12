@@ -136,10 +136,10 @@
   /* 編集モードのドラッグ移動 */
   /* 九宮（宮殿）：枠と対角線を盤に描く */
   /* マスの斜め線属性（九宮など）：マス目と同じ線を、そのマスの中に描く。駒より背面 */
-  .em-diag{width:100%;padding:8px 0 2px;border-top:1px solid rgba(139,107,255,.25);}
-  .em-diag-lbl{display:block;font-size:.74rem;color:var(--gold);letter-spacing:.1em;margin-bottom:6px;}
-  .em-diag-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
-  .em-diag-row button{font-size:1rem;padding:9px 0;min-height:44px;}
+  .em-diag{width:100%;padding:6px 0 0;border-top:1px solid rgba(139,107,255,.25);}
+  .em-diag-lbl{display:block;font-size:.66rem;color:var(--gold);letter-spacing:.08em;margin-bottom:4px;text-align:center;}
+  .em-diag-row{display:flex;gap:6px;justify-content:center;}
+  .em-diag-row button{flex:0 0 auto;width:46px;min-height:32px;font-size:.8rem;padding:4px 0;line-height:1;}
   .em-diag-row button.on{background:linear-gradient(160deg,#2f7d5e,#1f5e44);border-color:var(--sel);color:#dff5ec;}
   .cell-diag{position:absolute;inset:0;z-index:0;pointer-events:none;}
   .cell-diag svg{width:100%;height:100%;display:block;}
@@ -769,9 +769,14 @@
       <button id="applySizeBtn">作成</button>
     </div>
     <div class="bs-row"><span id="sizeVal" class="bs-size">9 行 × 9 列</span></div>
+    <div class="bs-row">
+      <label for="pzSel">敵陣</label>
+      <select id="pzSel" class="bs-num"></select>
+      <span class="bs-size">段（一番奥から数えて）</span>
+    </div>
     <label class="bs-row bs-check"><input type="checkbox" id="bsPalace">
       <span>九宮をつくる（シャンチー用。帥・将／仕・士は宮殿から出られない。列数が奇数なら3×3、偶数なら2×2）</span></label>
-    <div class="bs-note bs-pending" id="bsPalaceNote" style="display:none;">※ 九宮の変更は「適用」または「作成」を押すと反映されます</div>
+    <div class="bs-note bs-pending" id="bsPalaceNote" style="display:none;">※ 九宮・敵陣の変更は「適用」または「作成」を押すと反映されます</div>
     <div class="bs-note">「適用」「作成」で盤を作り直します（駒は編集ツールで配置）。初期配置は出典に基づく正確な配置です。</div>
    </div>
   </div>
@@ -1343,8 +1348,10 @@ TP['XR']={n:'Chariot(Xiangqi)',k:'俥',pr:null,v:600,fl:['xiangqi'],m:[[-1,0,'F'
 TP['XRb']={n:'Chariot(Xiangqi)',k:'車',pr:null,v:600,fl:['xiangqi'],m:[[-1,0,'F'],[1,0,'F'],[0,-1,'F'],[0,1,'F']]};
 TP['XC']={n:'Cannon(Xiangqi)',k:'炮',pr:null,v:450,fl:['xiangqi','cannon'],m:[[-1,0,'F'],[1,0,'F'],[0,-1,'F'],[0,1,'F']]};
 TP['XCb']={n:'Cannon(Xiangqi)',k:'砲',pr:null,v:450,fl:['xiangqi','cannon'],m:[[-1,0,'F'],[1,0,'F'],[0,-1,'F'],[0,1,'F']]};
-TP['XP']={n:'Soldier(Xiangqi)',k:'兵',pr:null,v:100,fl:['xiangqi','xpawn'],m:[[-1,0,1]]};
-TP['XPb']={n:'Soldier(Xiangqi)',k:'卒',pr:null,v:100,fl:['xiangqi','xpawn'],m:[[-1,0,1]]};
+TP['XP']={n:'Soldier(Xiangqi)',k:'兵',pr:'+XP',v:100,fl:['xiangqi','xpawn'],m:[[-1,0,1]]};
+TP['+XP']={n:'Soldier crossed',k:'兵',pr:null,v:200,fl:['xiangqi'],m:[[-1,0,1],[0,-1,1],[0,1,1]]};
+TP['XPb']={n:'Soldier(Xiangqi)',k:'卒',pr:'+XPb',v:100,fl:['xiangqi','xpawn'],m:[[-1,0,1]]};
+TP['+XPb']={n:'Soldier crossed',k:'卒',pr:null,v:200,fl:['xiangqi'],m:[[-1,0,1],[0,-1,1],[0,1,1]]};
 const XIANGQI_LIST=['XK','XA','XE','XH','XR','XC','XP','XKb','XAb','XEb','XHb','XRb','XCb','XPb'];
 
 // ===== チャンギ（韓国将棋）の駒 =====
@@ -1986,7 +1993,7 @@ const TAIKYOKU_ROWS=("L WT RB W DM TK27 LO BO HR TK03 ED WO FT Q RS RG G CP K G 
 function setupTaikyoku(){ placeFullGrid(TAIKYOKU_ROWS, 6); }
 // チェス（8×8）。左右対称（点対称ではない）に同じ並びを両陣へ。
 function setupChess(){
-  NR=NC=8; PZ=0; emptyBoard();
+  NR=NC=8; PZ=1; emptyBoard();   // 一番奥の段が敵陣（ポーンが成る）
   const back=['cR','cN','cB','cQ','cK','cB','cN','cR'];
   for(let c=0;c<8;c++){
     board[7][c]={t:back[c],p:1};  board[6][c]={t:'cP',p:1};
@@ -2025,7 +2032,7 @@ function setupDoubutsu(){
 
 // シャンチー（中国象棋 9×10）。紅=あなた（下）、黒=相手（上）。標準初期配置。
 function setupXiangqi(){
-  NR=10; NC=9; PZ=0; emptyBoard();
+  NR=10; NC=9; PZ=5; emptyBoard();   // 河（中央）から先が敵陣＝兵/卒が成る
   const bk=['XRb','XHb','XEb','XAb','XKb','XAb','XEb','XHb','XRb']; // 黒の最上段
   const rd=['XR','XH','XE','XA','XK','XA','XE','XH','XR'];          // 紅の最下段
   for(let c=0;c<9;c++){ board[0][c]={t:bk[c],p:-1}; board[9][c]={t:rd[c],p:1}; }
@@ -2278,6 +2285,7 @@ function moves(b,r,c){
         nr+=dr; nc+=dc;
       }
     }
+    res.push(...janggiDiagMoves(b,r,c,p,'jump'));   // 宮の斜め線に沿った跳び越え
     return res;
   }
   // チャンギの兵/卒：前と左右に1マス（後退なし）
@@ -2288,6 +2296,7 @@ function moves(b,r,c){
       if(nr<0||nr>=NR||nc<0||nc>=NC) continue;
       const q=b[nr][nc]; if(!q||q.p!==p) res.push([nr,nc]);
     }
+    res.push(...janggiDiagMoves(b,r,c,p,'step',true));  // 宮の斜め線に沿った前進
     return res;
   }
   // シャンチーの炮/砲：移動は空マスのみ（飛車型）。取る時だけ間に1枚（砲台）を
@@ -2306,18 +2315,6 @@ function moves(b,r,c){
         }
         nr+=dr; nc+=dc;
       }
-    }
-    return res;
-  }
-  // シャンチーの兵/卒：前に1マス。河（盤の中央）を渡ると左右にも1マス動ける。
-  if(isXPawn(pc.t)){
-    const res=[]; const dir = p===1? -1 : 1;
-    const fr2=r+dir;
-    if(fr2>=0&&fr2<NR && (!b[fr2][c]||b[fr2][c].p!==p)) res.push([fr2,c]);
-    const crossed = p===1 ? (r < NR/2) : (r >= NR/2);
-    if(crossed){
-      for(const dc of [-1,1]){ const cc=c+dc;
-        if(cc>=0&&cc<NC && (!b[r][cc]||b[r][cc].p!==p)) res.push([r,cc]); }
     }
     return res;
   }
@@ -2417,9 +2414,13 @@ function moves(b,r,c){
   if(isHook(pc.t)) hookMoves(b,r,c).forEach(([a,bb])=>res.push([a,bb]));
   // 九宮（宮殿）：帥/將・仕/士は九宮の外へ出られない
   if(RULES.palace && isPalaceBound(pc.t)){
-    if(!inPalace(r,c,p)) return [];                              // 九宮の外に居る場合は動けない
-    return res.filter(([tr,tc])=>inPalace(tr,tc,p));             // 九宮の中だけへ動ける
+    if(!isPalaceCell(r,c)) return [];                            // 宮の外に居る場合は動けない
+    // チャンギの王・士は宮の斜め線に沿っても動ける
+    if(isJPalaceBound(pc.t)) res.push(...janggiDiagMoves(b,r,c,p,'step'));
+    return res.filter(([tr,tc])=>isPalaceCell(tr,tc));           // 宮のマスへだけ動ける
   }
+  // チャンギの車は宮の斜め線に沿って走れる
+  if((pc.t==='JR'||pc.t==='JRb')) res.push(...janggiDiagMoves(b,r,c,p,'slide'));
   return res;
 }
 // ===== シャンチーの九宮（宮殿） =====
@@ -2431,6 +2432,50 @@ function inPalace(r,c,side){
   const c0=Math.floor((NC-s)/2), c1=c0+s-1;
   const r0 = side===1 ? NR-s : 0, r1 = side===1 ? NR-1 : s-1;
   return r>=r0 && r<=r1 && c>=c0 && c<=c1;
+}
+// 宮のマス＝「斜め線・交差が描かれたマス」または「交差マスの縦横1マス隣」。
+// 編集で斜め線を足せば宮も広がる（描かれた線がそのまま宮の形になる）。
+function isPalaceCell(r,c){
+  if(getDiag(r,c)) return true;
+  for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){
+    const rr=r+dr, cc=c+dc;
+    if(rr>=0&&rr<NR&&cc>=0&&cc<NC && getDiag(rr,cc)==='x') return true;
+  }
+  return false;
+}
+// マス(r,c)が斜め線 d（'l'=＼ / 'r'=／）を持つか（交差は両方を持つ）
+function diagHas(r,c,d){ const g=getDiag(r,c); return g===d||g==='x'; }
+// チャンギ：宮の斜め線に沿った移動。線が続く間だけ進める。
+// mode: 'step'（王・士・兵）／'slide'（車）／'jump'（包）
+function janggiDiagMoves(b,r,c,p,mode,forwardOnly){
+  const res=[];
+  const dirs=[['l',-1,-1],['l',1,1],['r',-1,1],['r',1,-1]];
+  const fwd = p===1? -1 : 1;
+  for(const [d,dr,dc] of dirs){
+    if(!diagHas(r,c,d)) continue;
+    if(forwardOnly && dr!==fwd) continue;      // 兵・卒は前方の斜めのみ
+    if(mode==='step'){
+      const nr=r+dr, nc=c+dc;
+      if(nr<0||nr>=NR||nc<0||nc>=NC || !diagHas(nr,nc,d)) continue;
+      const q=b[nr][nc]; if(!q||q.p!==p) res.push([nr,nc]);
+    } else if(mode==='slide'){
+      let nr=r+dr, nc=c+dc;
+      while(nr>=0&&nr<NR&&nc>=0&&nc<NC&&diagHas(nr,nc,d)){
+        const q=b[nr][nc];
+        if(q){ if(q.p!==p) res.push([nr,nc]); break; }
+        res.push([nr,nc]); nr+=dr; nc+=dc;
+      }
+    } else {
+      let nr=r+dr, nc=c+dc, jumped=false;
+      while(nr>=0&&nr<NR&&nc>=0&&nc<NC&&diagHas(nr,nc,d)){
+        const q=b[nr][nc];
+        if(!jumped){ if(q){ if(isJCannon(q.t)) break; jumped=true; } }
+        else { if(!q) res.push([nr,nc]); else { if(q.p!==p&&!isJCannon(q.t)) res.push([nr,nc]); break; } }
+        nr+=dr; nc+=dc;
+      }
+    }
+  }
+  return res;
 }
 // ===== 王不見王（帥と将を相対させない） =====
 function isXGeneral(t){ return t==='XK'||t==='XKb'; }
@@ -4360,6 +4405,17 @@ function syncSizeUI(){
   if(rR) rR.value=NR;
   if(cR) cR.value=NC;
   if(val) val.textContent=NR+' 行 × '+NC+' 列';
+  // 敵陣の深さ（成りゾーン）も盤の設定として同期する
+  const pz=document.getElementById('pzSel');
+  if(pz){
+    const want=Math.min(PZ, NR);
+    if(pz.options.length!==NR+1){
+      pz.innerHTML='';
+      for(let i=0;i<=NR;i++){ const o=document.createElement('option'); o.value=i;
+        o.textContent=(i===0?'なし（成りゾーン無し）':i+' 段'); pz.appendChild(o); }
+    }
+    pz.value=want;
+  }
   // 九宮は盤の形に関わる設定なので、盤の設定側に置いてここで同期する
   const pl=document.getElementById('bsPalace');
   if(pl){ pl.checked=RULES.palace;
@@ -4416,11 +4472,17 @@ document.getElementById('presetSel').onchange=()=>{
   const key=document.getElementById('presetSel').value;
   const cb=document.getElementById('bsPalace');
   if(cb){ cb.checked=(key==='xiangqi'||key==='janggi'); updatePalacePending(); }
+  const pz=document.getElementById('pzSel'); if(pz) pz.dataset.touched='';   // プリセットの既定を使う
 };
 document.getElementById('applyPresetBtn').onclick=()=>{
   const key=document.getElementById('presetSel').value;
   const wantPalace=document.getElementById('bsPalace').checked; // 押した時点の指定を先に読む
+  const pzEl=document.getElementById('pzSel');
+  const pzBefore=pzEl?+pzEl.value:null;
+  const pzChanged=pzEl && document.getElementById('pzSel').dataset.touched==='1';
   newGameWithBoard(()=>applyPreset(key));
+  if(pzChanged && pzBefore!==null) PZ=Math.min(pzBefore, NR);   // 手動指定があれば優先
+  if(pzEl) pzEl.dataset.touched='';
   RULES.palace = wantPalace;   // 常にチェックどおり（プリセットでも上書きしない）
   applyPalaceDiag();           // 九宮の斜め線をマス属性として書き込む
   // 囲碁・オセロ・はさみ将棋は王を置かない代わりに「取り切るまで戦う」を自動ON
@@ -4452,7 +4514,10 @@ document.getElementById('applyPresetBtn').onclick=()=>{
     const rows=clampN(rR.value), cols=clampN(cR.value);
     rR.value=rows; cR.value=cols;
     const wantPalace=document.getElementById('bsPalace').checked; // 押した時点の指定
+    const pzEl=document.getElementById('pzSel'); const wantPZ=pzEl?+pzEl.value:null;
     newGameWithBoard(()=>makeEmptyBoard(rows, cols));
+    if(wantPZ!==null) PZ=Math.min(wantPZ, NR);
+    if(pzEl) pzEl.dataset.touched='';
     RULES.palace=wantPalace; applyPalaceDiag(); syncSizeUI(); render();
     const sel=document.getElementById('presetSel'); if(sel) sel.value='empty';
     setStatus('空盤 '+NR+' 行 × '+NC+' 列 を作りました（編集ツールで駒を配置）');
@@ -4965,10 +5030,13 @@ document.getElementById('rSennichiteMode').onchange=e=>{ setSennichiteMode(e.tar
 document.getElementById('rFlyingGeneral').onchange=e=>{ RULES.flyingGeneral=e.target.checked; render(); };
 // 九宮は盤の設定なので、チェックしただけでは反映しない（「適用」または「作成」で確定）
 document.getElementById('bsPalace').onchange=()=>updatePalacePending();
+document.getElementById('pzSel').onchange=e=>{ e.target.dataset.touched='1'; updatePalacePending(); };
 function updatePalacePending(){
   const cb=document.getElementById('bsPalace'), note=document.getElementById('bsPalaceNote');
   if(!cb||!note) return;
-  note.style.display = (cb.checked!==RULES.palace) ? '' : 'none';
+  const pz=document.getElementById('pzSel');
+  const pzPending = pz && pz.dataset.touched==='1' && +pz.value!==PZ;
+  note.style.display = ((cb.checked!==RULES.palace) || pzPending) ? '' : 'none';
 }
 document.getElementById('rRankless').onchange=e=>{ RULES.ranklessAsGeneral=e.target.checked; POWER_CACHE_clear(); render(); };
 document.getElementById('rRandSpecial').onchange=e=>{ RULES.randomIncludeSpecial=e.target.checked; };
