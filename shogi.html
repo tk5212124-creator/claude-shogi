@@ -499,37 +499,83 @@
 
   /* エフェクト用オーバーレイ（盤の上に重ねる） */
   #fxLayer{position:absolute; inset:10px; z-index:30; pointer-events:none; overflow:visible;}
-  /* 取られた駒が倒れて散る（トップル） */
+  /* 取られた駒が倒れて散る（トップル）：吹っ飛びながら回転して消える */
   .fx-topple{position:absolute; transform-origin:50% 100%; will-change:transform,opacity;
-    animation:fxTopple .6s cubic-bezier(.4,.1,.6,1) forwards; filter:drop-shadow(0 4px 6px rgba(0,0,0,.5));}
+    animation:fxTopple .78s cubic-bezier(.3,.1,.5,1) forwards; filter:drop-shadow(0 6px 10px rgba(0,0,0,.6));}
   @keyframes fxTopple{
-    0%{transform:rotate(0) translateY(0) scale(1); opacity:1;}
-    35%{transform:rotate(-62deg) translateY(4%) scale(1); opacity:1;}
-    100%{transform:rotate(-96deg) translate(-30%,70%) scale(.7); opacity:0;}}
-  /* 斬撃：白い斬線が走る（ドラクエの攻撃エフェクト風） */
-  .fx-slash{position:absolute; height:7px; border-radius:999px; pointer-events:none;
-    background:linear-gradient(90deg, transparent, rgba(255,255,255,.25) 15%, #fff 50%, rgba(255,255,255,.25) 85%, transparent);
-    box-shadow:0 0 10px rgba(255,255,255,.95), 0 0 26px rgba(150,200,255,.7);
+    0%{transform:rotate(0) translateY(0) scale(1.35); opacity:1; filter:brightness(2.6);}
+    18%{transform:rotate(-30deg) translate(-10%,-38%) scale(1.2); opacity:1;}
+    45%{transform:rotate(-140deg) translate(-40%,-12%) scale(1.02); opacity:.95;}
+    100%{transform:rotate(-330deg) translate(-95%,150%) scale(.5); opacity:0;}}
+  /* 斬撃：白い斬線が走る（ドラクエの攻撃エフェクト風）。太く・長く・尾を引く */
+  .fx-slash{position:absolute; height:13px; border-radius:999px; pointer-events:none;
+    background:linear-gradient(90deg, transparent, rgba(190,225,255,.35) 10%, #fff 48%, rgba(255,255,255,.9) 58%, rgba(160,210,255,.3) 88%, transparent);
+    box-shadow:0 0 18px rgba(255,255,255,1), 0 0 44px rgba(150,200,255,.9), 0 0 80px rgba(120,170,255,.5);
     will-change:transform,opacity;
-    animation:fxSlash .2s cubic-bezier(.1,.8,.2,1) forwards;}
+    animation:fxSlash .26s cubic-bezier(.1,.9,.2,1) forwards;}
+  .fx-slash.gold{background:linear-gradient(90deg, transparent, rgba(255,230,150,.35) 10%, #fff6d8 48%, #ffd76b 58%, rgba(255,190,70,.3) 88%, transparent);
+    box-shadow:0 0 20px rgba(255,225,140,1), 0 0 50px rgba(255,180,60,.9), 0 0 90px rgba(255,140,40,.5);}
   @keyframes fxSlash{
-    0%{transform:translate(-50%,-50%) rotate(var(--ang)) scaleX(.05); opacity:0;}
-    22%{opacity:1;}
-    70%{transform:translate(-50%,-50%) rotate(var(--ang)) scaleX(1); opacity:1;}
-    100%{transform:translate(-50%,-50%) rotate(var(--ang)) scaleX(1.08); opacity:0;}}
-  /* ヒット閃光：マスが白く光る */
+    0%{transform:translate(-50%,-50%) rotate(var(--ang)) scaleX(.04) scaleY(.4); opacity:0;}
+    18%{opacity:1;}
+    62%{transform:translate(-50%,-50%) rotate(var(--ang)) scaleX(1) scaleY(1.25); opacity:1;}
+    100%{transform:translate(-50%,-50%) rotate(var(--ang)) scaleX(1.22) scaleY(.25); opacity:0;}}
+  /* ヒット閃光：マスが白く光る（大きく強く） */
   .fx-flash{position:absolute; border-radius:12%; pointer-events:none;
-    background:radial-gradient(circle, rgba(255,255,255,.95), rgba(255,240,200,.5) 55%, transparent 75%);
-    animation:fxFlash .26s ease-out forwards;}
-  @keyframes fxFlash{0%{opacity:0; transform:scale(.6);} 30%{opacity:1; transform:scale(1.15);} 100%{opacity:0; transform:scale(1.3);}}
+    background:radial-gradient(circle, #fff, rgba(255,244,210,.85) 42%, rgba(255,200,120,.35) 68%, transparent 80%);
+    animation:fxFlash .34s ease-out forwards;}
+  @keyframes fxFlash{0%{opacity:0; transform:scale(.4);} 22%{opacity:1; transform:scale(1.7);} 100%{opacity:0; transform:scale(2.3);}}
+  /* 衝撃波：ヒット地点から広がる白いリング（画面座標） */
+  .fx-shock{position:fixed; border-radius:50%; pointer-events:none; z-index:360;
+    border:6px solid rgba(255,255,255,.9);
+    box-shadow:0 0 30px rgba(255,255,255,.9), inset 0 0 30px rgba(255,220,150,.7);
+    animation:fxShock .5s cubic-bezier(.1,.7,.3,1) forwards;}
+  @keyframes fxShock{0%{transform:translate(-50%,-50%) scale(.1);opacity:1;border-width:10px;}
+    100%{transform:translate(-50%,-50%) scale(3.4);opacity:0;border-width:1px;}}
+  /* ダメージ数値（RPG風に取った駒の価値が飛び出す） */
+  .fx-dmg{position:fixed; z-index:365; pointer-events:none; font-weight:900;
+    font-family:'Shippori Mincho',serif; font-size:1.5rem; color:#fff3c4; letter-spacing:.02em;
+    text-shadow:0 0 10px rgba(255,180,60,1), 0 0 22px rgba(255,120,30,.9), 0 3px 0 #7a3a06, 0 4px 6px rgba(0,0,0,.7);
+    will-change:transform,opacity; animation:fxDmg .95s cubic-bezier(.2,1.4,.4,1) forwards;}
+  .fx-dmg.crit{font-size:2.3rem; color:#fff; text-shadow:0 0 14px rgba(255,90,60,1), 0 0 30px rgba(255,40,20,.95), 0 3px 0 #6b0d0d, 0 5px 8px rgba(0,0,0,.8);}
+  @keyframes fxDmg{0%{transform:translate(-50%,-50%) scale(.2);opacity:0;}
+    18%{transform:translate(-50%,-60%) scale(1.45);opacity:1;}
+    32%{transform:translate(-50%,-64%) scale(1);opacity:1;}
+    72%{transform:translate(-50%,-130%) scale(1);opacity:1;}
+    100%{transform:translate(-50%,-180%) scale(.85);opacity:0;}}
+  /* 破片（斬られた駒から飛び散る木片） */
+  .fx-shard{position:absolute; pointer-events:none; border-radius:2px;
+    background:linear-gradient(160deg,#ffeec4,#c99a52); will-change:transform,opacity;
+    animation:fxShard .7s cubic-bezier(.2,.7,.4,1) forwards;}
+  @keyframes fxShard{0%{transform:translate(0,0) rotate(0) scale(1);opacity:1;}
+    100%{transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(.3);opacity:0;}}
+  /* 着地の土煙（すべての着手で出る小さなリング） */
+  .fx-dust{position:absolute; border-radius:50%; pointer-events:none;
+    border:2px solid rgba(255,240,205,.75); box-shadow:0 0 12px rgba(255,220,150,.6);
+    animation:fxDust .42s ease-out forwards;}
+  @keyframes fxDust{0%{transform:scale(.25);opacity:.95;} 100%{transform:scale(1.6);opacity:0;}}
+  /* 移動の残像（駒が尾を引く） */
+  .fx-trail{position:absolute; pointer-events:none; opacity:.5;
+    filter:blur(1.5px) brightness(1.5); animation:fxTrail .3s ease-out forwards;}
+  @keyframes fxTrail{0%{opacity:.55;transform:scale(1);} 100%{opacity:0;transform:scale(.8);}}
   /* 成り演出：金の光柱が立ち昇る */
   .fx-pillar{position:absolute; pointer-events:none; transform-origin:50% 100%;
     background:linear-gradient(to top, rgba(255,228,150,.95), rgba(255,242,200,.6) 42%, rgba(255,246,220,.25) 72%, transparent);
     box-shadow:0 0 26px rgba(255,214,110,.85), 0 0 60px rgba(255,190,80,.4);
     border-radius:38% 38% 0 0 / 10% 10% 0 0;
     animation:fxPillar .8s ease-out forwards;}
-  @keyframes fxPillar{0%{transform:scaleY(0);opacity:0;} 22%{transform:scaleY(1.05);opacity:1;}
-    65%{transform:scaleY(1);opacity:.95;} 100%{transform:scaleY(1.12);opacity:0;}}
+  @keyframes fxPillar{0%{transform:scaleY(0) scaleX(.4);opacity:0;} 18%{transform:scaleY(1.12) scaleX(1.25);opacity:1;}
+    60%{transform:scaleY(1) scaleX(1);opacity:.95;} 100%{transform:scaleY(1.25) scaleX(.5);opacity:0;}}
+  /* 成り演出：背後で回る放射光 */
+  .fx-burst{position:absolute; pointer-events:none; border-radius:50%;
+    background:conic-gradient(from 0deg, rgba(255,222,140,.85) 0 6deg, transparent 6deg 24deg);
+    mix-blend-mode:screen; animation:fxBurst .95s cubic-bezier(.15,.8,.3,1) forwards;}
+  @keyframes fxBurst{0%{transform:translate(-50%,-50%) scale(.1) rotate(0);opacity:0;}
+    20%{opacity:1;} 100%{transform:translate(-50%,-50%) scale(2.6) rotate(150deg);opacity:0;}}
+  /* 成り演出：画面全体が金色に染まる */
+  .fx-goldflash{position:fixed; inset:0; z-index:340; pointer-events:none;
+    background:radial-gradient(ellipse at 50% 45%, rgba(255,232,160,.62), rgba(255,190,70,.28) 45%, transparent 72%);
+    animation:critFlash .6s ease-out forwards;}
   /* 成り演出：舞い上がる輝きの粒（✦） */
   .fx-spark{position:absolute; pointer-events:none; color:#ffe08a; font-size:14px; line-height:1;
     text-shadow:0 0 8px rgba(255,214,110,.95), 0 0 18px rgba(255,180,60,.6);
@@ -549,22 +595,37 @@
   #cutIn.gold{background:linear-gradient(90deg, transparent, rgba(214,160,30,.94) 18%, rgba(255,206,84,.96) 50%, rgba(214,160,30,.94) 82%, transparent);
     box-shadow:0 0 30px rgba(245,207,107,.75);}
   #cutIn.gold #cutInText{color:#3a2504; text-shadow:0 1px 0 rgba(255,255,255,.55), 0 0 16px rgba(255,240,190,.9);}
-  .fx-ring{position:absolute; border-radius:50%; border:3px solid rgba(255,210,120,.95);
-    box-shadow:0 0 16px rgba(255,170,80,.8); animation:fxRing .5s ease-out forwards;}
-  @keyframes fxRing{0%{transform:scale(.2);opacity:.95;} 100%{transform:scale(1.9);opacity:0;}}
+  .fx-ring{position:absolute; border-radius:50%; border:5px solid rgba(255,210,120,.98);
+    box-shadow:0 0 26px rgba(255,170,80,.95), inset 0 0 20px rgba(255,200,110,.7);
+    animation:fxRing .62s cubic-bezier(.1,.8,.3,1) forwards;}
+  @keyframes fxRing{0%{transform:scale(.12);opacity:1;border-width:9px;} 100%{transform:scale(3.1);opacity:0;border-width:1px;}}
   .fx-particle{position:absolute; width:8%; height:8%; border-radius:50%;
-    background:radial-gradient(circle,#fff2c8,#ffae4d 60%,#e0563f); will-change:transform,opacity;
-    animation:fxPart .55s ease-out forwards;}
-  @keyframes fxPart{0%{transform:translate(0,0) scale(1);opacity:1;} 100%{transform:translate(var(--dx),var(--dy)) scale(.2);opacity:0;}}
-  /* 着地した駒のインパクト（敵駒は180°回転を保つ別アニメ） */
-  .koma.landed{animation:komaLand .34s cubic-bezier(.3,1.4,.5,1);}
-  .koma.enemy.landed{animation:komaLandE .34s cubic-bezier(.3,1.4,.5,1);}
-  @keyframes komaLand{0%{transform:translateY(-46%) scale(1.35);} 55%{transform:translateY(6%) scale(.9);} 100%{transform:none;}}
-  @keyframes komaLandE{0%{transform:rotate(180deg) translateY(-46%) scale(1.35);} 55%{transform:rotate(180deg) translateY(6%) scale(.9);} 100%{transform:rotate(180deg);}}
-  /* 盤の揺れ（取ったとき） */
-  .board-wrap.shake{animation:bshake .32s ease;}
-  @keyframes bshake{0%,100%{transform:translate(0,0);} 20%{transform:translate(-4px,2px) rotate(-.4deg);}
-    40%{transform:translate(4px,-2px) rotate(.4deg);} 60%{transform:translate(-3px,1px);} 80%{transform:translate(3px,-1px);}}
+    background:radial-gradient(circle,#fff,#ffd27a 45%,#ff7a3d 75%,#e0563f); will-change:transform,opacity;
+    box-shadow:0 0 10px rgba(255,170,80,.9);
+    animation:fxPart .72s cubic-bezier(.15,.7,.4,1) forwards;}
+  @keyframes fxPart{0%{transform:translate(0,0) scale(1.4);opacity:1;} 100%{transform:translate(var(--dx),var(--dy)) scale(.15);opacity:0;}}
+  /* 着地した駒のインパクト（敵駒は180°回転を保つ別アニメ）。高く跳ねて強く沈む */
+  .koma.landed{animation:komaLand .42s cubic-bezier(.25,1.6,.45,1);}
+  .koma.enemy.landed{animation:komaLandE .42s cubic-bezier(.25,1.6,.45,1);}
+  @keyframes komaLand{0%{transform:translateY(-78%) scale(1.6);filter:brightness(1.6);}
+    52%{transform:translateY(11%) scale(.8,1.18);filter:brightness(1.1);}
+    76%{transform:translateY(-4%) scale(1.06,.94);} 100%{transform:none;filter:none;}}
+  @keyframes komaLandE{0%{transform:rotate(180deg) translateY(-78%) scale(1.6);filter:brightness(1.6);}
+    52%{transform:rotate(180deg) translateY(11%) scale(.8,1.18);filter:brightness(1.1);}
+    76%{transform:rotate(180deg) translateY(-4%) scale(1.06,.94);} 100%{transform:rotate(180deg);filter:none;}}
+  /* 盤の揺れ（取ったとき）。通常でも大きく、会心は画面ごと揺らす */
+  .board-wrap.shake{animation:bshake .46s cubic-bezier(.3,.1,.3,1);}
+  @keyframes bshake{0%,100%{transform:translate(0,0) scale(1);} 8%{transform:translate(-11px,6px) rotate(-1.3deg) scale(1.02);}
+    20%{transform:translate(10px,-6px) rotate(1.2deg) scale(1.02);} 34%{transform:translate(-8px,4px) rotate(-.9deg);}
+    50%{transform:translate(7px,-3px) rotate(.7deg);} 66%{transform:translate(-4px,2px) rotate(-.4deg);}
+    82%{transform:translate(3px,-1px);}}
+  body.quake{animation:quake .5s cubic-bezier(.3,.1,.3,1);}
+  @keyframes quake{0%,100%{transform:translate(0,0);} 10%{transform:translate(-9px,7px) rotate(-.6deg);}
+    24%{transform:translate(9px,-7px) rotate(.6deg);} 40%{transform:translate(-7px,5px);}
+    58%{transform:translate(6px,-4px);} 76%{transform:translate(-4px,2px);} 90%{transform:translate(2px,-1px);}}
+  /* ヒットストップ：一瞬だけ盤がぐっと寄る（打撃の重みを出す） */
+  .board-wrap.hitstop{animation:hitstop .2s cubic-bezier(.2,.9,.3,1);}
+  @keyframes hitstop{0%{transform:scale(1);} 30%{transform:scale(1.045);} 100%{transform:scale(1);}}
   /* オセロの裏返り */
   .othello-disc.flip{animation:discFlip .55s cubic-bezier(.4,.1,.3,1);}
   @keyframes discFlip{0%{transform:rotateY(180deg) scale(.55);} 60%{transform:rotateY(0) scale(1.12);} 100%{transform:rotateY(0) scale(1);}}
@@ -606,15 +667,25 @@
     box-shadow:0 0 30px rgba(224,60,40,.6);}
   #cutIn.turn{background:linear-gradient(90deg, transparent, rgba(60,48,120,.92) 18%, rgba(90,70,180,.94) 50%, rgba(60,48,120,.92) 82%, transparent);
     box-shadow:0 0 26px rgba(139,107,255,.55);}
-  #cutIn.go{animation:cutInSlide 1s cubic-bezier(.2,.9,.3,1) forwards;}
+  #cutIn.go{animation:cutInSlide 1.05s cubic-bezier(.15,.95,.25,1) forwards;}
   @keyframes cutInSlide{
-    0%{opacity:0; transform:translateX(-105%);}
-    18%{opacity:1; transform:translateX(0);}
-    78%{opacity:1; transform:translateX(0);}
-    100%{opacity:0; transform:translateX(105%);}}
+    0%{opacity:0; transform:translateX(-115%) skewX(-14deg) scale(1.25);}
+    14%{opacity:1; transform:translateX(2%) skewX(-6deg) scale(1.06);}
+    22%{opacity:1; transform:translateX(0) skewX(0) scale(1);}
+    76%{opacity:1; transform:translateX(0) skewX(0) scale(1);}
+    100%{opacity:0; transform:translateX(115%) skewX(14deg) scale(1.2);}}
+  /* カットインの背後を走るスピード線 */
+  #cutIn::before{content:''; position:absolute; inset:0; pointer-events:none; opacity:.55;
+    background:repeating-linear-gradient(100deg, rgba(255,255,255,.5) 0 2px, transparent 2px 16px);
+    mix-blend-mode:overlay; animation:cutLines 1.05s linear forwards;}
+  @keyframes cutLines{0%{transform:translateX(-30%);opacity:.7;} 100%{transform:translateX(30%);opacity:0;}}
   #cutInText{font-family:'Shippori Mincho',serif; font-weight:900; letter-spacing:.28em;
-    font-size:1.7rem; color:#fff; text-shadow:0 0 14px rgba(255,220,120,.9), 0 2px 4px rgba(0,0,0,.6);}
-  #cutIn.turn #cutInText{font-family:'Zen Maru Gothic',sans-serif; letter-spacing:.2em; font-size:1.3rem;}
+    font-size:2.15rem; color:#fff;
+    text-shadow:0 0 18px rgba(255,220,120,1), 0 0 40px rgba(255,170,60,.8), 0 3px 6px rgba(0,0,0,.7);
+    animation:cutTextPunch 1.05s cubic-bezier(.2,1.6,.35,1) forwards;}
+  @keyframes cutTextPunch{0%{transform:scale(1.9);letter-spacing:.6em;} 16%{transform:scale(1);letter-spacing:.28em;}
+    100%{transform:scale(1);letter-spacing:.28em;}}
+  #cutIn.turn #cutInText{font-family:'Zen Maru Gothic',sans-serif; letter-spacing:.2em; font-size:1.5rem;}
 
   /* 勝利の放射光を強く・二重に */
   .rb-rays{background:conic-gradient(from 0deg, rgba(245,207,107,.34) 0 9deg, transparent 9deg 30deg);}
@@ -688,11 +759,24 @@
   body::after{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;opacity:.05;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='40'%3E%3Cg fill='none' stroke='%23c9b6ff' stroke-width='1'%3E%3Ccircle cx='20' cy='40' r='18'/%3E%3Ccircle cx='20' cy='40' r='12'/%3E%3Ccircle cx='20' cy='40' r='6'/%3E%3Ccircle cx='60' cy='40' r='18'/%3E%3Ccircle cx='60' cy='40' r='12'/%3E%3Ccircle cx='60' cy='40' r='6'/%3E%3Ccircle cx='0' cy='20' r='18'/%3E%3Ccircle cx='40' cy='20' r='18'/%3E%3Ccircle cx='40' cy='20' r='12'/%3E%3Ccircle cx='80' cy='20' r='18'/%3E%3C/g%3E%3C/svg%3E");
     background-size:80px 40px;}
-  /* 会心の一撃：画面全体の白フラッシュ */
+  /* 会心の一撃：画面全体の白フラッシュ（2度焚き＋集中線） */
   .fx-critflash{position:fixed;inset:0;z-index:390;pointer-events:none;
-    background:radial-gradient(circle at 50% 42%, rgba(255,255,255,.98), rgba(255,240,200,.75) 45%, rgba(255,220,150,.25) 75%, transparent);
-    animation:critFlash .4s ease-out forwards;}
+    background:radial-gradient(circle at 50% 42%, #fff, rgba(255,240,200,.92) 40%, rgba(255,200,110,.45) 72%, transparent);
+    animation:critFlash2 .58s ease-out forwards;}
   @keyframes critFlash{0%{opacity:0;} 15%{opacity:1;} 100%{opacity:0;}}
+  @keyframes critFlash2{0%{opacity:0;} 8%{opacity:1;} 26%{opacity:.15;} 40%{opacity:.85;} 100%{opacity:0;}}
+  /* 集中線（会心・王手のときに画面外周から中央へ） */
+  .fx-lines{position:fixed;inset:0;z-index:385;pointer-events:none; mix-blend-mode:screen;
+    background:repeating-conic-gradient(from 0deg at 50% 45%, rgba(255,255,255,.5) 0 .6deg, transparent .6deg 4deg);
+    -webkit-mask-image:radial-gradient(circle at 50% 45%, transparent 22%, #000 62%);
+    mask-image:radial-gradient(circle at 50% 45%, transparent 22%, #000 62%);
+    animation:fxLines .55s cubic-bezier(.2,.8,.3,1) forwards;}
+  .fx-lines.danger{background:repeating-conic-gradient(from 0deg at 50% 45%, rgba(255,110,80,.6) 0 .8deg, transparent .8deg 4deg);}
+  @keyframes fxLines{0%{opacity:0;transform:scale(1.5);} 22%{opacity:1;transform:scale(1);} 100%{opacity:0;transform:scale(.82);}}
+  /* 画面の赤フチ（王手・大駒を取られたとき） */
+  .fx-vignette{position:fixed;inset:0;z-index:338;pointer-events:none;
+    box-shadow:inset 0 0 90px 24px rgba(224,60,40,.75), inset 0 0 200px 60px rgba(150,10,10,.4);
+    animation:critFlash .75s ease-out forwards;}
   /* 取った駒が持ち駒トレイへ飛んでいく */
   .fx-fly{position:fixed;z-index:200;pointer-events:none;will-change:transform,opacity;
     transition:transform .55s cubic-bezier(.3,.6,.4,1), opacity .55s ease-in;}
@@ -3363,7 +3447,9 @@ function nextTurn(){
   } else {
     const ck = checkInfo(turn).check;
     const who = turn===1?'あなた':'相手';
-    if(ck){ setStatus('⚠ '+who+'に王手！',  'lose'); SFX.play('check'); cutIn('王手！','danger'); }
+    if(ck){ setStatus('⚠ '+who+'に王手！',  'lose'); SFX.play('check'); cutIn('王手！','danger');
+      if(fxEnabled()){ screenFx('fx-vignette',780); screenFx('fx-lines danger',560);
+        if(navigator.vibrate){ try{navigator.vibrate([25,40,25]);}catch(_){} } } }
     else{
       setStatus(who+'の番です');
       // 手番があなたに移ったときだけ「あなたの番」カットイン（連続発火は抑止）
@@ -3908,36 +3994,46 @@ const SFX = (function(){
           tone(310,t,0.06,'triangle',0.3); tone(620,t,0.03,'sine',0.14); noise(t,0.045,0.2,1400); break;
         case 'drop': /* トンッと重めの打ち込み */
           tone(220,t,0.1,'triangle',0.34); tone(110,t,0.12,'sine',0.24,70); noise(t,0.06,0.22,900); break;
-        case 'capture': /* ドスン！：サブベース＋轟音＋破片 */
-          tone(58,t,0.3,'sine',0.5,32);
-          tone(150,t,0.18,'sawtooth',0.34,55);
-          noise(t,0.18,0.65,700);
-          noise(t+0.08,0.1,0.25,2600); /* 破片のカラカラ */
+        case 'capture': /* ドォンッ！：サブベース＋轟音＋破片＋残響の唸り */
+          tone(52,t,0.45,'sine',0.75,24);
+          tone(88,t,0.3,'sine',0.45,38);
+          tone(150,t,0.22,'sawtooth',0.46,50);
+          noise(t,0.26,0.9,600);
+          noise(t+0.08,0.16,0.4,2600);   /* 破片のカラカラ */
+          noise(t+0.2,0.22,0.16,300);    /* 低い残響 */
           break;
-        case 'slash': /* シャキーン！：二重スイープ＋鋭い金属リング */
-          noiseSweep(t,0.16,0.6,8000,1100);
-          noiseSweep(t+0.02,0.12,0.35,5200,900);
-          tone(3600,t+0.012,0.12,'sine',0.16,650);
-          tone(5200,t+0.03,0.08,'sine',0.1,1600);
-          tone(7000,t+0.045,0.05,'sine',0.06,2400);
+        case 'slash': /* シャキィィン！：三重スイープ＋長い金属リング */
+          noiseSweep(t,0.2,0.85,9000,900);
+          noiseSweep(t+0.02,0.16,0.55,6000,800);
+          noiseSweep(t+0.05,0.13,0.35,4200,700);
+          tone(3600,t+0.012,0.18,'sine',0.26,600);
+          tone(5200,t+0.03,0.13,'sine',0.17,1500);
+          tone(7000,t+0.045,0.09,'sine',0.1,2400);
+          tone(2400,t+0.06,0.22,'triangle',0.12,900);  /* 刃鳴りの尾 */
           break;
-        case 'crit': /* 会心の一撃：溜め上昇→大爆発＋鐘 */
-          tone(300,t,0.09,'sawtooth',0.22,1300);
-          tone(46,t+0.1,0.5,'sine',0.6,26);
-          noise(t+0.1,0.3,0.7,500);
-          noiseSweep(t+0.1,0.2,0.5,6000,700);
-          tone(2093,t+0.12,0.4,'triangle',0.2);
-          tone(2637,t+0.16,0.35,'triangle',0.14);
+        case 'crit': /* 会心の一撃：溜め上昇→大爆発＋鐘＋地鳴り */
+          tone(260,t,0.12,'sawtooth',0.32,1800);
+          tone(38,t+0.1,0.75,'sine',0.9,20);
+          tone(72,t+0.1,0.5,'sine',0.5,30);
+          noise(t+0.1,0.42,1.0,450);
+          noiseSweep(t+0.1,0.28,0.72,7000,600);
+          tone(2093,t+0.12,0.6,'triangle',0.3);
+          tone(2637,t+0.16,0.55,'triangle',0.22);
+          tone(3136,t+0.2,0.5,'sine',0.16);
+          noise(t+0.36,0.35,0.2,260);    /* 地鳴りの余韻 */
           break;
         case 'promote': /* 成り：ハープの上昇グリス＋輝きの鐘＋暖かいパッド */
           [392,523,587,659,784,880,1047,1175,1319].forEach((f,i)=>{ /* 速い上昇グリス */
             tone(f,t+i*0.038,0.3,'triangle',0.2);
             tone(f*2,t+i*0.038,0.2,'sine',0.07);
           });
-          tone(1568,t+0.36,0.55,'triangle',0.26);  /* 頂点の鐘 */
-          tone(2093,t+0.4,0.5,'sine',0.14);
-          tone(130.8,t,0.7,'sine',0.16);           /* 低音の暖かいパッド */
-          noiseSweep(t+0.06,0.5,0.18,3000,10000);  /* シャラララ */
+          tone(1568,t+0.36,0.8,'triangle',0.4);    /* 頂点の鐘 */
+          tone(2093,t+0.4,0.7,'sine',0.24);
+          tone(3136,t+0.44,0.6,'sine',0.14);
+          tone(130.8,t,0.9,'sine',0.26);           /* 低音の暖かいパッド */
+          tone(65.4,t+0.34,0.6,'sine',0.4,40);     /* 変身のドン */
+          noiseSweep(t+0.06,0.7,0.3,3000,12000);   /* シャラララ */
+          noise(t+0.34,0.2,0.4,500);
           break;
         case 'flip': tone(520,t,0.1,'sine',0.22,1050); tone(780,t+0.05,0.08,'sine',0.14,1300); noise(t,0.05,0.12,1800); break;
         case 'check': /* 王手：不協和ブラスのスティング＋ドン */
@@ -4008,6 +4104,25 @@ function computeFx(prev, side, m, promo){
     moveFrom:(m&&!m.drop&&m.fr!==undefined?[m.fr,m.fc]:null),
     drop:!!(m&&m.drop), promo:!!promo, side, crit};
 }
+// 画面全体に一瞬だけ重ねる演出（集中線・赤フチ・金フラッシュなど）。ms後に自動で消える。
+function screenFx(cls, ms){
+  const el=document.createElement('div'); el.className=cls;
+  document.body.appendChild(el); setTimeout(()=>el.remove(), ms);
+  return el;
+}
+// 画面座標に衝撃波リングを出す
+function shockAt(px,py,size){
+  const s=document.createElement('div'); s.className='fx-shock';
+  s.style.cssText='left:'+px+'px;top:'+py+'px;width:'+size+'px;height:'+size+'px;';
+  document.body.appendChild(s); setTimeout(()=>s.remove(),520);
+}
+// ダメージ数値（RPG風）。取った駒の価値をそのままダメージとして飛ばす。
+function dmgAt(px,py,val,crit){
+  const el=document.createElement('div'); el.className='fx-dmg'+(crit?' crit':'');
+  el.textContent=(crit?'':'')+val+(crit?'!!':'');
+  el.style.cssText='left:'+px+'px;top:'+py+'px;';
+  document.body.appendChild(el); setTimeout(()=>el.remove(),1000);
+}
 function applyFx(d){
   if(!fxEnabled()) return;   // 判定は設定のみ（人間/CPUで分岐しない）
   const bd=document.getElementById('board'), fx=document.getElementById('fxLayer');
@@ -4028,23 +4143,42 @@ function applyFx(d){
     fxCutHoldUntil = Date.now() + pDelay + 1100;  // 成りカットインが手番表示に潰されないよう予約
     setTimeout(()=>{
       SFX.play('promote');
+      setTimeout(()=>SFX.play('crit'),120);            // 変身の追い打ち音
       const cell=cellAt(d.moveTo[0],d.moveTo[1]); if(!cell) return;
       const cr2=cell.getBoundingClientRect();
       const x=cr2.left-fxRect.left, y=cr2.top-fxRect.top, w=cr2.width, h=cr2.height;
-      // 光柱（マスの2.6倍の高さで立ち昇る）
+      const cx=x+w/2, cy=y+h/2;
+      // 画面全体が金色に染まる＋集中線＋振動
+      screenFx('fx-goldflash',620);
+      screenFx('fx-lines',560);
+      shockAt(cr2.left+cr2.width/2, cr2.top+cr2.height/2, Math.max(w,h)*3);
+      if(navigator.vibrate){ try{navigator.vibrate([40,40,70]);}catch(_){} }
+      document.body.classList.remove('quake'); void document.body.offsetWidth;
+      document.body.classList.add('quake'); setTimeout(()=>document.body.classList.remove('quake'),520);
+      // 背後で回る放射光
+      const bu=document.createElement('div'); bu.className='fx-burst';
+      bu.style.cssText='left:'+cx+'px;top:'+cy+'px;width:'+(w*3.2)+'px;height:'+(w*3.2)+'px;';
+      fx.appendChild(bu); setTimeout(()=>bu.remove(),1000);
+      // 光柱（マスの4倍の高さで立ち昇る）
       const pl=document.createElement('div'); pl.className='fx-pillar';
-      pl.style.cssText='left:'+(x+w*0.08)+'px;top:'+(y-h*1.7)+'px;width:'+(w*0.84)+'px;height:'+(h*2.7)+'px;';
-      fx.appendChild(pl); setTimeout(()=>pl.remove(),850);
+      pl.style.cssText='left:'+(x-w*0.12)+'px;top:'+(y-h*3.0)+'px;width:'+(w*1.24)+'px;height:'+(h*4.0)+'px;';
+      fx.appendChild(pl); setTimeout(()=>pl.remove(),900);
+      // 金のリングが3重に広がる
+      [0,110,220].forEach((dl,i)=>setTimeout(()=>{
+        const rg=document.createElement('div'); rg.className='fx-ring';
+        rg.style.cssText='left:'+(x-w*0.2)+'px;top:'+(y-h*0.2)+'px;width:'+(w*1.4)+'px;height:'+(h*1.4)+'px;';
+        fx.appendChild(rg); setTimeout(()=>rg.remove(),640);
+      },dl));
       // 変身ポップ（駒が白く光って弾む）
       const k=cell.querySelector('.koma');
       if(k){ k.classList.remove('landed'); void k.offsetWidth; k.classList.add('promo-pop'); }
-      // 輝きの粒 ✦ が舞い上がる
-      for(let i=0;i<10;i++){
-        const sp=document.createElement('div'); sp.className='fx-spark'; sp.textContent=(i%3===0?'✦':'✧');
-        const dx=(Math.random()*2-1)*w*1.3, dy=-(h*(0.9+Math.random()*1.8));
-        sp.style.cssText='left:'+(x+w*(0.15+Math.random()*0.7))+'px;top:'+(y+h*(0.3+Math.random()*0.5))+'px;'+
-          'font-size:'+(9+Math.random()*10)+'px;--dx:'+dx+'px;--dy:'+dy+'px;animation-delay:'+(Math.random()*0.18)+'s;';
-        fx.appendChild(sp); setTimeout(()=>sp.remove(),1250);
+      // 輝きの粒 ✦ が大量に舞い上がる
+      for(let i=0;i<26;i++){
+        const sp=document.createElement('div'); sp.className='fx-spark'; sp.textContent=(i%3===0?'✦':i%3===1?'✧':'★');
+        const dx=(Math.random()*2-1)*w*2.4, dy=-(h*(1.2+Math.random()*3.0));
+        sp.style.cssText='left:'+(x+w*(0.05+Math.random()*0.9))+'px;top:'+(y+h*(0.2+Math.random()*0.7))+'px;'+
+          'font-size:'+(10+Math.random()*18)+'px;--dx:'+dx+'px;--dy:'+dy+'px;animation-delay:'+(Math.random()*0.3)+'s;';
+        fx.appendChild(sp); setTimeout(()=>sp.remove(),1400);
       }
       // どちら側の成りかを明示（相手の成りを自分の手柄と誤認しないように）
       cutIn(d.side===1?'成り！':'相手が成り', d.side===1?'gold':'danger');
@@ -4058,60 +4192,109 @@ function applyFx(d){
       const fr=fromCell.getBoundingClientRect(), tr2=toCell.getBoundingClientRect();
       const dx=fr.left-tr2.left, dy=fr.top-tr2.top;
       if(Math.hypot(dx,dy)>4){
+        // 移動経路に残像を置く（尾を引いて見せる）
+        const enemy=mover.classList.contains('enemy');
+        for(let i=1;i<=3;i++){
+          const t=i/4;
+          const gx=(fr.left-fxRect.left)+(tr2.left-fr.left)*t, gy=(fr.top-fxRect.top)+(tr2.top-fr.top)*t;
+          const tr3=document.createElement('div'); tr3.className='fx-trail';
+          tr3.style.cssText='left:'+gx+'px;top:'+gy+'px;width:'+fr.width+'px;height:'+fr.height+'px;'+
+            'animation-delay:'+(i*0.03)+'s;';
+          const gk=mover.cloneNode(true); gk.className=mover.className.replace(/landed|promo-pop/g,'');
+          gk.style.cssText='width:100%;height:100%;'+(enemy?'transform:rotate(180deg);':'');
+          tr3.appendChild(gk); fx.appendChild(tr3); setTimeout(()=>tr3.remove(),340);
+        }
         mover.style.transition='none';
-        mover.style.transform=(mover.classList.contains('enemy')?'rotate(180deg) ':'')+'translate('+(mover.classList.contains('enemy')?-dx:dx)+'px,'+(mover.classList.contains('enemy')?-dy:dy)+'px)';
+        mover.style.transform=(enemy?'rotate(180deg) ':'')+'translate('+(enemy?-dx:dx)+'px,'+(enemy?-dy:dy)+'px)';
         requestAnimationFrame(()=>{ requestAnimationFrame(()=>{
           mover.style.transition='transform .13s cubic-bezier(.2,.8,.3,1)';
-          mover.style.transform=mover.classList.contains('enemy')?'rotate(180deg)':'';
-          setTimeout(()=>{ mover.style.transition=''; mover.classList.add('landed'); },140);
+          mover.style.transform=enemy?'rotate(180deg)':'';
+          setTimeout(()=>{ mover.style.transition=''; mover.classList.add('landed'); dustAt(toCell); },140);
         });});
-      } else { mover.classList.add('landed'); }
+      } else { mover.classList.add('landed'); dustAt(toCell); }
     }
   }
   // 着地インパクト（打つ手）
   else if(d.moveTo){ const cell=cellAt(d.moveTo[0],d.moveTo[1]);
-    if(cell){ const k=cell.querySelector('.koma'); if(k) k.classList.add('landed');
+    if(cell){ const k=cell.querySelector('.koma'); if(k) k.classList.add('landed'); dustAt(cell);
       const gd=cell.querySelector('.go-disc'); if(gd&&d.drop) gd.classList.add('drop-in'); } }
-  // オセロ裏返り
-  d.flips.forEach(f=>{ const cell=cellAt(f.r,f.c); if(cell){ const disc=cell.querySelector('.othello-disc'); if(disc) disc.classList.add('flip'); } });
+  // 着地の土煙（どの着手でも小さく出す）
+  function dustAt(cell){
+    if(!cell) return;
+    const rc=cell.getBoundingClientRect();
+    const du=document.createElement('div'); du.className='fx-dust';
+    du.style.cssText='left:'+(rc.left-fxRect.left)+'px;top:'+(rc.top-fxRect.top+rc.height*0.18)+'px;'+
+      'width:'+rc.width+'px;height:'+(rc.height*0.8)+'px;';
+    fx.appendChild(du); setTimeout(()=>du.remove(),440);
+  }
+  // オセロ裏返り：順にめくれて、リング＋粒がはじける（連鎖が長いほど派手）
+  d.flips.forEach((f,i)=>{
+    const cell=cellAt(f.r,f.c); if(!cell) return;
+    setTimeout(()=>{
+      const disc=cell.querySelector('.othello-disc');
+      if(disc){ disc.classList.remove('flip'); void disc.offsetWidth; disc.classList.add('flip'); }
+      const rc=cell.getBoundingClientRect();
+      const x2=rc.left-fxRect.left, y2=rc.top-fxRect.top;
+      const ring=document.createElement('div'); ring.className='fx-ring';
+      ring.style.cssText='left:'+x2+'px;top:'+y2+'px;width:'+rc.width+'px;height:'+rc.height+'px;';
+      fx.appendChild(ring); setTimeout(()=>ring.remove(),660);
+      if(i===d.flips.length-1 && d.flips.length>=4){
+        shockAt(rc.left+rc.width/2, rc.top+rc.height/2, rc.width*3);
+        cutIn(d.side===1?(d.flips.length+'枚返し！'):('相手が'+d.flips.length+'枚返し'), d.side===1?'gold':'danger');
+      }
+    }, 60*i);
+  });
   // 取った駒：RPG風の斬撃 → ヒット（白閃光・盤揺れ・バイブ）→ 倒れて散る → 持ち駒へ飛ぶ
   if(d.caps.length){
     // 会心の一撃（大駒・royal取り）：全画面フラッシュ＋カットイン＋強バイブ
     if(d.crit){
-      fxCutHoldUntil = Date.now() + 1200;   // 会心/痛恨のカットインを優先
+      fxCutHoldUntil = Date.now() + 1400;   // 会心/痛恨のカットインを優先
       setTimeout(()=>{
-        const cf=document.createElement('div'); cf.className='fx-critflash';
-        document.body.appendChild(cf); setTimeout(()=>cf.remove(),420);
+        screenFx('fx-critflash',600);
+        screenFx('fx-lines'+(d.side===1?'':' danger'),580);
+        if(d.side!==1) screenFx('fx-vignette',780);   // 取られた側なら画面が赤く縁取られる
+        setTimeout(()=>SFX.play('crit'),120);          // 轟音の二段撃ち
+        // 画面ごと揺らす
+        document.body.classList.remove('quake'); void document.body.offsetWidth;
+        document.body.classList.add('quake'); setTimeout(()=>document.body.classList.remove('quake'),540);
         // 自分が大駒を取れば「会心の一撃！」、取られた側なら「痛恨の一撃！」
         cutIn(d.side===1?'会心の一撃！':'痛恨の一撃！','danger');
       },100);
     }
     // ヒットのタイミング（斬線が走り終わる頃）に衝撃系をまとめる
     setTimeout(()=>{
-      if(navigator.vibrate){ try{navigator.vibrate(d.crit?[50,50,80]:(d.caps.length>1?[30,40,30]:30));}catch(_){} }
+      if(navigator.vibrate){ try{navigator.vibrate(d.crit?[70,50,110]:(d.caps.length>1?[45,40,45]:45));}catch(_){} }
       const wrap=document.querySelector('.board-wrap');
-      if(wrap){ wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake'); setTimeout(()=>wrap.classList.remove('shake'),340); }
+      if(wrap){
+        wrap.classList.remove('shake','hitstop'); void wrap.offsetWidth;
+        wrap.classList.add('shake'); setTimeout(()=>wrap.classList.remove('shake'),480);
+        wrap.classList.add('hitstop'); setTimeout(()=>wrap.classList.remove('hitstop'),210);
+      }
     },110);
     d.caps.forEach((cap,ci)=>{
       const cell=cellAt(cap.r,cap.c); if(!cell) return;
       const cr=cell.getBoundingClientRect();
       const x=cr.left-fxRect.left, y=cr.top-fxRect.top, w=cr.width, h=cr.height;
       const cx=x+w/2, cy=y+h/2;
-      // 1) 斬撃：白い斬線がX字に走る（会心は3本）
-      const slashes = d.crit ? [[-52,0],[38,60],[-8,120]] : [[-52,0],[38,70]];
-      slashes.forEach(([ang,delay])=>{
+      // 1) 斬撃：白い斬線が乱れ斬りに走る（会心は5本＋金の一閃）
+      const slashes = d.crit ? [[-52,0,''],[38,55,''],[-8,105,''],[76,150,''],[-40,200,'gold']]
+                             : [[-52,0,''],[38,60,''],[-4,115,'']];
+      slashes.forEach(([ang,delay,cls])=>{
         setTimeout(()=>{
-          const s=document.createElement('div'); s.className='fx-slash';
-          s.style.cssText='left:'+cx+'px;top:'+cy+'px;width:'+(w*(d.crit?2.6:2.1))+'px;--ang:'+ang+'deg;';
-          fx.appendChild(s); setTimeout(()=>s.remove(),240);
+          const s=document.createElement('div'); s.className='fx-slash'+(cls?' '+cls:'');
+          s.style.cssText='left:'+cx+'px;top:'+cy+'px;width:'+(w*(d.crit?4.2:3.2))+'px;--ang:'+ang+'deg;';
+          fx.appendChild(s); setTimeout(()=>s.remove(),300);
         }, delay);
       });
-      // 2) ヒット閃光：マスが白く光る
+      // 2) ヒット閃光＋衝撃波＋ダメージ数値
       setTimeout(()=>{
         const fl=document.createElement('div'); fl.className='fx-flash';
-        fl.style.cssText='left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;';
-        fx.appendChild(fl); setTimeout(()=>fl.remove(),260);
-      },90);
+        fl.style.cssText='left:'+(x-w*0.3)+'px;top:'+(y-h*0.3)+'px;width:'+(w*1.6)+'px;height:'+(h*1.6)+'px;';
+        fx.appendChild(fl); setTimeout(()=>fl.remove(),340);
+        shockAt(cr.left+cr.width/2, cr.top+cr.height/2, Math.max(w,h)*2.6);
+        const dmg=VALUE[cap.code]||100;
+        dmgAt(cr.left+cr.width/2, cr.top+cr.height*0.4, isRoyal(cap.code)?'∞':dmg, d.crit);
+      },90+ci*70);
       // 3) 倒れる駒（斬られてから倒れる）
       setTimeout(()=>{
         const gh=document.createElement('div'); gh.className='fx-topple';
@@ -4143,16 +4326,29 @@ function applyFx(d){
           setTimeout(()=>fly.remove(),620);
         },420);
       }
-      // 4) リング＋粒子（ヒットの飛沫）
+      // 4) リング＋粒子＋破片（ヒットの飛沫。会心は数も距離も倍増）
       setTimeout(()=>{
-        const ring=document.createElement('div'); ring.className='fx-ring';
-        ring.style.cssText='left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;';
-        fx.appendChild(ring); setTimeout(()=>ring.remove(),520);
-        const ps=Math.max(4,w*0.16);
-        for(let i=0;i<8;i++){ const p=document.createElement('div'); p.className='fx-particle';
-          const ang=Math.PI*2*i/8+Math.random()*0.5, dist=w*(0.8+Math.random()*0.9);
-          p.style.cssText='left:'+(cx-w*0.04)+'px;top:'+(cy-h*0.04)+'px;width:'+ps+'px;height:'+ps+'px;--dx:'+(Math.cos(ang)*dist)+'px;--dy:'+(Math.sin(ang)*dist)+'px;';
-          fx.appendChild(p); setTimeout(()=>p.remove(),560); }
+        const rings = d.crit ? [0,90,180] : [0,100];
+        rings.forEach(dl=>setTimeout(()=>{
+          const ring=document.createElement('div'); ring.className='fx-ring';
+          ring.style.cssText='left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;';
+          fx.appendChild(ring); setTimeout(()=>ring.remove(),660);
+        },dl));
+        const ps=Math.max(5,w*0.22);
+        const n=d.crit?22:14;
+        for(let i=0;i<n;i++){ const p=document.createElement('div'); p.className='fx-particle';
+          const ang=Math.PI*2*i/n+Math.random()*0.6, dist=w*(1.6+Math.random()*2.2)*(d.crit?1.4:1);
+          p.style.cssText='left:'+(cx-w*0.04)+'px;top:'+(cy-h*0.04)+'px;width:'+ps+'px;height:'+ps+'px;'+
+            '--dx:'+(Math.cos(ang)*dist)+'px;--dy:'+(Math.sin(ang)*dist)+'px;animation-delay:'+(Math.random()*0.08)+'s;';
+          fx.appendChild(p); setTimeout(()=>p.remove(),760); }
+        // 木片が飛び散る（駒が砕けた感じ）
+        const sn=d.crit?14:9;
+        for(let i=0;i<sn;i++){ const s=document.createElement('div'); s.className='fx-shard';
+          const ang=Math.PI*2*i/sn+Math.random()*0.7, dist=w*(1.2+Math.random()*2.0);
+          const sw=Math.max(3,w*(0.08+Math.random()*0.12)), sh=Math.max(4,w*(0.14+Math.random()*0.2));
+          s.style.cssText='left:'+(cx-sw/2)+'px;top:'+(cy-sh/2)+'px;width:'+sw+'px;height:'+sh+'px;'+
+            '--dx:'+(Math.cos(ang)*dist)+'px;--dy:'+(Math.sin(ang)*dist+h*0.7)+'px;--rot:'+(Math.random()*900-450)+'deg;';
+          fx.appendChild(s); setTimeout(()=>s.remove(),740); }
       },150);
     });
   }
@@ -4164,11 +4360,27 @@ function showResult(kind, title, sub){
   document.getElementById('rbTitle').textContent=title;
   document.getElementById('rbSub').textContent=sub||'';
   rb.classList.add('show');
+  if(SFX.on){
+    screenFx(kind==='win'?'fx-goldflash':'fx-vignette', 800);
+    screenFx('fx-lines'+(kind==='win'?'':' danger'), 580);
+    document.body.classList.remove('quake'); void document.body.offsetWidth;
+    document.body.classList.add('quake'); setTimeout(()=>document.body.classList.remove('quake'),540);
+    if(navigator.vibrate){ try{navigator.vibrate(kind==='win'?[60,60,60,60,140]:[140,80,140]);}catch(_){} }
+  }
   if(kind==='win' && SFX.on){
     const colors=['#f5cf6b','#8b6bff','#62d1a0','#e0563f','#ffffff'];
-    for(let i=0;i<44;i++){ const c=document.createElement('div'); c.className='confetti';
-      c.style.cssText='left:'+(Math.random()*100)+'%;background:'+colors[i%5]+';animation-duration:'+(1.8+Math.random()*1.7)+'s;animation-delay:'+(Math.random()*0.5)+'s;';
-      rb.appendChild(c); setTimeout(()=>c.remove(),4000); }
+    for(let i=0;i<120;i++){ const c=document.createElement('div'); c.className='confetti';
+      c.style.cssText='left:'+(Math.random()*100)+'%;background:'+colors[i%5]+';'+
+        'width:'+(6+Math.random()*8)+'px;height:'+(10+Math.random()*12)+'px;'+
+        'animation-duration:'+(1.6+Math.random()*2.0)+'s;animation-delay:'+(Math.random()*0.9)+'s;';
+      rb.appendChild(c); setTimeout(()=>c.remove(),4600); }
+    // 勝利は星も舞う
+    for(let i=0;i<26;i++){ const s=document.createElement('div'); s.className='fx-spark';
+      s.textContent=i%2?'✦':'★';
+      s.style.cssText='position:fixed;left:'+(Math.random()*100)+'vw;top:'+(40+Math.random()*30)+'vh;z-index:410;'+
+        'font-size:'+(14+Math.random()*22)+'px;--dx:'+((Math.random()*2-1)*160)+'px;--dy:'+(-(120+Math.random()*260))+'px;'+
+        'animation-delay:'+(Math.random()*0.6)+'s;';
+      document.body.appendChild(s); setTimeout(()=>s.remove(),2200); }
   }
 }
 // カットイン（王手！／あなたの番）：盤の上を帯が横切るソシャゲ風演出
