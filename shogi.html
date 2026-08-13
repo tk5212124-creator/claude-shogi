@@ -118,6 +118,19 @@
     display:flex;align-items:center;justify-content:center;
     cursor:pointer;
   }
+  /* 交点置き（囲碁・シャンチー・チャンギ）：マスの枠を消し、線がマスの中心を通るように別レイヤーで引く。
+     駒はマスの中央＝線の交点に乗る。論理座標(board[r][c])は升目置きとまったく同じ。 */
+  .board.point-mode .cell{border-color:transparent;}
+  .board.point-mode .cell.movable::after{opacity:.9;}
+  /* 交点置きでは強調表示も交点を中心にした丸にする（マスの枠が無いため） */
+  .board.point-mode .cell.sel,
+  .board.point-mode .cell.last{border-radius:50%;}
+  .board.point-mode .cell.last{background:radial-gradient(circle,rgba(224,86,63,.34),transparent 70%);}
+  .grid-lines{position:absolute; z-index:0; pointer-events:none;}
+  .grid-lines svg{width:100%; height:100%; display:block; overflow:visible;}
+  .grid-lines line{vector-effect:non-scaling-stroke; stroke:rgba(107,74,30,.55); stroke-width:1;}
+  .grid-lines line.edge{stroke:rgba(107,74,30,.8); stroke-width:2;}
+  .grid-lines circle.hoshi{fill:rgba(107,74,30,.8); stroke:none;}
   .cell.movable::after{
     content:"";position:absolute;width:30%;height:30%;
     background:radial-gradient(circle,var(--move),#3aa977);
@@ -864,6 +877,15 @@
       <select id="pzSel" class="bs-num"></select>
       <span class="bs-size">段（一番奥から数えて）</span>
     </div>
+    <div class="bs-row">
+      <label for="ptSel">駒の置き方</label>
+      <select id="ptSel">
+        <option value="auto">自動（囲碁・シャンチー・チャンギの駒があれば交点）</option>
+        <option value="point">交点に置く（囲碁・シャンチー・チャンギ風）</option>
+        <option value="cell">マスの中に置く（将棋・チェス風）</option>
+      </select>
+    </div>
+    <div class="bs-note">※ 交点置きは見た目だけの違いです。マス番号は同じなので、交点の駒とマスの駒が同じ盤にいても取り合いは変わりません。</div>
     <label class="bs-row bs-check"><input type="checkbox" id="bsPalace">
       <span>九宮をつくる（シャンチー用。帥・将／仕・士は宮殿から出られない。列数が奇数なら3×3、偶数なら2×2）</span></label>
     <div class="bs-note bs-pending" id="bsPalaceNote" style="display:none;">※ 九宮・敵陣の変更は「適用」または「作成」を押すと反映されます</div>
@@ -2279,6 +2301,7 @@ const RULES={
   captureAll:false,  // 相手の駒を全て取り切るまで戦う（王の有無に関係なく勝敗判定）。囲碁/オセロ/はさみ向け
   banSennichite:true,  // 千日手回避：同一局面が4回目になる手を禁じる（＝千日手が成立しない）
   flyingGeneral:false, // 王不見王：帥と将を同じ筋で相対させる手は指せない（シャンチー）
+  pointMode:'auto',    // 駒の置き方：'auto'（囲碁・シャンチー・チャンギ駒があれば交点）|'point'|'cell'
   allowPass:false,     // パス（着手放棄）を認める。チャンギは既定でON
   palace:false,        // 九宮：帥/將・仕/士は宮殿から出られない（シャンチー）
   palaceEscape:false,  // 九宮があっても、帥/將・仕/士が宮の外へ出られるようにする
@@ -2899,6 +2922,48 @@ function checkInfo(p){
 }
 
 /* ===== 描画 ===== */
+/* ===== 交点置き（囲碁・シャンチー・チャンギ）=====
+   囲碁19路＝19×19の交点、シャンチー＝9×10の交点。数も隣り合い方も NR×NC のマスと
+   まったく同じなので、盤のデータ board[r][c] はそのまま使い、「線を半マスずらして引き、
+   駒をその交点に乗せる」という描画だけを切り替える。
+   → 交点置きの駒と升目置きの駒が同じ盤にいても、同じ (r,c) なら同じ点にいる。
+     取る・取られるの判定は升目置きとまったく同じで、特別なルールは要らない。
+   見た目が半マスずれて混乱しないよう、切り替えは駒ごとではなく盤ごとに行う。 */
+function isPointPiece(t){
+  const fl=(TP[t]&&TP[t].fl)||[];
+  return fl.includes('go')||fl.includes('xiangqi')||fl.includes('janggi');
+}
+function pointModeOn(){
+  if(RULES.pointMode==='point') return true;
+  if(RULES.pointMode==='cell')  return false;
+  // 'auto'：囲碁・シャンチー・チャンギの駒が盤上か持ち駒にあれば交点置きにする
+  for(let r=0;r<NR;r++){ const row=board[r]||[];
+    for(let c=0;c<row.length;c++){ const pc=row[c]; if(pc&&isPointPiece(pc.t)) return true; } }
+  return capYou.some(isPointPiece)||capEnemy.some(isPointPiece);
+}
+// 碁盤の星の位置（9路・13路・19路の正方形盤のみ）
+function hoshiPoints(){
+  const M={9:[2,4,6], 13:[3,6,9], 19:[3,9,15]}[NR];
+  if(!M || NR!==NC) return [];
+  const pts=[];
+  for(const r of M) for(const c of M) pts.push([r,c]);
+  return NR===9 ? pts.filter(([r,c])=>(r===4&&c===4)||(r!==4&&c!==4)) : pts;
+}
+// 交点置きのときの格子線。マスの中心（＝駒の位置）を通るように別レイヤーで引く。
+function renderPointGrid(bd){
+  const old=bd.querySelector('.grid-lines'); if(old) old.remove();
+  if(!bd.classList.contains('point-mode') || NR<2 || NC<2) return;
+  const w=NC-1, h=NR-1;
+  let s='';
+  for(let c=0;c<NC;c++) s+='<line'+((c===0||c===w)?' class="edge"':'')+' x1="'+c+'" y1="0" x2="'+c+'" y2="'+h+'"/>';
+  for(let r=0;r<NR;r++) s+='<line'+((r===0||r===h)?' class="edge"':'')+' x1="0" y1="'+r+'" x2="'+w+'" y2="'+r+'"/>';
+  // 碁盤の星（9・13・19路の正方形のときだけ）
+  hoshiPoints().forEach(([hr,hc])=>{ s+='<circle class="hoshi" cx="'+hc+'" cy="'+hr+'" r="0.12"/>'; });
+  const g=document.createElement('div'); g.className='grid-lines';
+  g.style.cssText='left:'+(50/NC)+'%;top:'+(50/NR)+'%;width:'+(100-100/NC)+'%;height:'+(100-100/NR)+'%;';
+  g.innerHTML='<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+s+'</svg>';
+  bd.insertBefore(g, bd.firstChild);   // 駒より背面
+}
 function render(){
   const bd=document.getElementById('board'); bd.innerHTML='';
   // 盤グリッドを現在のサイズ NR×NC（行×列）に合わせる。大盤はマスを小さく。
@@ -2908,6 +2973,7 @@ function render(){
   bd.style.aspectRatio=NC+' / '+NR;
   bd.style.height='auto';
   bd.classList.toggle('bigboard', Math.max(NR,NC)>=13);
+  bd.classList.toggle('point-mode', pointModeOn());   // 交点置き（囲碁・シャンチー・チャンギ）
   let movable=new Set();
   if(sel){
     // 可動表示も合法判定と同じゲートを通す（千日手回避で禁じられた手は光らせない）
@@ -2940,7 +3006,7 @@ function render(){
   for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
     const cell=document.createElement('div'); cell.className='cell';
     cell.dataset.r=r; cell.dataset.c=c;   // ポインタ操作（タップ/長押し/ドラッグ）で参照
-    const dg=diagSvg(getDiag(r,c)); if(dg) cell.appendChild(dg);  // 斜め線属性（駒の背面）
+    const dg=diagSvg(getDiag(r,c),r,c); if(dg) cell.appendChild(dg);  // 斜め線属性（駒の背面）
     const pc=board[r][c];
     if(movable.has(r+'_'+c)){ cell.classList.add('movable'); if(pc)cell.classList.add('has-koma'); }
     if(checkCells.has(r+'_'+c)) cell.classList.add('check');
@@ -2980,6 +3046,7 @@ function render(){
     }
     bd.appendChild(cell);
   }
+  renderPointGrid(bd);   // 交点置きの格子線（マスの枠は透明になっている）
   renderCap('capYou',capYou,1);
   renderCap('capEnemy',capEnemy,-1);
   // 手番側のプレイヤー札を金色に光らせる
@@ -2991,14 +3058,30 @@ function render(){
 }
 // 九宮（宮殿）を盤に描画。両陣ぶん、枠＋対角線（シャンチーの盤と同じ見た目）。
 // マスの斜め線属性を、そのマスの中に描く（マス目と同じ線）。駒の背面。
-function diagSvg(kind){
-  const L={l:'<line x1="0" y1="0" x2="100" y2="100"/>',      // ＼
-           r:'<line x1="100" y1="0" x2="0" y2="100"/>'};     // ／
-  const body = kind==='x' ? (L.l+L.r) : (L[kind]||'');
+// マスの斜め線。升目置きはマスの対角線をそのまま引く。
+// 交点置きでは駒＝マスの中心なので、中心から「同じ斜め線を持つ隣の交点」の方向にだけ
+// 半マスぶん引く（＝隣のマスの半分と繋がって、交点から交点への線になる）。
+function diagSvg(kind,r,c){
+  if(!kind) return null;
+  let body='';
+  if(!pointModeOn()){
+    const L={l:'<line x1="0" y1="0" x2="100" y2="100"/>',      // ＼
+             r:'<line x1="100" y1="0" x2="0" y2="100"/>'};     // ／
+    body = kind==='x' ? (L.l+L.r) : (L[kind]||'');
+  } else {
+    // [方向, その方向の角(x,y)] …＼は左上/右下、／は右上/左下
+    const dirs=[['l',-1,-1,0,0],['l',1,1,100,100],['r',-1,1,100,0],['r',1,-1,0,100]];
+    for(const [d,dr,dc,x,y] of dirs){
+      if(!(kind===d||kind==='x')) continue;
+      const rr=r+dr, cc=c+dc;
+      const ok = rr>=0&&rr<NR&&cc>=0&&cc<NC && diagHas(rr,cc,d);
+      if(ok) body+='<line x1="50" y1="50" x2="'+x+'" y2="'+y+'"/>';
+    }
+  }
   if(!body) return null;
-  const d=document.createElement('div'); d.className='cell-diag';
-  d.innerHTML='<svg viewBox="0 0 100 100" preserveAspectRatio="none">'+body+'</svg>';
-  return d;
+  const d2=document.createElement('div'); d2.className='cell-diag';
+  d2.innerHTML='<svg viewBox="0 0 100 100" preserveAspectRatio="none">'+body+'</svg>';
+  return d2;
 }
 function renderCap(id,arr,p){
   const el=document.getElementById(id);
@@ -4745,6 +4828,7 @@ function syncSizeUI(){
   if(val) val.textContent=NR+' 行 × '+NC+' 列';
   // 敵陣の深さ（成りゾーン）も盤の設定として同期する
   syncPZOptions(Math.min(PZ, NR));
+  const pt=document.getElementById('ptSel'); if(pt) pt.value=RULES.pointMode;
   // 九宮は盤の形に関わる設定なので、盤の設定側に置いてここで同期する
   const pl=document.getElementById('bsPalace');
   if(pl){ pl.checked=RULES.palace;
@@ -4818,6 +4902,9 @@ document.getElementById('applyPresetBtn').onclick=()=>{
   if(key==='go'||key==='othello'||key==='hasami') RULES.captureAll=true;
   // はさみ将棋は取った駒を打てない（打ち込みの無いゲーム）
   if(key==='hasami') RULES.drops=false;
+  // 囲碁・オセロは「持ち駒を打つ」だけのゲームなので打ち込みを必ずON
+  // （シャンチー等でOFFにしたまま選ぶと一手も指せなくなるため）
+  if(key==='go'||key==='othello') RULES.drops=true;
   // シャンチーは持ち駒（打ち込み）が無いゲームなので自動OFF
   if(key==='xiangqi'){ RULES.drops=false; RULES.flyingGeneral=true; setSennichiteMode('xiangqi'); }
   // チャンギ：打ち込み無し／王不見王ではなくビッチャングン／パスは既定で可能
@@ -5411,6 +5498,11 @@ document.getElementById('rJanggiSetup').onchange=e=>{ RULES.janggiSetup=e.target
 // 九宮は盤の設定なので、チェックしただけでは反映しない（「適用」または「作成」で確定）
 document.getElementById('bsPalace').onchange=()=>updatePalacePending();
 document.getElementById('pzSel').onchange=e=>{ e.target.dataset.touched='1'; updatePalacePending(); };
+// 駒の置き方（交点／マス）は見た目だけなので、選んだらすぐ反映する
+document.getElementById('ptSel').onchange=e=>{
+  RULES.pointMode=e.target.value; render();
+  setStatus(pointModeOn()?'駒を線の交点に置く表示にしました':'駒をマスの中に置く表示にしました');
+};
 function updatePalacePending(){
   const cb=document.getElementById('bsPalace'), note=document.getElementById('bsPalaceNote');
   if(!cb||!note) return;
