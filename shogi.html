@@ -118,19 +118,28 @@
     display:flex;align-items:center;justify-content:center;
     cursor:pointer;
   }
-  /* 交点置き（囲碁・シャンチー・チャンギ）：マスの枠を消し、線がマスの中心を通るように別レイヤーで引く。
-     駒はマスの中央＝線の交点に乗る。論理座標(board[r][c])は升目置きとまったく同じ。 */
-  .board.point-mode .cell{border-color:transparent;}
-  .board.point-mode .cell.movable::after{opacity:.9;}
-  /* 交点置きでは強調表示も交点を中心にした丸にする（マスの枠が無いため） */
-  .board.point-mode .cell.sel,
-  .board.point-mode .cell.last{border-radius:50%;}
-  .board.point-mode .cell.last{background:radial-gradient(circle,rgba(224,86,63,.34),transparent 70%);}
-  .grid-lines{position:absolute; z-index:0; pointer-events:none;}
-  .grid-lines svg{width:100%; height:100%; display:block; overflow:visible;}
-  .grid-lines line{vector-effect:non-scaling-stroke; stroke:rgba(107,74,30,.55); stroke-width:1;}
-  .grid-lines line.edge{stroke:rgba(107,74,30,.8); stroke-width:2;}
-  .grid-lines circle.hoshi{fill:rgba(107,74,30,.8); stroke:none;}
+  /* 交点に乗る駒（囲碁・シャンチー・チャンギ）。マスの左上の角＝格子線の交点に置く。
+     マスの中の駒とは別の点なので重ならず、互いに取り合わない。 */
+  /* 交点の駒は外周の線にも乗るので、木地を盤の外側へ広げて余白をつくる
+     （実際の碁盤・象棋盤と同じで、線の外側にも盤面がある） */
+  .board.has-pts{overflow:visible; background:none; border:none; box-shadow:none;}
+  .board-wrap.pts-wrap{
+    background:linear-gradient(160deg,var(--board),var(--board2));
+    box-shadow:0 0 0 3px #7a5320, 0 0 0 5px rgba(245,207,107,.35),
+      0 14px 40px rgba(0,0,0,.55), inset 0 0 30px rgba(106,74,30,.45);}
+  .board-wrap.pts-wrap::before{border-color:rgba(122,83,32,.45);}
+  .pt-layer{position:absolute; inset:0; z-index:6; pointer-events:none;}
+  .pt-slot{position:absolute; display:flex; align-items:center; justify-content:center;
+    transform:translate(-50%,-50%); pointer-events:auto; cursor:pointer;}
+  .pt-slot .koma{width:78%; height:78%;}
+  .pt-slot .go-disc,.pt-slot .othello-disc{width:74%; height:74%;}
+  .pt-slot.sel::before{content:"";position:absolute;inset:6%;border-radius:50%;
+    background:radial-gradient(circle,rgba(98,209,160,.65),rgba(98,209,160,.15));}
+  .pt-slot.check::before{content:"";position:absolute;inset:2%;border-radius:50%;
+    box-shadow:0 0 0 3px var(--accent), 0 0 14px rgba(224,86,63,.6);}
+  .pt-slot.movable::after{content:"";position:absolute;width:26%;height:26%;border-radius:50%;
+    background:radial-gradient(circle,#8ff0c4,#2f9e73);box-shadow:0 0 10px rgba(98,209,160,.9);}
+  .pt-slot.movable.empty::after{width:34%;height:34%;}
   .cell.movable::after{
     content:"";position:absolute;width:30%;height:30%;
     background:radial-gradient(circle,var(--move),#3aa977);
@@ -880,12 +889,11 @@
     <div class="bs-row">
       <label for="ptSel">駒の置き方</label>
       <select id="ptSel">
-        <option value="auto">自動（囲碁・シャンチー・チャンギの駒があれば交点）</option>
-        <option value="point">交点に置く（囲碁・シャンチー・チャンギ風）</option>
-        <option value="cell">マスの中に置く（将棋・チェス風）</option>
+        <option value="auto">囲碁・シャンチー・チャンギの駒は交点に置く</option>
+        <option value="cell">すべての駒をマスの中に置く</option>
       </select>
     </div>
-    <div class="bs-note">※ 交点置きは見た目だけの違いです。マス番号は同じなので、交点の駒とマスの駒が同じ盤にいても取り合いは変わりません。</div>
+    <div class="bs-note">※ 交点の駒とマスの駒は別の点にいるので、互いに取り合えません（斜めに動くときの障壁にはなります）。碁石が囲んだ駒は交点・マスに関係なく取れ、九宮の交差マス（×）だけは両方が置ける共有点として取り合えます。斜めに飛び越えて動く駒は交点の駒も取れます。</div>
     <label class="bs-row bs-check"><input type="checkbox" id="bsPalace">
       <span>九宮をつくる（シャンチー用。帥・将／仕・士は宮殿から出られない。列数が奇数なら3×3、偶数なら2×2）</span></label>
     <div class="bs-note bs-pending" id="bsPalaceNote" style="display:none;">※ 九宮・敵陣の変更は「適用」または「作成」を押すと反映されます</div>
@@ -1999,7 +2007,60 @@ const BOARD_MIN=3, BOARD_MAX=40;
 const clampDim=v=>Math.max(BOARD_MIN,Math.min(BOARD_MAX,v|0));
 
 // 空盤を作る（現在のNR×NC）。
-function emptyBoard(){ board=Array.from({length:NR},()=>Array(NC).fill(null)); initDiag(); }
+/* ===== 盤は2層（マスの中／線の交点）=====
+   交点(r,c) は マス(r,c) の「左上の角」。つまりマスの中心と交点は必ず別の点なので、
+   ・交点駒（囲碁・シャンチー・チャンギ）と升目駒は同じ (r,c) に同時に存在できる
+   ・互いに取り合えない（別の点にいるので重ならない）
+   ・斜めに動くときだけ、通り道に相手レイヤーの点が来るので障壁になる
+     マス(r,c)から斜め(dr,dc)へ →  通る交点は (r+max(0,dr), c+max(0,dc))
+     交点(r,c)から斜め(dr,dc)へ →  通るマスは (r+min(0,dr), c+min(0,dc))
+   ・九宮の交差マス(×)だけは斜め線が「マスの中心」で交わる＝2層の共有点なので、
+     そこでは両者が同じ点に来るものとして取り合える
+   layers[0]=マスの駒(board), layers[1]=交点の駒(ptsBoard) */
+let ptsBoard=[];
+function emptyBoard(){
+  board=Array.from({length:NR},()=>Array(NC).fill(null));
+  ptsBoard=Array.from({length:NR},()=>Array(NC).fill(null));
+  linkLayers(board, ptsBoard);
+  initDiag();
+}
+// 2つのレイヤーを相互参照させる（bだけ渡せば相手レイヤーも分かるようにする）
+function linkLayers(cells, pts){
+  const L={cells,pts};
+  cells.L=L; cells.isPts=false;
+  pts.L=L;   pts.isPts=true;
+  return cells;
+}
+function cloneLayer(a){ return (a||[]).map(row=>row.map(x=>x?{...x}:null)); }
+// board と同じ形の空の交点レイヤーを用意する（サイズ変更・復元後の保険）
+function ensurePts(){
+  if(!ptsBoard || ptsBoard.length!==NR || (ptsBoard[0]||[]).length!==NC){
+    const old=ptsBoard||[];
+    ptsBoard=Array.from({length:NR},(_,r)=>Array.from({length:NC},(_,c)=>(old[r]&&old[r][c])||null));
+  }
+  linkLayers(board, ptsBoard);
+}
+// 交点置きが有効か（設定＝'point' か、'auto' で交点駒が居るとき）
+function ptLayerOn(){ return RULES.pointMode!=='cell'; }
+// この駒が交点に乗るか（囲碁・シャンチー・チャンギの駒だけ）
+function goesOnPoint(t){ return ptLayerOn() && isPointPiece(t); }
+// 駒の種類に応じて2層へ振り分け直す（設定変更・配置後に呼ぶ）
+function syncLayers(){
+  ensurePts();
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
+    const cell=board[r][c], pt=ptsBoard[r][c];
+    if(cell && goesOnPoint(cell.t)){                       // マス→交点へ
+      if(!pt){ ptsBoard[r][c]=cell; board[r][c]=null; }
+    }
+    if(pt && !goesOnPoint(pt.t)){                          // 交点→マスへ
+      if(!board[r][c]){ board[r][c]=pt; ptsBoard[r][c]=null; }
+    }
+  }
+}
+// (r,c) にある駒を層を問わず返す（描画・数え上げ用）
+function pieceAt(r,c){ return board[r][c] || (ptsBoard[r]&&ptsBoard[r][c]) || null; }
+// 九宮の交差マス（×）＝2層の共有点。ここだけは層をまたいで取り合える。
+function isSharedPoint(r,c){ return getDiag(r,c)==='x'; }
 // ===== マスの斜め線属性 =====
 // 各マスは 'r'（／右上がり）・'l'（＼右下がり）・'x'（交差）・null（なし）のいずれかを持つ。
 // 九宮はこの属性の組み合わせとして表現する。
@@ -2231,7 +2292,8 @@ function stampPreset(key, r0, c0){
   let n=0;
   for(let r=0;r<g.length;r++)for(let c=0;c<g[r].length;c++){
     const tr=r0+r, tc=c0+c;
-    if(tr>=0&&tr<rows&&tc>=0&&tc<cols){ board[tr][tc]= g[r][c]?{...g[r][c]}:null; n++; }
+    if(tr>=0&&tr<rows&&tc>=0&&tc<cols){ board[tr][tc]= g[r][c]?{...g[r][c]}:null;
+      if(ptsBoard[tr]) ptsBoard[tr][tc]=null; n++; }
   }
   return n;
 }
@@ -2417,6 +2479,59 @@ function enPassantTarget(b, p){
   if(!q || q.t!=='cP' || q.p!==-p) return null;
   return { row:tr, col:tc };
 }
+/* ===== 2層のあいだの当たり判定 =====
+   斜めに1歩動くとき、通り道にちょうど相手レイヤーの点が来る。そこに駒があれば通れない。
+   ただし九宮の交差マス(×)は2層の共有点なので、そこは「取り合える相手」として扱う。 */
+// b の (r,c) から (dr,dc) へ斜めに1歩動くとき、通り道にある相手レイヤーの座標
+function crossPointOf(b,r,c,dr,dc){
+  if(!b || !b.L || Math.abs(dr)!==1 || Math.abs(dc)!==1) return null;
+  const rr = b.isPts ? r+Math.min(0,dr) : r+Math.max(0,dr);
+  const cc = b.isPts ? c+Math.min(0,dc) : c+Math.max(0,dc);
+  if(rr<0||rr>=NR||cc<0||cc>=NC) return null;
+  return [rr,cc];
+}
+function otherLayer(b){ return (b&&b.L) ? (b.isPts? b.L.cells : b.L.pts) : null; }
+// 斜めに「飛び越えて」動く駒（馬・象・桂馬型など）が、跳び越える途中で通る相手レイヤーの点。
+// 走りの斜めは交点駒に塞がれるだけで取れないが、飛び越える駒はそこの駒を取れる。
+function crossJumpPoints(b, code, fr, fc, tr, tc, p){
+  if(!ptLayerOn() || !b || !b.L) return [];
+  const dr=tr-fr, dc=tc-fc;
+  if(!dr||!dc) return [];                      // 斜め成分が無ければ相手レイヤーの点は通らない
+  const flip = p===-1;
+  const isJump = moveVecs(code).some(v=>v.r==='jump' &&
+    (flip ? (-v.dr===dr && -v.dc===dc) : (v.dr===dr && v.dc===dc)));
+  if(!isJump) return [];
+  const sr=Math.sign(dr), sc=Math.sign(dc);
+  const steps=Math.min(Math.abs(dr),Math.abs(dc));   // 斜めに進んだ歩数だけ点を通る
+  const out=[]; let rr=fr, cc=fc;
+  for(let i=0;i<steps;i++){
+    const cp=crossPointOf(b,rr,cc,sr,sc);
+    if(cp) out.push(cp);
+    rr+=sr; cc+=sc;
+  }
+  return out;
+}
+// 斜め1歩が相手レイヤーの駒に塞がれるか（＝通り抜けられないか）
+function diagBlocked(b,r,c,dr,dc){
+  if(!ptLayerOn()) return false;
+  const o=otherLayer(b); if(!o) return false;
+  const cp=crossPointOf(b,r,c,dr,dc); if(!cp) return false;
+  return !!(o[cp[0]] && o[cp[0]][cp[1]]);
+}
+// 共有点（九宮の交差マス）にいる相手レイヤーの駒。ここだけは層をまたいで取り合える。
+function sharedFoeAt(b,r,c,p){
+  if(!ptLayerOn() || !isSharedPoint(r,c)) return null;
+  const o=otherLayer(b); if(!o||!o[r]) return null;
+  const q=o[r][c];
+  return (q && q.p!==p) ? q : null;
+}
+// 共有点に自分の駒（同じ陣営）がいて入れないか
+function sharedBlockAt(b,r,c,p){
+  if(!ptLayerOn() || !isSharedPoint(r,c)) return false;
+  const o=otherLayer(b); if(!o||!o[r]) return false;
+  const q=o[r][c];
+  return !!(q && q.p===p);
+}
 function moves(b,r,c){
   const pc=b[r][c]; if(!pc)return[];
   const p=pc.p;
@@ -2533,15 +2648,20 @@ function moves(b,r,c){
         return rr>=0&&rr<NR&&cc>=0&&cc<NC&&b[rr][cc]; })) continue;
       const tg=b[nr][nc];
       if(tg&&tg.p===p)continue;
+      if(sharedBlockAt(b,nr,nc,p))continue;   // 共有点に自駒
       res.push([nr,nc]);
     } else {
       const max = v.r===F? 99 : v.r;
       let nr=r+dr, nc=c+dc, cnt=0;
       while(nr>=0&&nr<NR&&nc>=0&&nc<NC&&cnt<max){
+        // 斜めの通り道に相手レイヤーの駒があると、そこから先へは進めない
+        if(diagBlocked(b,nr-dr,nc-dc,dr,dc)) break;
         const tg=b[nr][nc];
         if(tg&&tg.p===p)break;
+        if(sharedBlockAt(b,nr,nc,p))break;    // 共有点に自駒がいるので入れない
         res.push([nr,nc]);
         if(tg)break; // 相手駒で止まる
+        if(sharedFoeAt(b,nr,nc,p))break;      // 共有点で相手レイヤーの敵を取って止まる
         nr+=dr; nc+=dc; cnt++;
       }
     }
@@ -2617,10 +2737,12 @@ function janggiDiagMoves(b,r,c,p,mode,forwardOnly){
     if(mode==='step'){
       const nr=r+dr, nc=c+dc;
       if(nr<0||nr>=NR||nc<0||nc>=NC || !diagHas(nr,nc,d)) continue;
+      if(diagBlocked(b,r,c,dr,dc)) continue;             // 相手レイヤーの駒が斜めの通り道にある
       const q=b[nr][nc]; if(!q||q.p!==p) res.push([nr,nc]);
     } else if(mode==='slide'){
       let nr=r+dr, nc=c+dc;
       while(nr>=0&&nr<NR&&nc>=0&&nc<NC&&diagHas(nr,nc,d)){
+        if(diagBlocked(b,nr-dr,nc-dc,dr,dc)) break;      // 相手レイヤーの駒が斜めの通り道にある
         const q=b[nr][nc];
         if(q){ if(q.p!==p) res.push([nr,nc]); break; }
         res.push([nr,nc]); nr+=dr; nc+=dc;
@@ -2848,23 +2970,28 @@ function isLegalMove(m, p, b){
     if(wouldKeepBikjang(p, m)) return false;   // ビッチャングン：相対を解消しない手は指せない
   }
   if(m.pass) return !!RULES.allowPass;         // パスはルールONのときだけ指せる
+  const lbd = (m.pt && bd.L && bd.L.pts) ? bd.L.pts : bd;   // この手が動くレイヤー
   if(m.drop){
-    return dropTargets(bd, m.drop, p).some(([r,c])=>r===m.tr&&c===m.tc);
+    return dropTargets(lbd, m.drop, p).some(([r,c])=>r===m.tr&&c===m.tc);
   }
-  const pc = bd[m.fr] && bd[m.fr][m.fc];
+  const pc = lbd[m.fr] && lbd[m.fr][m.fc];
   if(!pc || pc.p!==p) return false;
   // 獅子型（caps付き・居喰い含む）は専用生成で検証
   if(hasLion(pc.t) && (m.caps || (m.fr===m.tr&&m.fc===m.tc))){
     const sig=cs=>(cs||[]).map(q=>q[0]+','+q[1]).sort().join(';');
-    return lionMoves(bd, m.fr, m.fc).some(x=>x.tr===m.tr&&x.tc===m.tc && sig(x.caps)===sig(m.caps));
+    return lionMoves(lbd, m.fr, m.fc).some(x=>x.tr===m.tr&&x.tc===m.tc && sig(x.caps)===sig(m.caps));
   }
-  return moves(bd, m.fr, m.fc).some(([r,c])=>r===m.tr&&c===m.tc);
+  return moves(lbd, m.fr, m.fc).some(([r,c])=>r===m.tr&&c===m.tc);
 }
 // 局面キー（盤＋手番＋持ち駒）。任意の局面に使える共通形式。
 function posKeyOf(b, tn, cy, ce){
   let s='';
   for(let r=0;r<b.length;r++){ const row=b[r]||[];
     for(let c=0;c<row.length;c++){ const pc=row[c]; s+= pc?(pc.t+(pc.p>0?'+':'-')):'.'; s+=','; } }
+  const pb=(b&&b.L&&b.L.pts)||null;   // 交点レイヤーも局面の一部
+  if(pb){ s+='|P|';
+    for(let r=0;r<pb.length;r++){ const row=pb[r]||[];
+      for(let c=0;c<row.length;c++){ const pc=row[c]; s+= pc?(pc.t+(pc.p>0?'+':'-')):'.'; s+=','; } } }
   s+='|'+tn+'|'+[...cy].sort().join('')+'|'+[...ce].sort().join('');
   return s;
 }
@@ -2896,8 +3023,10 @@ function demoteOf(t){ return (isPromoted(t) && DEMOTE[t]) ? DEMOTE[t] : t; }
 function isRoyal(t){ return t==='hK'||t==='hKw'||t==='mK'||t==='K'||t==='CP'||t==='cK'||t==='JT'||t==='zLion'||!!(TP[t]&&TP[t].fl&&TP[t].fl.includes('royal')); }
 // 指定プレイヤーのroyal駒（玉・太子）が盤上または持ち駒に残っているか
 function hasRoyal(p){
+  ensurePts();
   for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
     const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) return true;
+    const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===p&&isRoyal(q.t)) return true;
   }
   const cap = p===1?capYou:capEnemy;
   if(cap.some(isRoyal)) return true;
@@ -2905,64 +3034,92 @@ function hasRoyal(p){
 }
 // プレイヤー p が王手をかけられているか（pのroyalが相手の利きに入る）。royal位置も返す。
 function checkInfo(p){
+  ensurePts();
   const royals=[];
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-    const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) royals.push([r,c]);
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++)for(const L of [board,ptsBoard]){
+    const pc=L[r]&&L[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) royals.push([r,c,L]);
   }
   if(!royals.length) return {check:false,cells:[]};
-  const key=new Set(royals.map(([r,c])=>r+'_'+c));
+  const key=new Set(royals.map(([r,c,L])=>r+'_'+c+'_'+(L===ptsBoard?'p':'c')));
   const hit=new Set();
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-    const pc=board[r][c];
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++)for(const L of [board,ptsBoard]){
+    const pc=L[r]&&L[r][c];
     if(pc&&pc.p===-p){
-      for(const [tr,tc] of moves(board,r,c)){ if(key.has(tr+'_'+tc)) hit.add(tr+'_'+tc); }
+      const tag=(L===ptsBoard?'p':'c');
+      for(const [tr,tc] of moves(L,r,c)){
+        if(key.has(tr+'_'+tc+'_'+tag)) hit.add(tr+'_'+tc);
+        // 共有点（九宮の交差マス）では層をまたいで王手になる
+        if(isSharedPoint(tr,tc) && key.has(tr+'_'+tc+'_'+(tag==='p'?'c':'p'))) hit.add(tr+'_'+tc);
+      }
     }
   }
   return {check:hit.size>0, cells:[...hit]};
 }
 
 /* ===== 描画 ===== */
-/* ===== 交点置き（囲碁・シャンチー・チャンギ）=====
-   囲碁19路＝19×19の交点、シャンチー＝9×10の交点。数も隣り合い方も NR×NC のマスと
-   まったく同じなので、盤のデータ board[r][c] はそのまま使い、「線を半マスずらして引き、
-   駒をその交点に乗せる」という描画だけを切り替える。
-   → 交点置きの駒と升目置きの駒が同じ盤にいても、同じ (r,c) なら同じ点にいる。
-     取る・取られるの判定は升目置きとまったく同じで、特別なルールは要らない。
-   見た目が半マスずれて混乱しないよう、切り替えは駒ごとではなく盤ごとに行う。 */
+/* ===== 交点に乗る駒（囲碁・シャンチー・チャンギ）=====
+   これらの駒だけが「格子線の交点」に乗る。他の駒は今までどおりマスの中。
+   交点(r,c) は マス(r,c) の左上の角なので、交点とマスの中心は必ず別の点になる。 */
 function isPointPiece(t){
   const fl=(TP[t]&&TP[t].fl)||[];
   return fl.includes('go')||fl.includes('xiangqi')||fl.includes('janggi');
 }
-function pointModeOn(){
-  if(RULES.pointMode==='point') return true;
-  if(RULES.pointMode==='cell')  return false;
-  // 'auto'：囲碁・シャンチー・チャンギの駒が盤上か持ち駒にあれば交点置きにする
-  for(let r=0;r<NR;r++){ const row=board[r]||[];
-    for(let c=0;c<row.length;c++){ const pc=row[c]; if(pc&&isPointPiece(pc.t)) return true; } }
-  return capYou.some(isPointPiece)||capEnemy.some(isPointPiece);
-}
-// 碁盤の星の位置（9路・13路・19路の正方形盤のみ）
-function hoshiPoints(){
-  const M={9:[2,4,6], 13:[3,6,9], 19:[3,9,15]}[NR];
-  if(!M || NR!==NC) return [];
-  const pts=[];
-  for(const r of M) for(const c of M) pts.push([r,c]);
-  return NR===9 ? pts.filter(([r,c])=>(r===4&&c===4)||(r!==4&&c!==4)) : pts;
-}
-// 交点置きのときの格子線。マスの中心（＝駒の位置）を通るように別レイヤーで引く。
-function renderPointGrid(bd){
-  const old=bd.querySelector('.grid-lines'); if(old) old.remove();
-  if(!bd.classList.contains('point-mode') || NR<2 || NC<2) return;
-  const w=NC-1, h=NR-1;
-  let s='';
-  for(let c=0;c<NC;c++) s+='<line'+((c===0||c===w)?' class="edge"':'')+' x1="'+c+'" y1="0" x2="'+c+'" y2="'+h+'"/>';
-  for(let r=0;r<NR;r++) s+='<line'+((r===0||r===h)?' class="edge"':'')+' x1="0" y1="'+r+'" x2="'+w+'" y2="'+r+'"/>';
-  // 碁盤の星（9・13・19路の正方形のときだけ）
-  hoshiPoints().forEach(([hr,hc])=>{ s+='<circle class="hoshi" cx="'+hc+'" cy="'+hr+'" r="0.12"/>'; });
-  const g=document.createElement('div'); g.className='grid-lines';
-  g.style.cssText='left:'+(50/NC)+'%;top:'+(50/NR)+'%;width:'+(100-100/NC)+'%;height:'+(100-100/NR)+'%;';
-  g.innerHTML='<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+s+'</svg>';
-  bd.insertBefore(g, bd.firstChild);   // 駒より背面
+
+// 交点に乗る駒を、マスの左上の角（＝格子線の交点）に描くレイヤー。
+// マスの枠線がそのまま交点の線なので、格子を引き直す必要はない。
+function renderPtLayer(bd, movable, checkCells){
+  const old=bd.querySelector('.pt-layer'); if(old) old.remove();
+  if(!ptLayerOn()){
+    bd.classList.remove('has-pts'); bd.style.width='';
+    const w0=bd.closest? bd.closest('.board-wrap') : null;
+    if(w0){ w0.classList.remove('pts-wrap'); w0.style.padding=''; }
+    return;
+  }
+  ensurePts();
+  const layer=document.createElement('div'); layer.className='pt-layer';
+  let any=false;
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
+    const pc=ptsBoard[r][c]; if(!pc) continue;
+    any=true;
+    const w=document.createElement('div');
+    w.className='pt-slot'+(movable&&movable.has('P'+r+'_'+c)?' movable':'')
+      +(checkCells&&checkCells.has(r+'_'+c)?' check':'')
+      +(sel&&sel.pt&&!sel.drop&&sel.r===r&&sel.c===c?' sel':'');
+    w.dataset.r=r; w.dataset.c=c; w.dataset.pt='1';
+    w.style.cssText='left:'+(c*100/NC)+'%;top:'+(r*100/NR)+'%;width:'+(100/NC)+'%;height:'+(100/NR)+'%;';
+    if(pc.t==='OTH'){ const d=document.createElement('div'); d.className='othello-disc '+(pc.p===1?'black':'white'); w.appendChild(d); }
+    else if(isGo(pc.t)){ const d=document.createElement('div'); d.className='go-disc '+(pc.t==='GOB'?'black':'white'); w.appendChild(d); }
+    else {
+      const k=document.createElement('div');
+      const promoted=isPromoted(pc.t)||!!pc.o;
+      k.className='koma'+(pc.p===-1?' enemy':'')+(promoted?' promoted':'');
+      fillKoma(k, pc.t);
+      w.appendChild(k);
+    }
+    layer.appendChild(w);
+  }
+  // 交点に打てるマス（持ち駒の打ち先）も点で示す
+  if(movable) movable.forEach(key=>{
+    if(key.charAt(0)!=='P') return;
+    const [r,c]=key.slice(1).split('_').map(Number);
+    if(ptsBoard[r]&&ptsBoard[r][c]) return;
+    any=true;
+    const w=document.createElement('div'); w.className='pt-slot movable empty';
+    w.dataset.r=r; w.dataset.c=c; w.dataset.pt='1';
+    w.style.cssText='left:'+(c*100/NC)+'%;top:'+(r*100/NR)+'%;width:'+(100/NC)+'%;height:'+(100/NR)+'%;';
+    layer.appendChild(w);
+  });
+  bd.classList.toggle('has-pts', any);
+  const wrap=bd.closest? bd.closest('.board-wrap') : null;
+  if(wrap) wrap.classList.toggle('pts-wrap', any);
+  if(any){
+    // 外周の交点に乗る駒がはみ出す分（半マス）だけ、格子を縮めて木地の余白をつくる
+    bd.style.width='calc(min(92vw,410px) * '+(NC/(NC+1))+')';
+    if(wrap) wrap.style.padding='calc(min(92vw,410px) / '+(2*(NC+1))+' + 8px)';
+    bd.appendChild(layer);
+  } else {
+    bd.style.width=''; if(wrap) wrap.style.padding='';
+  }
 }
 function render(){
   const bd=document.getElementById('board'); bd.innerHTML='';
@@ -2973,15 +3130,21 @@ function render(){
   bd.style.aspectRatio=NC+' / '+NR;
   bd.style.height='auto';
   bd.classList.toggle('bigboard', Math.max(NR,NC)>=13);
-  bd.classList.toggle('point-mode', pointModeOn());   // 交点置き（囲碁・シャンチー・チャンギ）
+  ensurePts();
+  // 可動マスのキー：マスは "r_c"、交点は "Pr_c"（2層を区別する）
   let movable=new Set();
+  const mkey=(isPt,r,c)=>(isPt?'P':'')+r+'_'+c;
   if(sel){
     // 可動表示も合法判定と同じゲートを通す（千日手回避で禁じられた手は光らせない）
-    if(sel.drop){ const sp=sel.p||turn;
-      dropTargets(board,sel.t,sp).forEach(([r,c])=>{ if(isLegalMove({drop:sel.t,tr:r,tc:c},sp)) movable.add(r+'_'+c); }); }
+    if(sel.drop){ const sp=sel.p||turn; const isPt=goesOnPoint(sel.t); const L=isPt?ptsBoard:board;
+      dropTargets(L,sel.t,sp).forEach(([r,c])=>{ if(isLegalMove(isPt?{drop:sel.t,tr:r,tc:c,pt:true}:{drop:sel.t,tr:r,tc:c},sp)) movable.add(mkey(isPt,r,c)); }); }
+    else if(sel.pt){
+      const mv=ptsBoard[sel.r]&&ptsBoard[sel.r][sel.c], mp=mv?mv.p:turn;
+      if(mv) moves(ptsBoard,sel.r,sel.c).forEach(([r,c])=>{ if(isLegalMove({fr:sel.r,fc:sel.c,tr:r,tc:c,pt:true},mp)) movable.add(mkey(true,r,c)); });
+    }
     else {
       const mv=board[sel.r][sel.c], mp=mv?mv.p:turn;
-      moves(board,sel.r,sel.c).forEach(([r,c])=>{ if(isLegalMove({fr:sel.r,fc:sel.c,tr:r,tc:c},mp)) movable.add(r+'_'+c); });
+      moves(board,sel.r,sel.c).forEach(([r,c])=>{ if(isLegalMove({fr:sel.r,fc:sel.c,tr:r,tc:c},mp)) movable.add(mkey(false,r,c)); });
       // 獅子型：2歩先・取って戻る先なども可動表示
       const lp=board[sel.r][sel.c];
       if(lp&&hasLion(lp.t)) lionMoves(board,sel.r,sel.c).forEach(m=>{ if(!(m.tr===sel.r&&m.tc===sel.c) && isLegalMove(m,lp.p)) movable.add(m.tr+'_'+m.tc); });
@@ -3010,7 +3173,7 @@ function render(){
     const pc=board[r][c];
     if(movable.has(r+'_'+c)){ cell.classList.add('movable'); if(pc)cell.classList.add('has-koma'); }
     if(checkCells.has(r+'_'+c)) cell.classList.add('check');
-    if(sel&&!sel.drop&&sel.r===r&&sel.c===c)cell.classList.add('sel');
+    if(sel&&!sel.drop&&!sel.pt&&sel.r===r&&sel.c===c)cell.classList.add('sel');
     if(history.length){const lm=history[history.length-1].to; if(lm&&lm[0]===r&&lm[1]===c)cell.classList.add('last');}
     const msIdx = multiSel.length? multiSel.findIndex(s=>s.r===r&&s.c===c) : -1;
     if(msIdx>=0){
@@ -3046,7 +3209,7 @@ function render(){
     }
     bd.appendChild(cell);
   }
-  renderPointGrid(bd);   // 交点置きの格子線（マスの枠は透明になっている）
+  renderPtLayer(bd, movable, checkCells);   // 交点に乗る駒（マスの角＝線の交点）
   renderCap('capYou',capYou,1);
   renderCap('capEnemy',capEnemy,-1);
   // 手番側のプレイヤー札を金色に光らせる
@@ -3058,26 +3221,14 @@ function render(){
 }
 // 九宮（宮殿）を盤に描画。両陣ぶん、枠＋対角線（シャンチーの盤と同じ見た目）。
 // マスの斜め線属性を、そのマスの中に描く（マス目と同じ線）。駒の背面。
-// マスの斜め線。升目置きはマスの対角線をそのまま引く。
-// 交点置きでは駒＝マスの中心なので、中心から「同じ斜め線を持つ隣の交点」の方向にだけ
-// 半マスぶん引く（＝隣のマスの半分と繋がって、交点から交点への線になる）。
+// マスの斜め線（九宮）。マスの対角線をそのまま引く。交点はマスの角なので、
+// この線は「交点から交点へ」の線になり、2本が交わる点はそのマスの中心になる。
+// その交わる点（交差マス×）だけが、交点の駒とマスの駒が同居できる共有点。
 function diagSvg(kind,r,c){
   if(!kind) return null;
-  let body='';
-  if(!pointModeOn()){
-    const L={l:'<line x1="0" y1="0" x2="100" y2="100"/>',      // ＼
-             r:'<line x1="100" y1="0" x2="0" y2="100"/>'};     // ／
-    body = kind==='x' ? (L.l+L.r) : (L[kind]||'');
-  } else {
-    // [方向, その方向の角(x,y)] …＼は左上/右下、／は右上/左下
-    const dirs=[['l',-1,-1,0,0],['l',1,1,100,100],['r',-1,1,100,0],['r',1,-1,0,100]];
-    for(const [d,dr,dc,x,y] of dirs){
-      if(!(kind===d||kind==='x')) continue;
-      const rr=r+dr, cc=c+dc;
-      const ok = rr>=0&&rr<NR&&cc>=0&&cc<NC && diagHas(rr,cc,d);
-      if(ok) body+='<line x1="50" y1="50" x2="'+x+'" y2="'+y+'"/>';
-    }
-  }
+  const L={l:'<line x1="0" y1="0" x2="100" y2="100"/>',      // ＼
+           r:'<line x1="100" y1="0" x2="0" y2="100"/>'};     // ／
+  const body = kind==='x' ? (L.l+L.r) : (L[kind]||'');
   if(!body) return null;
   const d2=document.createElement('div'); d2.className='cell-diag';
   d2.innerHTML='<svg viewBox="0 0 100 100" preserveAspectRatio="none">'+body+'</svg>';
@@ -3132,12 +3283,16 @@ function renderCap(id,arr,p){
 /* ===== 盤のポインタ操作（タップ／長押しで編集モード／編集中はドラッグ移動） ===== */
 // 編集モードでの移動：(fr,fc)→(tr,tc)。移動先が空のときだけ移す。
 // 既に駒がある場合は上書きせず、元の場所に戻す（移動しない）。
-function moveEditPiece(fr,fc,tr,tc){
-  const pc=board[fr]&&board[fr][fc]; if(!pc){ render(); return; }
-  if(fr===tr&&fc===tc){ render(); return; }
-  if(board[tr][tc]){ render(); setStatus('そのマスには駒があるため移動できません（元に戻しました）','think'); return; }
-  board[tr][tc]={...pc};
-  board[fr][fc]=null;
+function moveEditPiece(fr,fc,tr,tc,fromPt,toPt){
+  ensurePts();
+  // 交点に乗る駒は交点レイヤー、それ以外はマスのレイヤーへ（種類で決まる）
+  const SRC = fromPt? ptsBoard : board;
+  const pc=SRC[fr]&&SRC[fr][fc]; if(!pc){ render(); return; }
+  const DST = goesOnPoint(pc.t) ? ptsBoard : board;
+  if(fr===tr&&fc===tc&&SRC===DST){ render(); return; }
+  if(DST[tr][tc]){ render(); setStatus('そこには既に駒があるため移動できません（元に戻しました）','think'); return; }
+  DST[tr][tc]={...pc};
+  SRC[fr][fc]=null;
   sel=null; render();
   setStatus('駒を移動しました（編集モード）');
 }
@@ -3146,7 +3301,10 @@ function moveEditPiece(fr,fc,tr,tc){
   bd.style.touchAction='none';   // 盤上ではブラウザのスクロール/ズームを抑止しジェスチャを取得
   const LP_MS=450, MOVE_TH=8;
   let g=null, lpTimer=null, ghost=null;
-  const cellOf=(el)=>{ const c=el&&el.closest?el.closest('.cell'):null;
+  const cellOf=(el)=>{
+    const pk = el&&el.closest? el.closest('[data-pt]') : null;   // 交点の駒を先に拾う
+    if(pk && pk.dataset.r!==undefined) return {r:+pk.dataset.r,c:+pk.dataset.c,el:pk,pt:true};
+    const c=el&&el.closest?el.closest('.cell'):null;
     return (c&&c.dataset&&c.dataset.r!==undefined)?{r:+c.dataset.r,c:+c.dataset.c,el:c}:null; };
   const clearLP=()=>{ if(lpTimer){clearTimeout(lpTimer); lpTimer=null;} };
   function makeGhost(pc, srcEl, x, y){
@@ -3165,7 +3323,7 @@ function moveEditPiece(fr,fc,tr,tc){
   bd.addEventListener('pointerdown', e=>{
     const cell=cellOf(e.target); if(!cell) return;
     try{ bd.setPointerCapture(e.pointerId); }catch(_){}
-    g={r:cell.r,c:cell.c,x0:e.clientX,y0:e.clientY,moved:false,dragging:false,longPress:false};
+    g={r:cell.r,c:cell.c,pt:!!cell.pt,x0:e.clientX,y0:e.clientY,moved:false,dragging:false,longPress:false};
     // 長押し検出は両モードで有効：非編集→編集モードへ、編集→駒変更メニュー
     lpTimer=setTimeout(()=>{ if(g&&!g.moved&&!g.dragging){ g.longPress=true; bd.classList.add('lp-armed');
       if(navigator.vibrate){ try{navigator.vibrate(15);}catch(_){} } } }, LP_MS);
@@ -3174,8 +3332,8 @@ function moveEditPiece(fr,fc,tr,tc){
     if(!g) return;
     if(!g.moved && Math.hypot(e.clientX-g.x0, e.clientY-g.y0)>MOVE_TH){ g.moved=true; clearLP(); bd.classList.remove('lp-armed'); }
     if(editing && g.moved && !g.dragging){
-      const pc=board[g.r]&&board[g.r][g.c];
-      if(pc){ g.dragging=true; const src=bd.querySelector('.cell[data-r=\"'+g.r+'\"][data-c=\"'+g.c+'\"]');
+      const pc=g.pt? (ptsBoard[g.r]&&ptsBoard[g.r][g.c]) : (board[g.r]&&board[g.r][g.c]);
+      if(pc){ g.dragging=true; const src=bd.querySelector((g.pt?'.pt-slot':'.cell')+'[data-r=\"'+g.r+'\"][data-c=\"'+g.c+'\"]');
         if(src)src.classList.add('drag-src'); makeGhost(pc, src, e.clientX, e.clientY); }
       else { g=null; return; }
     }
@@ -3192,7 +3350,7 @@ function moveEditPiece(fr,fc,tr,tc){
     // ドラッグ（編集中のみ発生）→ 移動
     if(gg.dragging){
       const t=cellOf(document.elementFromPoint(e.clientX,e.clientY)); endGhost();
-      if(t) moveEditPiece(gg.r,gg.c,t.r,t.c); else render();
+      if(t) moveEditPiece(gg.r,gg.c,t.r,t.c,gg.pt,!!t.pt); else render();
       return;
     }
     // 長押し（動かさず）
@@ -3207,14 +3365,14 @@ function moveEditPiece(fr,fc,tr,tc){
         if(multiSel.length>0) toggleMultiSel(gg.r,gg.c);  // 複数選択中はトグルを優先
         else setEditing(false);                            // 編集中のタップ→編集モード解除
       } else {
-        onCell(gg.r, gg.c);                                // 通常のタップ→着手
+        onCell(gg.r, gg.c, !!gg.pt);                       // 通常のタップ→着手
       }
     }
   });
   bd.addEventListener('pointercancel', ()=>{ clearLP(); endGhost(); g=null; bd.classList.remove('lp-armed'); });
 })();
 /* ===== クリック処理 ===== */
-function onCell(r,c){
+function onCell(r,c,isPt){
   if(gameOver||pendingPromo)return;
   if(editing){
     if(multiSel.length>0){ toggleMultiSel(r,c); return; } // 複数選択中はトグル
@@ -3222,15 +3380,28 @@ function onCell(r,c){
   }
   if(isAuto(turn))return; // 手番側が自動なら操作不可
   const me=turn; // 現在の手番のプレイヤー
-  const pc=board[r][c];
+  ensurePts();
+  const pc = isPt ? (ptsBoard[r]&&ptsBoard[r][c]) : board[r][c];
+  // 交点の駒を動かす（レイヤーは同じまま）
+  if(sel && sel.pt && !sel.drop){
+    const sp=ptsBoard[sel.r]&&ptsBoard[sel.r][sel.c];
+    if(sp && isPt && moves(ptsBoard,sel.r,sel.c).some(([a,b])=>a===r&&b===c)){
+      if(!isLegalMove({fr:sel.r,fc:sel.c,tr:r,tc:c,pt:true}, me)){ setStatus('千日手になるため、その手は指せません','think'); return; }
+      applyMoveSilent(me,{fr:sel.r,fc:sel.c,tr:r,tc:c,pt:true},false); sel=null; afterPlayer(); return;
+    }
+    if(pc&&pc.p===me){ sel={r,c,pt:!!isPt}; render(); return; }
+    sel=null; render(); return;
+  }
   if(sel){
     if(sel.drop){
-      if(dropTargets(board,sel.t,me).some(([a,b])=>a===r&&b===c)){
+      const dPt=goesOnPoint(sel.t), L=dPt?ptsBoard:board;
+      if(!!isPt===dPt && dropTargets(L,sel.t,me).some(([a,b])=>a===r&&b===c)){
         // 合法判定は人間・CPU共通の isLegalMove を必ず通す（千日手回避を含む）
-        if(!isLegalMove({drop:sel.t,tr:r,tc:c}, me)){ setStatus('千日手になるため、その手は指せません','think'); return; }
+        const dm=dPt?{drop:sel.t,tr:r,tc:c,pt:true}:{drop:sel.t,tr:r,tc:c};
+        if(!isLegalMove(dm, me)){ setStatus('千日手になるため、その手は指せません','think'); return; }
         doDrop(sel.t,r,c,me); sel=null; afterPlayer(); return;
       }
-    } else {
+    } else if(!isPt) {
       // 獅子型：2歩取り・居喰いを含む着手を優先（途中の駒も取る）
       const selPc=board[sel.r][sel.c];
       if(selPc && hasLion(selPc.t)){
@@ -3245,10 +3416,10 @@ function onCell(r,c){
         attemptMove(sel.r,sel.c,r,c); return;
       }
     }
-    if(pc&&pc.p===me){ sel={r,c}; render(); return; }
+    if(pc&&pc.p===me){ sel={r,c,pt:!!isPt}; render(); return; }
     sel=null; render(); return;
   }
-  if(pc&&pc.p===me){ sel={r,c}; render(); }
+  if(pc&&pc.p===me){ sel={r,c,pt:!!isPt}; render(); }
 }
 
 function attemptMove(fr,fc,tr,tc){
@@ -3384,28 +3555,52 @@ function fireBurn(r,c,p){
 // 囲碁の囲み取り：縦横4方を敵(または盤端)で囲まれた碁石を、囲んだ側の持ち駒へ。
 // 碁石はコード(GOB/GOW)のまま持ち駒に入り色を保持する。各着手後に呼ぶ。
 function goCaptureScan(){
+  ensurePts();
   const orth=[[-1,0],[1,0],[0,-1],[0,1]];
   const caps=[];
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-    const q=board[r][c]; if(!q||!isGo(q.t))continue;
+  // 碁石の囲みは「マス・交点に関係なく」判定する（隣は2層のどちらでも可）
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++)for(const layer of [board,ptsBoard]){
+    const q=layer[r]&&layer[r][c]; if(!q||!isGo(q.t))continue;
     const enemy=-q.p; let surrounded=true;
     for(const [dr,dc] of orth){
       const nr=r+dr,nc=c+dc;
       if(nr<0||nr>=NR||nc<0||nc>=NC) continue;          // 盤端は壁＝囲み成立側
-      const n=board[nr][nc];
+      const n=pieceAt(nr,nc);
       if(!n || n.p!==enemy){ surrounded=false; break; } // 空 or 敵でない(味方含む)＝囲まれていない
     }
-    if(surrounded) caps.push([r,c,enemy,q.t]);
+    if(surrounded) caps.push([r,c,enemy,q.t,layer]);
   }
-  for(const [r,c,enemy,t] of caps){
-    board[r][c]=null;
+  for(const [r,c,enemy,t,layer] of caps){
+    layer[r][c]=null;
     if(RULES.drops) (enemy===1?capYou:capEnemy).push(t); // コード保持＝色そのまま
   }
   return caps.length;
 }
+// 碁石を打った直後：その石が囲んだ領域の駒を、マス・交点に関係なく取る。
+function goSurroundCapture(r,c,side){
+  ensurePts();
+  const orth=[[-1,0],[1,0],[0,-1],[0,1]];
+  const cap = side===1? capYou : capEnemy;
+  let n=0;
+  for(const [dr,dc] of orth){
+    const nr=r+dr, nc=c+dc; if(nr<0||nr>=NR||nc<0||nc>=NC) continue;
+    for(const layer of [board,ptsBoard]){
+      const q=layer[nr]&&layer[nr][nc];
+      if(!q||q.p===side||isGo(q.t)) continue;      // 碁石どうしは goCaptureScan が担当
+      let surr=true;
+      for(const [ar,ac] of orth){
+        const rr=nr+ar, cc=nc+ac; if(rr<0||rr>=NR||cc<0||cc>=NC) continue;  // 盤端は壁
+        const t=pieceAt(rr,cc);
+        if(!t || t.p!==side){ surr=false; break; }
+      }
+      if(surr){ if(RULES.drops && !isRoyal(q.t)) cap.push(capturedCode(q)); layer[nr][nc]=null; n++; }
+    }
+  }
+  return n;
+}
 // 手動の打ちも唯一の着手実体 applyMoveSilent を通す（CPUと共通化）。
 function doDrop(t,r,c,p){
-  applyMoveSilent(p, {drop:t,tr:r,tc:c}, false);
+  applyMoveSilent(p, {drop:t,tr:r,tc:c, pt:goesOnPoint(t)||undefined}, false);
 }
 // (r,c)に置いた側pのオセロ駒が、8方向で自軍オセロ駒との間に挟んだ相手駒を裏返す（自軍に）
 // 裏返し：成駒は成る前に戻し、未成は成り駒にする。成りが無い駒はそのまま。
@@ -3468,13 +3663,13 @@ function pushHistory(){
   if(gameStartSnap===null){
     // 最初の着手の直前 = リプレイ起点
     gameStartSnap={
-      board:board.map(row=>row.map(x=>x?{...x}:null)),
+      board:cloneLayer(board), pts:cloneLayer(ptsBoard),
       capYou:[...capYou], capEnemy:[...capEnemy], turn:turn,
       diag:cellDiag.map(row=>row.slice())
     };
   }
   history.push({
-    board:board.map(row=>row.map(x=>x?{...x}:null)),
+    board:cloneLayer(board), pts:cloneLayer(ptsBoard),
     capYou:[...capYou], capEnemy:[...capEnemy], to:null
   });
 }
@@ -3630,14 +3825,18 @@ document.getElementById('passBtn').onclick=()=>{
 /* ===== 相手AI：αβ探索 ===== */
 // 玉の位置を探す
 function findKing(b,p){
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){const pc=b[r][c];if(pc&&pc.p===p&&isRoyal(pc.t))return[r,c];}
+  const layers=(b&&b.L&&b.L.pts)? [b, b.L.pts] : [b];
+  for(const L of layers)
+    for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){const pc=L[r]&&L[r][c];if(pc&&pc.p===p&&isRoyal(pc.t))return[r,c];}
   return null;
 }
 function evaluate(b,cy,ce){ // 相手(-1)視点で大きいほど良い
   let s=0;
   const ek=findKing(b,-1), yk=findKing(b,1);
+  const layers=(b&&b.L&&b.L.pts)? [b, b.L.pts] : [b];
+  for(const L of layers)
   for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-    const pc=b[r][c]; if(!pc)continue;
+    const pc=L[r]&&L[r][c]; if(!pc)continue;
     let v=VALUE[pc.t];
     if(pc.t!=='K'){
       const adv = pc.p===-1? r : (NR-1-r);       // 前進ボーナス
@@ -3657,8 +3856,14 @@ function evaluate(b,cy,ce){ // 相手(-1)視点で大きいほど良い
 function dropTargetsRaw(b,t,p){ return dropTargets(b,t,p); } // 後方互換のため残置（中身はdropTargetsに統合）
 function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻り値 {nb,ncy,nce,king}
   const nb=b.map(row=>row.map(x=>x?{...x}:null));
+  // 交点レイヤーも一緒にコピーして、読みの中でも2層のまま扱う
+  const srcPts=(b&&b.L&&b.L.pts)||null;
+  const npts=srcPts? srcPts.map(row=>row.map(x=>x?{...x}:null)) : Array.from({length:NR},()=>Array(NC).fill(null));
+  linkLayers(nb, npts);
   const ncy=[...cy], nce=[...ce];
   if(m&&m.pass) return {nb,ncy,nce,king:false};   // パスは盤面を変えない
+  const lb = (m&&m.pt)? npts : nb;                // この手が動くレイヤー
+  const ob = (m&&m.pt)? nb : npts;                // もう一方のレイヤー
 
   const myCap = p===-1? nce : ncy;
   let king=false;
@@ -3710,36 +3915,70 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
       if(q && q.p!==side){ if(isRoyal(q.t)) king=true; else if(RULES.drops) myCap.push(capturedCode(q)); nb[rr][cc]=null; }
     }
   }
-  // コピー盤nb上で囲碁の囲み取り（縦横4方を囲まれた碁石を取る。色保持で各陣営の持ち駒へ）
+  // 囲碁の囲み取り。碁石は「囲んだ領域の駒はマス・交点に関係なく取れる」ので2層を通して数える
   function simGoCapture(){
     const orth=[[-1,0],[1,0],[0,-1],[0,1]];
+    const at=(r,c)=>(nb[r]&&nb[r][c])||(npts[r]&&npts[r][c])||null;
     for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-      const q=nb[r][c]; if(!q||!isGo(q.t))continue;
-      const enemy=-q.p; let surr=true;
-      for(const [dr,dc] of orth){ const nr=r+dr,nc=c+dc; if(nr<0||nr>=NR||nc<0||nc>=NC)continue; const n=nb[nr][nc]; if(!n||n.p!==enemy){surr=false;break;} }
-      if(surr){ nb[r][c]=null; if(RULES.drops) (enemy===1?ncy:nce).push(q.t); }
+      for(const layer of [nb,npts]){
+        const q=layer[r]&&layer[r][c]; if(!q||!isGo(q.t))continue;
+        const enemy=-q.p; let surr=true;
+        for(const [dr,dc] of orth){ const nr=r+dr,nc=c+dc; if(nr<0||nr>=NR||nc<0||nc>=NC)continue;
+          const n=at(nr,nc); if(!n||n.p!==enemy){surr=false;break;} }
+        if(surr){ layer[r][c]=null; if(RULES.drops) (enemy===1?ncy:nce).push(q.t); }
+      }
+    }
+  }
+  // 碁石が囲んだ領域の駒を取る（層に関係なく）。囲碁石を打った直後に判定する。
+  function simGoSurround(r,c,side){
+    const orth=[[-1,0],[1,0],[0,-1],[0,1]];
+    for(const [dr,dc] of orth){
+      const nr=r+dr, nc=c+dc; if(nr<0||nr>=NR||nc<0||nc>=NC) continue;
+      for(const layer of [nb,npts]){
+        const q=layer[nr]&&layer[nr][nc];
+        if(!q||q.p===side||isGo(q.t)) continue;
+        let surr=true;
+        for(const [ar,ac] of orth){ const rr=nr+ar, cc=nc+ac;
+          if(rr<0||rr>=NR||cc<0||cc>=NC) continue;
+          const n=(nb[rr]&&nb[rr][cc])||(npts[rr]&&npts[rr][cc]);
+          if(!n||n.p!==side){ surr=false; break; } }
+        if(surr){ if(isRoyal(q.t)) king=true; else if(RULES.drops) myCap.push(demoteOf(q.t)); layer[nr][nc]=null; }
+      }
     }
   }
   if(m.drop){
-    nb[m.tr][m.tc]={t:m.drop,p:isGo(m.drop)?goOwner(m.drop):p};
+    lb[m.tr][m.tc]={t:m.drop,p:isGo(m.drop)?goOwner(m.drop):p};
     const i=myCap.indexOf(m.drop); if(i>=0)myCap.splice(i,1);
     if(m.drop==='OTH') simOthelloFlip(m.tr,m.tc,p); // 打ったオセロの裏返しを読みに反映
+    if(isGo(m.drop)) simGoSurround(m.tr,m.tc,lb[m.tr][m.tc].p);
   } else {
-    const pc=nb[m.fr][m.fc]; const tg=nb[m.tr][m.tc];
+    const pc=lb[m.fr][m.fc]; const tg=lb[m.tr][m.tc];
+    if(!pc) return {nb,ncy,nce,king:false};
     const igui = m.fr===m.tr && m.fc===m.tc; // 居喰い：動かない
     if(tg && tg.p!==p){ // 移動先の敵を取る（居喰いでは自駒なので除外）
       if(isRoyal(tg.t)) king=true;
       else { myCap.push(demoteOf(tg.t)); }
     }
+    // 九宮の交差マス（2層の共有点）では、もう一方のレイヤーの敵も取れる
+    const sh=ob[m.tr]&&ob[m.tr][m.tc];
+    if(isSharedPoint(m.tr,m.tc) && sh && sh.p!==p){
+      if(isRoyal(sh.t)) king=true; else myCap.push(demoteOf(sh.t));
+      ob[m.tr][m.tc]=null;
+    }
+    // 斜めに飛び越えて動く駒は、跳び越えた先の相手レイヤーの駒も取れる
+    for(const [cr,cc] of crossJumpPoints(lb, pc.t, m.fr, m.fc, m.tr, m.tc, p)){
+      const v=ob[cr]&&ob[cr][cc];
+      if(v && v.p!==p){ if(isRoyal(v.t)) king=true; else myCap.push(demoteOf(v.t)); ob[cr][cc]=null; }
+    }
     // 獅子の途中取り（caps）
     if(m.caps) for(const [cr,cc] of m.caps){
-      const v=nb[cr][cc];
-      if(v){ if(isRoyal(v.t)) king=true; else myCap.push(demoteOf(v.t)); nb[cr][cc]=null; }
+      const v=lb[cr][cc];
+      if(v){ if(isRoyal(v.t)) king=true; else myCap.push(demoteOf(v.t)); lb[cr][cc]=null; }
     }
     const promo = m.promo!==undefined ? m.promo
       : (!igui && canPromoteMove(pc.t,m.fr,m.tr,p, !!(tg&&tg.p!==p)||!!(m.caps&&m.caps.length)));
-    nb[m.tr][m.tc]={t:promo?(promoteCode(pc.t)||pc.t):pc.t,p};
-    if(!igui) nb[m.fr][m.fc]=null;
+    lb[m.tr][m.tc]={t:promo?(promoteCode(pc.t)||pc.t):pc.t,p};
+    if(!igui) lb[m.fr][m.fc]=null;
     if(pc.t==='HASA') simHasamiCapture(m.tr,m.tc,p); // はさみ取りを読みに反映
     if(hasFire(pc.t)) simFireBurn(m.tr,m.tc,p);      // 火鬼の焼き取りを読みに反映
   }
@@ -3750,28 +3989,36 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
 // 着手生成（成り/不成を別手として展開、持ち駒打ちも含む）
 function genMoves(b,p,cy,ce){
   const list=[];
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-    const pc=b[r][c];
-    if(pc&&pc.p===p){
-      moves(b,r,c).forEach(([tr,tc])=>{
-        const canP=canPromoteMove(pc.t,r,tr,p,!!(b[tr][tc]&&b[tr][tc].p!==p));
-        if(canP){
-          list.push({fr:r,fc:c,tr,tc,promo:true});
-          if(!mustPromote(pc.t,tr,p)) list.push({fr:r,fc:c,tr,tc,promo:false});
-        } else {
-          list.push({fr:r,fc:c,tr,tc,promo:false});
+  // マスの層と交点の層の両方から生成する（交点の手には pt:true を付ける）
+  const layers=[[b,false]];
+  if(b&&b.L&&b.L.pts&&ptLayerOn()) layers.push([b.L.pts,true]);
+  for(const [lb,isPt] of layers){
+    for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
+      const pc=lb[r][c];
+      if(pc&&pc.p===p){
+        moves(lb,r,c).forEach(([tr,tc])=>{
+          const canP=canPromoteMove(pc.t,r,tr,p,!!(lb[tr][tc]&&lb[tr][tc].p!==p));
+          const base=isPt?{pt:true}:{};
+          if(canP){
+            list.push({...base,fr:r,fc:c,tr,tc,promo:true});
+            if(!mustPromote(pc.t,tr,p)) list.push({...base,fr:r,fc:c,tr,tc,promo:false});
+          } else {
+            list.push({...base,fr:r,fc:c,tr,tc,promo:false});
+          }
+        });
+        // 獅子型：2歩動き・2枚取り・居喰い（caps付き。成りはapply側で自動判定）
+        if(hasLion(pc.t)){
+          lionMoves(lb,r,c).forEach(m=>list.push(isPt?{...m,pt:true}:m));
         }
-      });
-      // 獅子型：2歩動き・2枚取り・居喰い（caps付き。成りはapply側で自動判定）
-      if(hasLion(pc.t)){
-        lionMoves(b,r,c).forEach(m=>list.push(m));
       }
     }
   }
   const cap = p===-1? ce : cy;
   if(RULES.drops){
     [...new Set(cap)].forEach(t=>{
-      dropTargets(b,t,p).forEach(([tr,tc])=>list.push({drop:t,tr,tc}));
+      const isPt=!!(goesOnPoint(t)&&b&&b.L&&b.L.pts);
+      const lb=isPt? b.L.pts : b;
+      dropTargets(lb,t,p).forEach(([tr,tc])=>list.push(isPt?{drop:t,tr,tc,pt:true}:{drop:t,tr,tc}));
     });
   }
   if(RULES.allowPass) list.push({pass:true});  // パス（着手放棄）。人間・CPU共通の手として扱う
@@ -3866,11 +4113,15 @@ function applyMoveSilent(side,m,_legacySilent){
     checkSennichite();
     return;
   }
+  ensurePts();
+  const LB = m.pt ? ptsBoard : board;   // この手が動くレイヤー
+  const OB = m.pt ? board : ptsBoard;   // もう一方のレイヤー
   if(m.drop){
-    recordKifu({side,drop:m.drop,to:[m.tr,m.tc]});
+    recordKifu({side,drop:m.drop,to:[m.tr,m.tc],pt:m.pt||undefined});
     // 囲碁の駒は固有の色（所有者）で盤に出る＝相手の碁石を打つと相手の駒になる
-    board[m.tr][m.tc]={t:m.drop,p:isGo(m.drop)?goOwner(m.drop):side};
+    LB[m.tr][m.tc]={t:m.drop,p:isGo(m.drop)?goOwner(m.drop):side};
     cap.splice(cap.indexOf(m.drop),1);
+    if(isGo(m.drop)) goSurroundCapture(m.tr,m.tc,LB[m.tr][m.tc].p);  // 囲んだ領域の駒を層に関係なく取る
     if(m.drop==='OTH'){
       const fc=othelloFlip(m.tr,m.tc,side); // 打ったオセロで挟んだ相手駒を裏返す
       if(fc===0){ // 実機診断：1枚も裏返らない＝本来打てないはずの不正配置。着手は弾かず（パス防止）、現場保全のため停止して座標表示
@@ -3881,9 +4132,9 @@ function applyMoveSilent(side,m,_legacySilent){
       }
     }
   }else{
-    const pc=board[m.fr][m.fc];
+    const pc=LB[m.fr][m.fc];
     const igui = m.fr===m.tr && m.fc===m.tc; // 獅子の居喰い：動かず隣を取る
-    const tg=igui? null : board[m.tr][m.tc]; // 居喰いは移動先=自駒なので取り対象外
+    const tg=igui? null : LB[m.tr][m.tc]; // 居喰いは移動先=自駒なので取り対象外
     // チェスポーン昇格判定
     const cpawnPromo = pc.t==='cP' && (m.tr===(side===1?0:NR-1));
     const captured0 = !!(tg&&tg.p!==side)||!!(m.caps&&m.caps.length);
@@ -3901,13 +4152,24 @@ function applyMoveSilent(side,m,_legacySilent){
         promoNew = (fin!==pc.t) ? fin : null;
       }
     }
-    recordKifu({side,from:[m.fr,m.fc],to:[m.tr,m.tc],code:pc.t,promo:!!promo0,promoTo:cpawnPromo?'cQ':(promoNew||undefined),cap:tg?tg.t:null,caps:m.caps||undefined});
+    recordKifu({side,from:[m.fr,m.fc],to:[m.tr,m.tc],code:pc.t,promo:!!promo0,promoTo:cpawnPromo?'cQ':(promoNew||undefined),cap:tg?tg.t:null,caps:m.caps||undefined,pt:m.pt||undefined});
     let tookRoyal = tg && isRoyal(tg.t);
     if(tg && RULES.drops){ cap.push(capturedCode(tg)); }
     // 獅子の途中取り（caps：2枚取り・居喰いの対象）
     if(m.caps) for(const [cr,cc] of m.caps){
-      const v=board[cr][cc];
-      if(v){ if(isRoyal(v.t)) tookRoyal=true; else if(RULES.drops) cap.push(capturedCode(v)); board[cr][cc]=null; }
+      const v=LB[cr][cc];
+      if(v){ if(isRoyal(v.t)) tookRoyal=true; else if(RULES.drops) cap.push(capturedCode(v)); LB[cr][cc]=null; }
+    }
+    // 九宮の交差マス（2層の共有点）では、もう一方のレイヤーの敵も取れる
+    const shTg = OB[m.tr] && OB[m.tr][m.tc];
+    if(isSharedPoint(m.tr,m.tc) && shTg && shTg.p!==side){
+      if(isRoyal(shTg.t)) tookRoyal=true; else if(RULES.drops) cap.push(capturedCode(shTg));
+      OB[m.tr][m.tc]=null;
+    }
+    // 斜めに飛び越えて動く駒は、跳び越えた先の相手レイヤーの駒も取れる
+    for(const [cr,cc] of crossJumpPoints(LB, pc.t, m.fr, m.fc, m.tr, m.tc, side)){
+      const v=OB[cr] && OB[cr][cc];
+      if(v && v.p!==side){ if(isRoyal(v.t)) tookRoyal=true; else if(RULES.drops) cap.push(capturedCode(v)); OB[cr][cc]=null; }
     }
     const newCode = cpawnPromo ? 'cQ' : (promoNew || pc.t);
     _fxPromo = !!(promoNew || cpawnPromo);
@@ -3920,16 +4182,16 @@ function applyMoveSilent(side,m,_legacySilent){
       const sr=Math.sign(m.tr-m.fr), sc=Math.sign(m.tc-m.fc);
       let rr=m.fr+sr, cc=m.fc+sc;
       while(rr!==m.tr||cc!==m.tc){
-        const mid=board[rr][cc];
+        const mid=LB[rr][cc];
         if(mid && !isRankless(mid.t) && pieceRank(mid.t)>pieceRank(pc.t)){
           if(RULES.drops && mid.p!==side && !isRoyal(mid.t)) cap.push(capturedCode(mid));
-          board[rr][cc]=null;
+          LB[rr][cc]=null;
         }
         rr+=sr; cc+=sc;
       }
     }
-    board[m.tr][m.tc]=np;
-    if(!igui) board[m.fr][m.fc]=null;
+    LB[m.tr][m.tc]=np;
+    if(!igui) LB[m.fr][m.fc]=null;
     if(pc.t==='HASA'){ hasamiCapture(m.tr,m.tc,side); }
     if(hasFire(pc.t)){ fireBurn(m.tr,m.tc,side); }   // 火鬼：移動後に隣接敵を焼く
     // どうぶつしょうぎ「トライ」：ライオンが相手陣の最奥段に到達し、その場で取り返されないなら勝ち
@@ -4509,28 +4771,35 @@ function cutIn(text, kind){
 function hasAnyLegalMove(side){
   // 判定は人間・CPUと同じ isLegalMove を通す（千日手回避で禁じた手は「指せる手」に数えない）
   if(RULES.allowPass && isLegalMove({pass:true},side)) return true;  // パスできるなら手詰まりではない
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-    const pc=board[r][c];
-    if(pc&&pc.p===side){
-      const ms=moves(board,r,c);
-      for(const [tr,tc] of ms){ if(isLegalMove({fr:r,fc:c,tr,tc},side)) return true; }
-      if(hasLion(pc.t)){
-        for(const lm of lionMoves(board,r,c)){ if(!(lm.tr===r&&lm.tc===c) && isLegalMove(lm,side)) return true; }
+  ensurePts();
+  for(const [L,isPt] of [[board,false],[ptsBoard,true]]){
+    if(isPt && !ptLayerOn()) continue;
+    for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
+      const pc=L[r]&&L[r][c];
+      if(pc&&pc.p===side){
+        const base=isPt?{pt:true}:{};
+        for(const [tr,tc] of moves(L,r,c)){ if(isLegalMove({...base,fr:r,fc:c,tr,tc},side)) return true; }
+        if(hasLion(pc.t)){
+          for(const lm of lionMoves(L,r,c)){ if(!(lm.tr===r&&lm.tc===c) && isLegalMove({...lm,...base},side)) return true; }
+        }
       }
     }
   }
   if(RULES.drops){
     const cap=side===1?capYou:capEnemy;
     for(const t of new Set(cap)){
-      for(const [tr,tc] of dropTargets(board,t,side)){ if(isLegalMove({drop:t,tr,tc},side)) return true; }
+      const isPt=goesOnPoint(t), L=isPt?ptsBoard:board;
+      for(const [tr,tc] of dropTargets(L,t,side)){ if(isLegalMove(isPt?{drop:t,tr,tc,pt:true}:{drop:t,tr,tc},side)) return true; }
     }
   }
   return false;
 }
 // side の駒の総数（盤上＋持ち駒）。「取り切るまで戦う」勝敗判定に使う。
 function sidePieces(side){
+  ensurePts();
   let n=0;
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===side) n++; }
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===side) n++;
+    const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===side) n++; }
   n += (side===1?capYou:capEnemy).length;
   return n;
 }
@@ -4592,29 +4861,33 @@ function judgeXiangqiRepetition(key){
 
 /* ===== 棋譜リプレイ ===== */
 function snapRestore(snap){
-  board=snap.board.map(row=>row.map(x=>x?{...x}:null));
+  board=cloneLayer(snap.board);
   NR=board.length; NC=board[0]?board[0].length:NR;   // 盤サイズも復元局面に合わせる
+  ptsBoard = snap.pts ? cloneLayer(snap.pts) : Array.from({length:NR},()=>Array(NC).fill(null));
+  linkLayers(board, ptsBoard);
   capYou=[...snap.capYou]; capEnemy=[...snap.capEnemy];
 }
 // kifu[i] を現在の盤へ適用（表示専用。勝敗判定なし）
 function applyKifuStep(rec){
   if(rec.pass){ return; }          // パスは盤面を変えない
+  ensurePts();
+  const LBk = rec.pt ? ptsBoard : board;   // 交点の手は交点レイヤーへ再現する
   if(rec.drop){
-    board[rec.to[0]][rec.to[1]]={t:rec.drop,p:isGo(rec.drop)?goOwner(rec.drop):rec.side};
+    LBk[rec.to[0]][rec.to[1]]={t:rec.drop,p:isGo(rec.drop)?goOwner(rec.drop):rec.side};
     const cap=rec.side===1?capYou:capEnemy;
     const idx=cap.indexOf(rec.drop); if(idx>=0)cap.splice(idx,1);
     if(rec.drop==='OTH') othelloFlip(rec.to[0],rec.to[1],rec.side); // 打ったオセロの裏返しを再現
   } else if(rec.castle){
     // キャスリング
     const [fr,fc]=rec.from, [tr,tc]=rec.to;
-    const k=board[fr][fc];
-    board[tr][tc]={...k,moved:true}; board[fr][fc]=null;
-    const rook=board[rec.castle.rookFrom[0]][rec.castle.rookFrom[1]];
-    if(rook){ board[rec.castle.rookTo[0]][rec.castle.rookTo[1]]={...rook,moved:true}; board[rec.castle.rookFrom[0]][rec.castle.rookFrom[1]]=null; }
+    const k=LBk[fr][fc];
+    LBk[tr][tc]={...k,moved:true}; LBk[fr][fc]=null;
+    const rook=LBk[rec.castle.rookFrom[0]][rec.castle.rookFrom[1]];
+    if(rook){ LBk[rec.castle.rookTo[0]][rec.castle.rookTo[1]]={...rook,moved:true}; LBk[rec.castle.rookFrom[0]][rec.castle.rookFrom[1]]=null; }
   } else if(rec.enpassant){
     const [fr,fc]=rec.from, [tr,tc]=rec.to;
     if(RULES.drops)(rec.side===1?capYou:capEnemy).push('cP');
-    board[fr][tc]=null; board[tr][tc]={t:'cP',p:rec.side}; board[fr][fc]=null;
+    LBk[fr][tc]=null; LBk[tr][tc]={t:'cP',p:rec.side}; LBk[fr][fc]=null;
   } else {
     const [fr,fc]=rec.from, [tr,tc]=rec.to;
     if(rec.cap && RULES.drops){
@@ -4625,23 +4898,23 @@ function applyKifuStep(rec){
       const sr=Math.sign(tr-fr), sc=Math.sign(tc-fc);
       let rr=fr+sr, cc=fc+sc;
       while(rr!==tr||cc!==tc){
-        const mid=board[rr][cc];
+        const mid=LBk[rr][cc];
         if(mid && !isRankless(mid.t) && pieceRank(mid.t)>pieceRank(rec.code)){
           if(RULES.drops && mid.p!==rec.side && !isRoyal(mid.t)) (rec.side===1?capYou:capEnemy).push(capturedCode(mid));
-          board[rr][cc]=null;
+          LBk[rr][cc]=null;
         }
         rr+=sr; cc+=sc;
       }
     }
     // 獅子の途中取り（caps：2枚取り・居喰い）を再現
     if(rec.caps) for(const [cr,cc] of rec.caps){
-      const v=board[cr][cc];
-      if(v){ if(RULES.drops && !isRoyal(v.t)) (rec.side===1?capYou:capEnemy).push(capturedCode(v)); board[cr][cc]=null; }
+      const v=LBk[cr][cc];
+      if(v){ if(RULES.drops && !isRoyal(v.t)) (rec.side===1?capYou:capEnemy).push(capturedCode(v)); LBk[cr][cc]=null; }
     }
     const igui = fr===tr && fc===tc; // 居喰いは動かない
     const newCode = rec.promoTo ? rec.promoTo : (rec.promo?(promoteCode(rec.code)||rec.code):rec.code);
-    board[tr][tc]={t:newCode, p:rec.side};
-    if(!igui) board[fr][fc]=null;
+    LBk[tr][tc]={t:newCode, p:rec.side};
+    if(!igui) LBk[fr][fc]=null;
     if(rec.code==='HASA') hasamiCapture(tr,tc,rec.side); // はさみ取りを再現
     if(hasFire(rec.code)) fireBurn(tr,tc,rec.side);      // 火鬼の焼き取りを再現
   }
@@ -4666,7 +4939,7 @@ function enterReplay(){
   if(!replaying){
     // 現在の対局状態を退避
     savedLive={
-      board:board.map(row=>row.map(x=>x?{...x}:null)),
+      board:cloneLayer(board), pts:cloneLayer(ptsBoard),
       capYou:[...capYou], capEnemy:[...capEnemy],
       history:history.map(h=>({...h})), turn:turn, gameOver:gameOver
     };
@@ -4679,7 +4952,9 @@ function enterReplay(){
 }
 function exitReplay(){
   if(replaying && savedLive){
-    board=savedLive.board.map(row=>row.map(x=>x?{...x}:null));
+    board=cloneLayer(savedLive.board);
+    ptsBoard = savedLive.pts? cloneLayer(savedLive.pts) : Array.from({length:NR},()=>Array(NC).fill(null));
+    linkLayers(board, ptsBoard);
     capYou=[...savedLive.capYou]; capEnemy=[...savedLive.capEnemy];
     history=savedLive.history.map(h=>({...h})); turn=savedLive.turn; gameOver=savedLive.gameOver;
     savedLive=null;
@@ -4842,7 +5117,7 @@ function syncSizeUI(){
 let rememberedSetup=null;
 function rememberSetup(){
   rememberedSetup={
-    board: board.map(row=>row.map(x=>x?{...x}:null)),
+    board: cloneLayer(board), pts: cloneLayer(ptsBoard),
     capYou:[...capYou], capEnemy:[...capEnemy],
     NR, NC, PZ, youAreSente
   };
@@ -4852,8 +5127,10 @@ function rememberSetup(){
 function restoreSetup(){
   exitReplay(); stopAutoLoop(); editing=false; multiSel=[];
   if(gameStartSnap){
-    board=gameStartSnap.board.map(row=>row.map(x=>x?{...x}:null));
+    board=cloneLayer(gameStartSnap.board);
     NR=board.length; NC=board[0]?board[0].length:NR;
+    ptsBoard = gameStartSnap.pts ? cloneLayer(gameStartSnap.pts) : Array.from({length:NR},()=>Array(NC).fill(null));
+    linkLayers(board, ptsBoard);
     capYou=[...gameStartSnap.capYou]; capEnemy=[...gameStartSnap.capEnemy];
     if(gameStartSnap.diag) cellDiag=gameStartSnap.diag.map(row=>row.slice());
     // PZ・youAreSente は対局開始から不変なので現状維持
@@ -4871,6 +5148,7 @@ function newGameWithBoard(builder){
   editing=false; multiSel=[];
   capYou=[]; capEnemy=[];   // 先にリセットし、builderが持ち駒を積めるようにする
   builder();
+  syncLayers();             // 囲碁・シャンチー・チャンギの駒を交点レイヤーへ振り分ける
   sel=null; history=[]; gameOver=false; pendingPromo=null;
   turn = youAreSente ? 1 : -1;
   kifu=[]; gameStartSnap=null; posCount={}; repLog=[];
@@ -4986,7 +5264,7 @@ function setEditing(on){
     // ※「初期配置に戻す」の対象（rememberedSetup）は、編集では上書きしない
     //   （＝プリセット/サイズ適用時の＝対局開始時の配置を保つ）。
     customStart = {
-      board: board.map(row=>row.map(x=>x?{...x}:null)),
+      board: cloneLayer(board), pts: cloneLayer(ptsBoard),
       capYou: [...capYou], capEnemy: [...capEnemy]
     };
     setStatus('編集を終了しました（「記憶した配置に戻す」で戻せます）'); nextTurn();
@@ -5325,15 +5603,17 @@ function applyPick(t){
     const n=pvQty; capPickSide=0; closePick(); render(); setStatus('持ち駒に'+KANJI[t]+'を'+n+'枚追加しました');
     return;
   }
+  ensurePts();
+  const putAt=(r,c)=>{
+    const cur=pieceAt(r,c); const owner=cur?cur.p:editSide;
+    board[r][c]=null; ptsBoard[r][c]=null;
+    (goesOnPoint(t)?ptsBoard:board)[r][c]={t,p:owner};
+  };
   if(multiSel.length>0){
-    multiSel.forEach(({r,c})=>{
-      const cur=board[r][c]; const owner=cur?cur.p:editSide;
-      board[r][c]={t,p:owner};
-    });
+    multiSel.forEach(({r,c})=>putAt(r,c));
     clearMultiSel();
   } else if(editCell){
-    const {r,c}=editCell; const cur=board[r][c];
-    board[r][c]={t, p: cur?cur.p:editSide};
+    putAt(editCell.r, editCell.c);
   }
   closePick(); render();
 }
@@ -5342,8 +5622,9 @@ function closePick(){
   editCell=null; previewType=null; infoOnly=false; capPickSide=0; showList();
 }
 document.getElementById('pickEmpty').onclick=()=>{
-  if(multiSel.length>0){ multiSel.forEach(({r,c})=>board[r][c]=null); clearMultiSel(); }
-  else if(editCell){ board[editCell.r][editCell.c]=null; }
+  ensurePts();
+  if(multiSel.length>0){ multiSel.forEach(({r,c})=>{board[r][c]=null; ptsBoard[r][c]=null;}); clearMultiSel(); }
+  else if(editCell){ board[editCell.r][editCell.c]=null; ptsBoard[editCell.r][editCell.c]=null; }
   closePick(); render();
 };
 document.getElementById('pickCancel').onclick=closePick;
@@ -5454,7 +5735,9 @@ document.getElementById('randomFull').onclick=()=>randomReplace('full');
 document.getElementById('restoreCustom').onclick=()=>{
   if(customStart){
     if(replaying) exitReplay(); // リプレイ中だと後で savedLive に上書きされるため先に抜ける
-    board=customStart.board.map(row=>row.map(x=>x?{...x}:null));
+    board=cloneLayer(customStart.board);
+    ptsBoard = customStart.pts? cloneLayer(customStart.pts) : Array.from({length:NR},()=>Array(NC).fill(null));
+    linkLayers(board, ptsBoard);
     capYou=[...customStart.capYou]; capEnemy=[...customStart.capEnemy];
     render(); setStatus('記憶した配置に戻しました');
   } else setStatus('記憶した配置がありません（編集を終了すると記憶されます）');
@@ -5500,8 +5783,9 @@ document.getElementById('bsPalace').onchange=()=>updatePalacePending();
 document.getElementById('pzSel').onchange=e=>{ e.target.dataset.touched='1'; updatePalacePending(); };
 // 駒の置き方（交点／マス）は見た目だけなので、選んだらすぐ反映する
 document.getElementById('ptSel').onchange=e=>{
-  RULES.pointMode=e.target.value; render();
-  setStatus(pointModeOn()?'駒を線の交点に置く表示にしました':'駒をマスの中に置く表示にしました');
+  RULES.pointMode=e.target.value; syncLayers(); sel=null; render();
+  setStatus(ptLayerOn()?'囲碁・シャンチー・チャンギの駒を線の交点に置きます'
+                      :'すべての駒をマスの中に置きます');
 };
 function updatePalacePending(){
   const cb=document.getElementById('bsPalace'), note=document.getElementById('bsPalaceNote');
@@ -5549,14 +5833,16 @@ let redoStack=[];
 const dcopyBoard=b=>b.map(r=>r.map(x=>x?{...x}:null));
 function captureState(){
   return {
-    board:dcopyBoard(board), capYou:[...capYou], capEnemy:[...capEnemy],
-    history:history.map(h=>({to:h.to?[...h.to]:null, board:h.board?dcopyBoard(h.board):null, capYou:h.capYou?[...h.capYou]:null, capEnemy:h.capEnemy?[...h.capEnemy]:null})),
+    board:dcopyBoard(board), pts:cloneLayer(ptsBoard), capYou:[...capYou], capEnemy:[...capEnemy],
+    history:history.map(h=>({to:h.to?[...h.to]:null, board:h.board?dcopyBoard(h.board):null, pts:h.pts?cloneLayer(h.pts):null, capYou:h.capYou?[...h.capYou]:null, capEnemy:h.capEnemy?[...h.capEnemy]:null})),
     kifu:kifu.map(k=>({...k})), turn, gameOver, gameStartSnap
   };
 }
 function restoreState(s){
   board=dcopyBoard(s.board); NR=board.length; NC=board[0]?board[0].length:NR; capYou=[...s.capYou]; capEnemy=[...s.capEnemy];
-  history=s.history.map(h=>({to:h.to?[...h.to]:null, board:h.board?dcopyBoard(h.board):null, capYou:h.capYou?[...h.capYou]:null, capEnemy:h.capEnemy?[...h.capEnemy]:null}));
+  ptsBoard = s.pts? cloneLayer(s.pts) : Array.from({length:NR},()=>Array(NC).fill(null));
+  linkLayers(board, ptsBoard);
+  history=s.history.map(h=>({to:h.to?[...h.to]:null, board:h.board?dcopyBoard(h.board):null, pts:h.pts?cloneLayer(h.pts):null, capYou:h.capYou?[...h.capYou]:null, capEnemy:h.capEnemy?[...h.capEnemy]:null}));
   kifu=s.kifu.map(k=>({...k})); turn=s.turn; gameOver=s.gameOver; gameStartSnap=s.gameStartSnap;
 }
 function redoOne(){
@@ -5574,7 +5860,9 @@ document.getElementById('undo').onclick=()=>{
   // 直近1手だけ戻す。手番は最後に指した側へ戻す（その側が指し直せる）。
   const st=history[history.length-1];                 // 最後の着手の直前の局面
   const lastSide = kifu.length ? kifu[kifu.length-1].side : -turn;
-  board=st.board.map(row=>row.map(x=>x?{...x}:null));
+  board=cloneLayer(st.board);
+  ptsBoard = st.pts? cloneLayer(st.pts) : Array.from({length:NR},()=>Array(NC).fill(null));
+  linkLayers(board, ptsBoard);
   capYou=[...st.capYou]; capEnemy=[...st.capEnemy];
   history.pop();
   if(kifu.length) kifu.pop();
