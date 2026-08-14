@@ -904,6 +904,14 @@
    <button type="button" class="acc-head" id="accEditHead">編集ツール<span class="acc-chev">∨</span></button>
    <div class="acc-body board-setup">
     <div class="bs-note">開くと編集モードです。盤のマスをタップして駒を配置・変更できます（閉じると編集終了）。</div>
+    <div class="bs-row">
+      <label for="editLayerSel">置く場所</label>
+      <select id="editLayerSel">
+        <option value="cell">マスの中（将棋・チェスの駒）</option>
+        <option value="pt">線の交点（囲碁・シャンチー・チャンギの駒）</option>
+      </select>
+    </div>
+    <div class="bs-note">※ ここで選んだ側に駒を置きます。長押しの駒変更・複数選択・空マスにする も同じ側が対象です。</div>
     <div class="edit-bar-row">
       <button id="copyToEnemy">自陣の配置を敵にコピー</button>
       <button id="randomPower">ランダム置換（強さ近い）</button>
@@ -1042,6 +1050,7 @@
       <div class="opts" style="flex-direction:column;gap:10px;">
         <button id="emInfo">説明を見る</button>
         <button class="primary" id="emChange">この駒を変更</button>
+        <button id="emSwapLayer">◇ 交点に切替</button>
         <button id="emSelectAdd">複数選択に追加</button>
         <button id="emDiagOpen">宮マス変更</button>
         <button id="emCancel">閉じる</button>
@@ -3288,7 +3297,7 @@ function moveEditPiece(fr,fc,tr,tc,fromPt,toPt){
   // 交点に乗る駒は交点レイヤー、それ以外はマスのレイヤーへ（種類で決まる）
   const SRC = fromPt? ptsBoard : board;
   const pc=SRC[fr]&&SRC[fr][fc]; if(!pc){ render(); return; }
-  const DST = goesOnPoint(pc.t) ? ptsBoard : board;
+  const DST = SRC;   // ドラッグは同じ側の中で動かす（マス⇄交点は「置く場所」で切り替える）
   if(fr===tr&&fc===tc&&SRC===DST){ render(); return; }
   if(DST[tr][tc]){ render(); setStatus('そこには既に駒があるため移動できません（元に戻しました）','think'); return; }
   DST[tr][tc]={...pc};
@@ -3356,7 +3365,7 @@ function moveEditPiece(fr,fc,tr,tc,fromPt,toPt){
     // 長押し（動かさず）
     if(gg.longPress && !gg.moved){
       if(!editing){ setEditing(true); setStatus('編集モードに入りました（駒を長押しで変更、ドラッグで移動、タップで解除）','think'); }
-      else { openEditMenu(gg.r, gg.c); }   // 編集中の長押し→駒変更メニュー
+      else { openEditMenu(gg.r, gg.c, gg.pt); }   // 編集中の長押し→駒変更メニュー
       return;
     }
     // 軽いタップ（動かさず）
@@ -3376,7 +3385,7 @@ function onCell(r,c,isPt){
   if(gameOver||pendingPromo)return;
   if(editing){
     if(multiSel.length>0){ toggleMultiSel(r,c); return; } // 複数選択中はトグル
-    openEditMenu(r,c); return;
+    openEditMenu(r,c,isPt); return;
   }
   if(isAuto(turn))return; // 手番側が自動なら操作不可
   const me=turn; // 現在の手番のプレイヤー
@@ -5401,24 +5410,48 @@ function buildPickGrid(){
 
 // 編集メニュー（説明 / 変更 / 複数選択追加）
 let menuCell=null;
-function openEditMenu(r,c){
-  const pc=board[r][c];
-  menuCell={r,c};
+// 編集で駒を置く側（'cell'=マスの中 / 'pt'=線の交点）。押し間違い防止に明示で選ぶ。
+let editLayer='cell';
+function editLayerIsPt(){ return editLayer==='pt'; }
+function syncEditLayerUI(){
+  const el=document.getElementById('editLayerSel'); if(el) el.value=editLayer;
+}
+(function(){
+  const el=document.getElementById('editLayerSel'); if(!el) return;
+  el.onchange=e=>{
+    editLayer=e.target.value; sel=null; render();
+    setStatus(editLayerIsPt()?'これから置く駒は「線の交点」に置きます'
+                            :'これから置く駒は「マスの中」に置きます');
+  };
+})();
+function openEditMenu(r,c,forcePt){
+  ensurePts();
+  if(forcePt!==undefined){ editLayer = forcePt? 'pt':'cell'; syncEditLayerUI(); }
+  const isPt=editLayerIsPt();
+  const pc=(isPt?ptsBoard:board)[r][c];
+  menuCell={r,c,pt:isPt};
   document.getElementById('editMenuTitle').textContent =
-    pc ? (KANJI[pc.t]+'（'+(pc.p===1?'あなた':'相手')+'）') : '空きマス';
+    (isPt?'◇交点':'□マスの中')+'　'+(pc ? (KANJI[pc.t]+'（'+(pc.p===1?'あなた':'相手')+'）') : '空き');
   document.getElementById('emInfo').style.display = pc?'':'none';
+  const sw=document.getElementById('emSwapLayer');
+  if(sw) sw.textContent = isPt? '□ マスの中に切替' : '◇ 交点に切替';
   document.getElementById('editMenuModal').classList.add('show');
 }
 function closeEditMenu(){ document.getElementById('editMenuModal').classList.remove('show'); menuCell=null; }
 document.getElementById('emCancel').onclick=closeEditMenu;
 document.getElementById('editMenuModal').onclick=(e)=>{ if(e.target.id==='editMenuModal') closeEditMenu(); };
 document.getElementById('emInfo').onclick=()=>{
-  const pc=menuCell&&board[menuCell.r][menuCell.c]; closeEditMenu();
+  const pc=menuCell&&(menuCell.pt?ptsBoard:board)[menuCell.r][menuCell.c]; closeEditMenu();
   if(pc){ infoOnly=true; editCell=null; openPickList(); showPreview(pc.t); }
 };
 document.getElementById('emChange').onclick=()=>{
   if(!menuCell){closeEditMenu();return;}
   editCell={...menuCell}; infoOnly=false; closeEditMenu(); openPickList();
+};
+document.getElementById('emSwapLayer').onclick=()=>{
+  if(!menuCell) return;
+  const {r,c}=menuCell;
+  openEditMenu(r,c,!editLayerIsPt());   // 同じマスで置く側だけ切り替える
 };
 document.getElementById('emSelectAdd').onclick=()=>{
   if(menuCell){ toggleMultiSel(menuCell.r,menuCell.c); } closeEditMenu();
@@ -5605,9 +5638,9 @@ function applyPick(t){
   }
   ensurePts();
   const putAt=(r,c)=>{
-    const cur=pieceAt(r,c); const owner=cur?cur.p:editSide;
-    board[r][c]=null; ptsBoard[r][c]=null;
-    (goesOnPoint(t)?ptsBoard:board)[r][c]={t,p:owner};
+    const L = editLayerIsPt()? ptsBoard : board;      // 編集ツールで選んだ側へ置く
+    const cur=L[r][c]; const owner=cur?cur.p:editSide;
+    L[r][c]={t,p:owner};
   };
   if(multiSel.length>0){
     multiSel.forEach(({r,c})=>putAt(r,c));
@@ -5623,8 +5656,9 @@ function closePick(){
 }
 document.getElementById('pickEmpty').onclick=()=>{
   ensurePts();
-  if(multiSel.length>0){ multiSel.forEach(({r,c})=>{board[r][c]=null; ptsBoard[r][c]=null;}); clearMultiSel(); }
-  else if(editCell){ board[editCell.r][editCell.c]=null; ptsBoard[editCell.r][editCell.c]=null; }
+  const LL = editLayerIsPt()? ptsBoard : board;
+  if(multiSel.length>0){ multiSel.forEach(({r,c})=>{LL[r][c]=null;}); clearMultiSel(); }
+  else if(editCell){ LL[editCell.r][editCell.c]=null; }
   closePick(); render();
 };
 document.getElementById('pickCancel').onclick=closePick;
