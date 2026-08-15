@@ -2368,8 +2368,11 @@ function resizeKeepPieces(rows, cols){
   const rr=Math.min(rows,oR), cc=Math.min(cols,oC);
   for(let r=0;r<rr;r++)for(let c=0;c<cc;c++){
     if(ob[r]&&ob[r][c]) board[r][c]={...ob[r][c]};
-    if(op&&op[r]&&op[r][c]) ptsBoard[r][c]={...op[r][c]};
     if(od&&od[r]) cellDiag[r][c]=od[r][c]||null;
+  }
+  // 交点は 0..NR / 0..NC まであるので、一番下・一番右の交点の駒も残す
+  for(let r=0;r<=rr;r++)for(let c=0;c<=cc;c++){
+    if(op&&op[r]&&op[r][c]) ptsBoard[r][c]={...op[r][c]};
   }
   capYou=cy; capEnemy=ce;   // 持ち駒も残す
 }
@@ -2966,6 +2969,8 @@ function diagHas(r,c,d){ const g=getDiag(r,c); return g===d||g==='x'; }
 function ptDiagDirs(R,C){
   const has=(r,c,d)=> r>=0&&r<NR&&c>=0&&c<NC && diagHas(r,c,d);
   const out=[];
+  // 交差マス(×)は共有点。その点からは4方向すべての斜め線が出ている
+  if(R>=0&&R<NR&&C>=0&&C<NC&&getDiag(R,C)==='x') return [[1,1],[-1,-1],[-1,1],[1,-1]];
   if(has(R,C,'l'))     out.push([ 1, 1]);   // ＼ の下向き
   if(has(R-1,C-1,'l')) out.push([-1,-1]);   // ＼ の上向き
   if(has(R-1,C,'r'))   out.push([-1, 1]);   // ／ の上向き
@@ -2975,6 +2980,8 @@ function ptDiagDirs(R,C){
 // 交点(R,C)が宮の点か＝その交点を角に持つマスのどれかが宮マス（斜め線あり）なら宮の点。
 // 宮マスの外周の交点（辺の真ん中）も宮に含まれるので、帥は宮の中を縦横に動ける。
 function isPalacePoint(R,C){
+  // 交差マス(×)はマスであり交点でもある共有点なので、交点としても宮に数える
+  if(R>=0&&R<NR&&C>=0&&C<NC&&getDiag(R,C)==='x') return true;
   for(const [dr,dc] of [[-1,-1],[-1,0],[0,-1],[0,0]]){
     const r=R+dr, c=C+dc;
     if(r>=0&&r<NR&&c>=0&&c<NC&&getDiag(r,c)) return true;
