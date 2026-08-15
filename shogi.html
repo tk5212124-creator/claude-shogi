@@ -4778,8 +4778,11 @@ function cpuPickMove(side, depth){
   let DEPTH = depth!=null ? depth : (SPEEDS[speedIdx].depth||3);
   // 大盤は合法手・分岐が爆発するためCPUを簡易化（探索を浅くする割り切り）
   const BMAX=Math.max(NR,NC);
-  if(BMAX>=18) DEPTH=Math.min(DEPTH,1);   // 19路盤など広い盤＋多数の打ち手は浅く
-  else if(BMAX>=13) DEPTH=Math.min(DEPTH,2);
+  // 熟考は時間で必ず止まるので、大盤でも深さを絞りすぎない。
+  // 時間の見張りが無い速度（標準・高速・超高速）は、盤が広いと画面が固まるので従来どおり浅くする。
+  const budget = (depth==null) ? (SPEEDS[speedIdx]&&SPEEDS[speedIdx].budget) : 0;
+  if(BMAX>=18) DEPTH=Math.min(DEPTH, budget?2:1);   // 19路盤など広い盤＋多数の打ち手は浅く
+  else if(BMAX>=13) DEPTH=Math.min(DEPTH, budget?3:2);
   // 手の並べ替え。to地点のマスの駒だけでなく、その手で実際に起きる事象で採点する
   //（交点レイヤー・共有点や飛び越えの別層取り・成り・royal取り・獅子の複数取り）。
   // 手の並べ替え（αβの枝刈り効率を上げるためだけの安い採点）。
@@ -4801,8 +4804,10 @@ function cpuPickMove(side, depth){
   const ordCache=new Map();
   const ordOf=(m)=>{ let v=ordCache.get(m); if(v===undefined){ v=ordScore(m); ordCache.set(m,v); } return v; };
   list.sort((a,b2)=>ordOf(b2)-ordOf(a));
-  // 超高速(depth<=1)や大盤では、トップ候補だけ評価して時間短縮
-  const cand = (DEPTH<=1 || BMAX>=16) ? list.slice(0, Math.min(list.length, BMAX>=16?18:24)) : list;
+  // 超高速(depth<=1)では、トップ候補だけ評価して即答する。
+  // 大盤の絞り込みは以前ほど厳しくしなくてよい（探索自体が桁違いに速くなったため）。
+  const CAP = (DEPTH<=1) ? (BMAX>=16?18:24) : (BMAX>=16? (budget?64:18) : 0);
+  const cand = CAP ? list.slice(0, Math.min(list.length, CAP)) : list;
   // 指定の深さで候補を全部評価して最善手を返す（王が取れる手は即返す）
   const now=()=>((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now());
   // 指定の深さで候補を全部評価して最善手を返す。
@@ -4837,15 +4842,16 @@ function cpuPickMove(side, depth){
     }
     return {m:best};
   };
-  const budget = (depth==null) ? (SPEEDS[speedIdx]&&SPEEDS[speedIdx].budget) : 0;
   if(budget && DEPTH>1){
     // 反復深化：浅い方から順に読み、与えた時間の中でできるだけ深く読む。
     // 途中で切れても「最後に読み切った深さの最善手」が残るので必ず手は返せる。
+    // 深さ1から始めるのは、広い盤で深さ2が時間内に1手も読み終わらなくても
+    // 「読み切った結論」を必ず1つ持っておくため。
     const deadline = now() + budget;
     searchDeadline = deadline; searchNodes = 0;   // 深い枝の途中でも時間で打ち切れるようにする
     try{
       let best=null;
-      for(let d=2; d<=DEPTH; d++){
+      for(let d=1; d<=DEPTH; d++){
         // 前の深さの最善手を先頭に持ってくると枝刈りがよく効き、同じ時間でより深く読める
         if(best){ const i=cand.indexOf(best); if(i>0){ cand.splice(i,1); cand.unshift(best); } }
         const r=pickAt(d, deadline);
