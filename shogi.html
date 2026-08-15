@@ -4807,6 +4807,11 @@ function cpuPickMove(side, depth){
   const now=()=>((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now());
   // 指定の深さで候補を全部評価して最善手を返す。
   // deadline を渡すと、途中で時間切れになった時点で打ち切る（その深さの結果は捨てる）。
+  /* ルートでも窓を絞る。これまでは候補1手ごとに全窓(-∞,∞)で読み直していたので、
+     明らかに劣る手も最後まで正確に読んでいた。今の最善よりわずかに下を下限にすれば、
+     「同点以上の手」は今までどおり正確な値が返り、劣る手だけ途中で打ち切れる。
+     → 選ばれる手も、同点のときの等確率選択も変わらないまま枝刈りだけが効く。 */
+  const EPS=1e-6;
   const pickAt=(d, deadline)=>{
     let best=null, bestScore = side===-1? -Infinity : Infinity, ties=0;
     for(const m of cand){
@@ -4814,8 +4819,10 @@ function cpuPickMove(side, depth){
       try{
         const s=simulate(board,m,side,capYou,capEnemy);
         if(s.king) return {m, mate:true};
+        const lo = (side===-1 && isFinite(bestScore)) ? bestScore-EPS : -Infinity;
+        const hi = (side===1  && isFinite(bestScore)) ? bestScore+EPS :  Infinity;
         sc = d<=0 ? evaluate(s.nb,s.ncy,s.nce)
-                  : search(s.nb,s.ncy,s.nce,d,-side,-Infinity,Infinity,1,mvKey(m));
+                  : search(s.nb,s.ncy,s.nce,d,-side,lo,hi,1,mvKey(m));
       }catch(e){
         // 読んでいる途中で時間切れ。この手の分は結論が出ていないので捨て、
         // ここまでに読み終えた範囲の最善手を返す（候補は良い順なので使える）
