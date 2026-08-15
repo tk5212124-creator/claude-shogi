@@ -152,6 +152,12 @@
     font-size:.72rem;box-shadow:0 0 0 2px var(--sel), 0 2px 6px rgba(0,0,0,.5);}
   /* 「置く場所」バー（編集モード中に盤の直下へ出す） */
   /* 編集モード中に盤の直下へ出すツール群 */
+  .trash-zone{width:100%;max-width:430px;margin-top:8px;padding:12px;border-radius:12px;
+    text-align:center;font-size:.84rem;color:#ffd0c4;letter-spacing:.06em;
+    background:linear-gradient(160deg,#5a2a24,#3a1a16);border:1px dashed rgba(224,86,63,.7);}
+  .trash-zone.over{background:linear-gradient(160deg,#8a3a2c,#5a221a);border-style:solid;
+    color:#fff;box-shadow:0 0 18px rgba(224,86,63,.6);}
+  .captured.drop-over{box-shadow:0 0 0 2px var(--sel), 0 0 20px rgba(98,209,160,.6);}
   .edit-tools-bar{width:100%;max-width:430px;margin-top:8px;padding:8px 10px;border-radius:12px;
     background:linear-gradient(160deg,#2f7d5e,#1f5e44);border:1px solid var(--sel);
     box-shadow:0 4px 16px rgba(98,209,160,.25);}
@@ -849,6 +855,7 @@
       <option value="pt">◇ 線の交点</option>
     </select>
   </div>
+  <div class="trash-zone" id="trashZone" style="display:none;">🗑 ここへドラッグで駒を捨てる</div>
   <div class="edit-tools-bar" id="editToolsBar" style="display:none;">
     <div class="etb-title">編集ツール</div>
     <div class="etb-grid">
@@ -1090,7 +1097,7 @@
           <div class="pick-section"><span class="pick-lbl" id="lblOther">その他の将棋駒</span><div class="pick-grid" id="pickOther"></div></div>
         </div>
         <div class="pick-actions">
-          <button id="pickEmpty">空マスにする</button>
+          <button id="pickEmpty">🗑 この駒を削除</button>
           <button id="pickCancel">キャンセル</button>
         </div>
       </div>
@@ -2312,33 +2319,38 @@ function setupDoubutsu(){
 
 // シャンチー（中国象棋 9×10）。紅=あなた（下）、黒=相手（上）。標準初期配置。
 function setupXiangqi(){
-  NR=10; NC=9; PZ=5; emptyBoard();   // 河（中央）から先が敵陣＝兵/卒が成る
+  // 交点に置くときは 9筋×10段の「交点」が要るので、マスは 8列×9行にする。
+  // 「すべての駒をマスの中に置く」ときだけ、従来どおり 9列×10行のマス配置。
+  const onPt = RULES.pointMode!=='cell';
+  NR=onPt?9:10; NC=onPt?8:9; PZ=5; emptyBoard();
+  const put=(r,c,t,p)=>{ (goesOnPoint(t)?ptsBoard:board)[r][c]={t,p}; };
   const bk=['XRb','XHb','XEb','XAb','XKb','XAb','XEb','XHb','XRb']; // 黒の最上段
   const rd=['XR','XH','XE','XA','XK','XA','XE','XH','XR'];          // 紅の最下段
-  for(let c=0;c<9;c++){ board[0][c]={t:bk[c],p:-1}; board[9][c]={t:rd[c],p:1}; }
-  board[2][1]={t:'XCb',p:-1}; board[2][7]={t:'XCb',p:-1};  // 砲
-  board[7][1]={t:'XC',p:1};   board[7][7]={t:'XC',p:1};    // 炮
-  for(const c of [0,2,4,6,8]){ board[3][c]={t:'XPb',p:-1}; board[6][c]={t:'XP',p:1}; } // 卒・兵
+  for(let c=0;c<9;c++){ put(0,c,bk[c],-1); put(9,c,rd[c],1); }
+  put(2,1,'XCb',-1); put(2,7,'XCb',-1);  // 砲
+  put(7,1,'XC',1);   put(7,7,'XC',1);    // 炮
+  for(const c of [0,2,4,6,8]){ put(3,c,'XPb',-1); put(6,c,'XP',1); } // 卒・兵
 }
 
 // チャンギ（韓国将棋 9×10）。楚＝相手（上）、漢＝あなた（下）。標準初期配置（象・馬は内側配置）。
 function setupJanggi(){
-  NR=10; NC=9; PZ=0; emptyBoard();
+  const onPt = RULES.pointMode!=='cell';
+  NR=onPt?9:10; NC=onPt?8:9; PZ=0; emptyBoard();
   // チャンギは対局前に馬と象の位置を入れ替えられる（設定 janggiSetup）。
   // 車も入れ替える北朝鮮ルールは、編集ツールで自由に組み替えて再現できる。
   const s=RULES.janggiSetup||'std';
   const L=(s==='in'||s==='left') ? ['E','H'] : ['H','E'];   // 左側 (2列目・3列目)
   const R=(s==='in'||s==='right') ? ['H','E'] : ['E','H'];  // 右側 (7列目・8列目)
   const back=['R',L[0],L[1],'A',null,'A',R[0],R[1],'R'];
+  const put=(r,c,t,p)=>{ (goesOnPoint(t)?ptsBoard:board)[r][c]={t,p}; };
   for(let c=0;c<9;c++){
     const t=back[c]; if(!t) continue;
-    board[0][c]={t:'J'+t+'b',p:-1};
-    board[9][c]={t:'J'+t,   p:1};
+    put(0,c,'J'+t+'b',-1); put(9,c,'J'+t,1);
   }
-  board[1][4]={t:'JKb',p:-1};  board[8][4]={t:'JK',p:1};      // 王は九宮の中央
-  board[2][1]={t:'JCb',p:-1};  board[2][7]={t:'JCb',p:-1};    // 包
-  board[7][1]={t:'JC', p:1};   board[7][7]={t:'JC', p:1};
-  for(const c of [0,2,4,6,8]){ board[3][c]={t:'JPb',p:-1}; board[6][c]={t:'JP',p:1}; } // 卒・兵
+  put(1,4,'JKb',-1);  put(8,4,'JK',1);      // 王は九宮の中央
+  put(2,1,'JCb',-1);  put(2,7,'JCb',-1);    // 包
+  put(7,1,'JC',1);    put(7,7,'JC',1);
+  for(const c of [0,2,4,6,8]){ put(3,c,'JPb',-1); put(6,c,'JP',1); } // 卒・兵
 }
 
 // 盤の大きさだけ変え、駒（マス・交点の両方）と斜め線・持ち駒は残す。
@@ -2878,7 +2890,7 @@ function moves(b,r,c){
   // 鉤行型：直進後に直角に曲がって走る到達先を追加
   if(isHook(pc.t)) hookMoves(b,r,c).forEach(([a,bb])=>res.push([a,bb]));
   // 九宮（宮殿）：帥/將・仕/士は九宮の外へ出られない
-  if(RULES.palace && isPalaceBound(pc.t)){
+  if(isPalaceBound(pc.t)){   // 九宮の設定に関係なく、帥/將・仕/士は宮マスの外へ出られない
     // チャンギの王・士は宮の斜め線に沿っても動ける
     if(isJPalaceBound(pc.t)) res.push(...janggiDiagMoves(b,r,c,p,'step'));
     if(RULES.palaceEscape) return res;                           // 宮の外にも出られる設定
@@ -3491,6 +3503,29 @@ function renderCap(id,arr,p){
 /* ===== 盤のポインタ操作（タップ／長押しで編集モード／編集中はドラッグ移動） ===== */
 // 編集モードでの移動：(fr,fc)→(tr,tc)。移動先が空のときだけ移す。
 // 既に駒がある場合は上書きせず、元の場所に戻す（移動しない）。
+// ドラッグの落とし先がゴミ箱／持ち駒トレイならその種類を返す
+function dropZoneOf(el){
+  if(!el||!el.closest) return null;
+  if(el.closest('#trashZone')) return 'trash';
+  const cap=el.closest('.captured');
+  if(cap) return cap.id==='capYou'?'capYou':(cap.id==='capEnemy'?'capEnemy':null);
+  return null;
+}
+// 盤の駒をゴミ箱／持ち駒へ移す（編集モード）
+function dropPieceToZone(fr,fc,fromPt,zone){
+  ensurePts();
+  const SRC = fromPt? ptsBoard : board;
+  const pc = SRC[fr]&&SRC[fr][fc];
+  if(!pc){ render(); return; }
+  SRC[fr][fc]=null;
+  if(zone==='trash'){ setStatus((KANJI[pc.t]||pc.t)+'を捨てました'); }
+  else {
+    const arr = zone==='capYou'? capYou : capEnemy;
+    arr.push(capturedCode(pc));
+    setStatus((KANJI[pc.t]||pc.t)+'を'+(zone==='capYou'?'あなた':'相手')+'の持ち駒に移しました');
+  }
+  sel=null; render();
+}
 function moveEditPiece(fr,fc,tr,tc,fromPt,toPt){
   ensurePts();
   // 交点に乗る駒は交点レイヤー、それ以外はマスのレイヤーへ（種類で決まる）
@@ -3548,7 +3583,13 @@ function moveEditPiece(fr,fc,tr,tc,fromPt,toPt){
     if(g.dragging){
       moveGhost(e.clientX,e.clientY);
       bd.querySelectorAll('.cell.drag-over').forEach(c=>c.classList.remove('drag-over'));
-      const t=cellOf(document.elementFromPoint(e.clientX,e.clientY)); if(t&&t.el) t.el.classList.add('drag-over');
+      document.querySelectorAll('.captured.drop-over').forEach(x=>x.classList.remove('drop-over'));
+      const tz=document.getElementById('trashZone'); if(tz) tz.classList.remove('over');
+      const el=document.elementFromPoint(e.clientX,e.clientY);
+      const zone=dropZoneOf(el);
+      if(zone==='trash'&&tz) tz.classList.add('over');
+      else if(zone==='capYou'||zone==='capEnemy'){ const tr=document.getElementById(zone); if(tr) tr.classList.add('drop-over'); }
+      else { const t=cellOf(el); if(t&&t.el) t.el.classList.add('drag-over'); }
       e.preventDefault();
     }
   });
@@ -3557,8 +3598,15 @@ function moveEditPiece(fr,fc,tr,tc,fromPt,toPt){
     if(!g) return; const gg=g; g=null;
     // ドラッグ（編集中のみ発生）→ 移動
     if(gg.dragging){
-      const t=cellOf(document.elementFromPoint(e.clientX,e.clientY)); endGhost();
-      if(t) moveEditPiece(gg.r,gg.c,t.r,t.c,gg.pt,!!t.pt); else render();
+      const el=document.elementFromPoint(e.clientX,e.clientY);
+      const zone=dropZoneOf(el);
+      const t=zone?null:cellOf(el);
+      endGhost();
+      const tz=document.getElementById('trashZone'); if(tz) tz.classList.remove('over');
+      document.querySelectorAll('.captured.drop-over').forEach(x=>x.classList.remove('drop-over'));
+      if(zone) dropPieceToZone(gg.r,gg.c,gg.pt,zone);
+      else if(t) moveEditPiece(gg.r,gg.c,t.r,t.c,gg.pt,!!t.pt);
+      else render();
       return;
     }
     // 長押し（動かさず）
@@ -5674,7 +5722,7 @@ document.getElementById('emChange').onclick=()=>{
 document.getElementById('emSwapLayer').onclick=()=>{
   if(!menuCell) return;
   const {r,c}=menuCell;
-  openEditMenu(r,c,!editLayerIsPt());   // 同じマスで置く側だけ切り替える
+  openEditMenu(r,c, editLayerIsPt()? 'cell' : true);   // 同じマスで置く側だけ切り替える
 };
 document.getElementById('emSelectAdd').onclick=()=>{
   if(menuCell){ toggleMultiSel(menuCell.r,menuCell.c); } closeEditMenu();
@@ -5904,13 +5952,13 @@ function moveBoardSetupRows(toBar){
   const slot=document.getElementById('etbBoardSlot');
   const home=document.querySelector('#accBoard .acc-body.board-setup');
   if(!slot||!home) return;
-  const ids=['bsRowPreset','bsRowSize','bsRowPZ','bsRowPt'];
+  const ids=['bsRowPreset','bsRowSize','bsRowPZ','bsRowPt','bsPalaceLabel'];
   ids.forEach(id=>{
     const el=document.getElementById(id); if(!el) return;
     const target = toBar? slot : home;
     if(el.parentElement!==target){
       if(toBar) target.appendChild(el);
-      else home.insertBefore(el, document.getElementById('bsPalaceLabel')||null);
+      else home.insertBefore(el, document.getElementById('bsPalaceNote')||null);
     }
   });
 }
@@ -5919,6 +5967,8 @@ function updateMultiBar(){
   if(lb) lb.style.display = editing? 'flex':'none';   // 編集モードのあいだ出す
   const tb=document.getElementById('editToolsBar');
   if(tb) tb.style.display = editing? 'block':'none';
+  const tz=document.getElementById('trashZone');
+  if(tz) tz.style.display = editing? 'block':'none';
   moveBoardSetupRows(!!editing);
   const bar=document.getElementById('multiBar');
   const cnt=document.getElementById('multiCount');
