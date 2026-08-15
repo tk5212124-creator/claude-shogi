@@ -2356,10 +2356,13 @@ function stampPreset(key, r0, c0){
   let n=0;
   for(let r=0;r<g.length;r++)for(let c=0;c<g[r].length;c++){
     const tr=r0+r, tc=c0+c;
-    if(tr>=0&&tr<rows&&tc>=0&&tc<cols){
-      const src=g[r][c];
-      if(src){ (goesOnPoint(src.t)?ptsBoard:board)[tr][tc]={...src}; }
-      else { board[tr][tc]=null; ptsBoard[tr][tc]=null; }   // プリセットの空マスは両方クリア
+    const src=g[r][c];
+    // 交点は 0..NR / 0..NC まであるので、置く側に合わせて範囲を判定する
+    const isPt = !!(src && goesOnPoint(src.t));
+    const inR = tr>=0 && tr<=(isPt?NR:NR-1), inC = tc>=0 && tc<=(isPt?NC:NC-1);
+    if(inR&&inC){
+      if(src){ (isPt?ptsBoard:board)[tr][tc]={...src}; }
+      else { if(board[tr]&&tr<NR&&tc<NC) board[tr][tc]=null; if(ptsBoard[tr]) ptsBoard[tr][tc]=null; }
       n++; }
   }
   return n;
@@ -2380,8 +2383,10 @@ function stampPresetSide(key, r0, c0, side){
     const cell=g[r][c];
     if(cell&&cell.p===side){
       const tr=r0+(r-minR), tc=c0+(c-minC);
-      if(tr>=0&&tr<rows&&tc>=0&&tc<cols){
-        (goesOnPoint(cell.t)?ptsBoard:board)[tr][tc]={...cell};   // 駒の種類で置く側を決め、もう一方は消さない
+      const isPt=goesOnPoint(cell.t);
+      // 交点は 0..NR / 0..NC まであるので、置く側に合わせて範囲を判定する
+      if(tr>=0 && tr<=(isPt?NR:NR-1) && tc>=0 && tc<=(isPt?NC:NC-1)){
+        (isPt?ptsBoard:board)[tr][tc]={...cell};   // 駒の種類で置く側を決め、もう一方は消さない
         n++; }
     }
   }
