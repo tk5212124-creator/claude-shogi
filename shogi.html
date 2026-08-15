@@ -4555,7 +4555,55 @@ const MATE=1e7;
    合法手の集合も評価値も変えない。「どの順に読むか」だけを変えて枝刈りを効かせる。
    1手ごとにクリアするので、局面が変わっても古い情報を引きずらない。 */
 let killers=[], histTable=new Map(), counters=new Map();
-function clearOrderTables(){ killers=[]; histTable=new Map(); counters=new Map(); }
+
+/* ===== 局面ハッシュ（Zobrist相当）と置換表 =====
+   同じ局面に別の手順で辿り着いたとき（＝合流）、二度目以降の探索を省く。
+   合法手も評価値も変えない。「同じ計算を二度しない」だけの仕組み。
+   盤の大きさやルールは対局中に編集で変わりうるので、表は1手ごとに捨てる。 */
+// 駒種を小さな整数に。VALUE に全駒種が載っているのでそこから採番する。
+const ZT_IDX=(()=>{ const m=Object.create(null); let i=1;
+  for(const k of Object.keys(VALUE)) m[k]=i++;
+  m.__n=i; return m; })();
+// VALUE に無い駒種（碁石など後から増えた種類）も衝突しないよう遅延で採番する
+function zIdx(t){
+  if(!t) return 0;
+  let v=ZT_IDX[t];
+  if(v===undefined){ v=ZT_IDX.__n++; ZT_IDX[t]=v; }
+  return v;
+}
+// 整数をばらけさせる（乱数表の代わり。表を持たずに同じ効果を得る）
+function mix32(x){
+  x=(x^(x>>>16))>>>0; x=Math.imul(x,0x7feb352d)>>>0;
+  x=(x^(x>>>15))>>>0; x=Math.imul(x,0x846ca68b)>>>0;
+  return (x^(x>>>16))>>>0;
+}
+// 盤（2層）＋持ち駒＋手番から44bitのキーを作る。順序に依らないようXORで畳む。
+function hashPos(b,cy,ce,side){
+  let h1=0,h2=0;
+  const add=(x)=>{ h1^=mix32(x); h2^=mix32((x^0x9e3779b9)>>>0); };
+  const pts=(b&&b.L&&b.L.pts)||null;
+  for(let li=0; li<(pts?2:1); li++){
+    const L = li? pts : b, RR=LR(L), CC=LC(L);
+    for(let r=0;r<RR;r++){ const row=L[r]; if(!row) continue;
+      for(let c=0;c<CC;c++){ const q=row[c]; if(!q) continue;
+        // 元コード(o)は持ち駒になる駒種を変えるので同一視できない
+        const code = (zIdx(q.t)*512 + zIdx(q.o))*2 + (q.p===1?1:0);
+        add((((li*41+r)*41+c)*262144 + code)|0);
+      } }
+  }
+  // 持ち駒は枚数まで含める（同じ駒2枚がXORで消えないように）
+  const hand=(arr,tag)=>{ if(!arr||!arr.length) return;
+    const m=new Map(); for(const t of arr) m.set(t,(m.get(t)||0)+1);
+    for(const [t,n] of m) add((0x40000000 ^ ((zIdx(t)*64 + Math.min(n,63))*4 + tag))|0);
+  };
+  hand(cy,1); hand(ce,2);
+  if(side===1) add(0x5bf03635|0);
+  // 53bitに畳む（Number で正確に表せる上限。衝突は実用上無視できる）
+  return (h1>>>0)*2097152 + (h2>>>11);
+}
+let TT=new Map();
+const TT_MAX=300000;
+function clearOrderTables(){ killers=[]; histTable=new Map(); counters=new Map(); TT=new Map(); }
 // 手を数値キーにする（座標は 0..40 なので衝突しない）
 function mvKey(m){
   if(!m) return -1;
@@ -4564,8 +4612,8 @@ function mvKey(m){
   if(m.drop) return 90000000 + L*2000 + (m.tr*41+m.tc);
   return (((m.fr*41+m.fc)*1681) + (m.tr*41+m.tc))*4 + L;
 }
-// 探索中の並べ替え点数。取りの価値＋killer/counter/history。
-function orderInSearch(b, m, side, ply, prevKey){
+// 探索中の並べ替え点数。取りの価値＋置換表の最善手＋killer/counter/history。
+function orderInSearch(b, m, side, ply, prevKey, ttMove){
   if(m.pass) return -1000;
   let sc=0;
   if(!m.drop){
@@ -4581,6 +4629,7 @@ function orderInSearch(b, m, side, ply, prevKey){
     if(m.promo) sc += 400;
   }
   const k=mvKey(m);
+  if(ttMove!==undefined && ttMove===k) sc += 50000;   // 前にこの局面で最善だった手を最優先
   const kk=killers[ply];
   if(kk){ if(kk[0]===k) sc += 9000; else if(kk[1]===k) sc += 8000; }
   if(prevKey!==undefined && counters.get(prevKey)===k) sc += 7000;
@@ -4590,16 +4639,39 @@ function orderInSearch(b, m, side, ply, prevKey){
 function search(b,cy,ce,depth,side,alpha,beta,ply,prevKey){
   if(depth===0) return evaluate(b,cy,ce);
   ply = ply||0;
+  // 置換表：同じ局面を同じ深さ以上で読み終えていれば、その結果を使い回す。
+  // 残り1手のところは「読み直す方がハッシュより安い」ので使わない（浅い探索が遅くなる）。
+  const useTT = depth>=2;
+  const a0=alpha, b0=beta;
+  const key=useTT? hashPos(b,cy,ce,side) : 0;
+  const ent=useTT? TT.get(key) : undefined;
+  if(ent && ent.d>=depth){
+    // 窓は動かさない（動かすと保存する上限/下限の意味が元の窓とずれる）。
+    // 確定値、または今の窓だけで結論が出る境界値のときだけ使い回す。
+    if(ent.f===0) return ent.v;                        // 確定値
+    if(ent.f===1 && ent.v>=beta) return ent.v;         // 下限がbeta以上→beta cut
+    if(ent.f===2 && ent.v<=alpha) return ent.v;        // 上限がalpha以下→alpha cut
+  }
   const list=genMoves(b,side,cy,ce);
   if(!list.length){ // 手詰まり＝玉を取られる前提でその側の負け
     return side===-1? -MATE : MATE;
   }
-  // 良い手から読む（取り→killer→counter→history→静かな手）
+  // 良い手から読む（置換表の手→取り→killer→counter→history→静かな手）
   if(list.length>1){
+    const tm = ent? ent.bm : undefined;
     const sc=new Map();
-    for(const m of list) sc.set(m, orderInSearch(b,m,side,ply,prevKey));
+    for(const m of list) sc.set(m, orderInSearch(b,m,side,ply,prevKey,tm));
     list.sort((x,y)=>sc.get(y)-sc.get(x));
   }
+  // 詰み点は残り深さを含む値なので置換表には入れない（深さが違うと意味が変わる）
+  const store=(val,bm)=>{
+    if(!useTT) return;
+    if(val<=-MATE || val>=MATE || !isFinite(val)) return;
+    if(TT.size>=TT_MAX) TT.clear();
+    const old=TT.get(key);
+    if(old && old.d>depth) return;
+    TT.set(key,{d:depth, v:val, f:(val<=a0?2:(val>=b0?1:0)), bm});
+  };
   const isCap=(m)=>{
     if(m.drop||m.pass) return false;
     if(m.caps && m.caps.length) return true;
@@ -4617,25 +4689,30 @@ function search(b,cy,ce,depth,side,alpha,beta,ply,prevKey){
     histTable.set(k,(histTable.get(k)||0)+depth*depth);
     if(prevKey!==undefined) counters.set(prevKey,k);
   };
+  let best=undefined;
   if(side===-1){ // 相手＝最大化
     let val=-Infinity;
     for(const m of list){
       const s=simulate(b,m,-1,cy,ce);
       if(s.king){ return MATE+depth; } // あなたの玉を取れる→即勝ち（早いほど高評価）
-      val=Math.max(val,search(s.nb,s.ncy,s.nce,depth-1,1,alpha,beta,ply+1,mvKey(m)));
+      const v=search(s.nb,s.ncy,s.nce,depth-1,1,alpha,beta,ply+1,mvKey(m));
+      if(v>val){ val=v; best=mvKey(m); }
       alpha=Math.max(alpha,val);
       if(alpha>=beta){ remember(m); break; }
     }
+    store(val,best);
     return val;
   } else { // あなた＝最小化
     let val=Infinity;
     for(const m of list){
       const s=simulate(b,m,1,cy,ce);
       if(s.king){ return -MATE-depth; } // 相手の玉を取れる→相手にとって即負け
-      val=Math.min(val,search(s.nb,s.ncy,s.nce,depth-1,-1,alpha,beta,ply+1,mvKey(m)));
+      const v=search(s.nb,s.ncy,s.nce,depth-1,-1,alpha,beta,ply+1,mvKey(m));
+      if(v<val){ val=v; best=mvKey(m); }
       beta=Math.min(beta,val);
       if(alpha>=beta){ remember(m); break; }
     }
+    store(val,best);
     return val;
   }
 }
