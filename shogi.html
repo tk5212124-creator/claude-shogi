@@ -2741,9 +2741,9 @@ function setSennichiteMode(mode){
 let posCount={};     // 局面出現回数（千日手判定用）
 let repLog=[];       // 各手の {局面キー, 指した側, 王手か}（シャンチー式千日手の判定用）
 const SPEEDS=[
-  {n:'低速',ms:700,depth:3},
-  {n:'標準',ms:250,depth:3},
-  {n:'高速',ms:40,depth:2},
+  {n:'熟考',ms:0,depth:4,budget:2000},   // 時間の許す限り深く読む（反復深化）
+  {n:'標準',ms:0,depth:3},
+  {n:'高速',ms:0,depth:2},
   {n:'超高速',ms:0,depth:1,turbo:true}
 ];
 
@@ -4591,17 +4591,43 @@ function cpuPickMove(side, depth){
   });
   // 超高速(depth<=1)や大盤では、トップ候補だけ評価して時間短縮
   const cand = (DEPTH<=1 || BMAX>=16) ? list.slice(0, Math.min(list.length, BMAX>=16?18:24)) : list;
-  let best=null, bestScore = side===-1? -Infinity : Infinity;
-  for(const m of cand){
-    const s=simulate(board,m,side,capYou,capEnemy);
-    if(s.king){ return m; } // 玉が取れる手は即採用
-    const raw = DEPTH<=0 ? evaluate(s.nb,s.ncy,s.nce)
-                         : search(s.nb,s.ncy,s.nce,DEPTH,-side,-Infinity,Infinity);
-    const sc=raw + (Math.random()*8-4);
-    if(side===-1){ if(sc>bestScore){bestScore=sc;best=m;} }
-    else { if(sc<bestScore){bestScore=sc;best=m;} }
+  // 指定の深さで候補を全部評価して最善手を返す（王が取れる手は即返す）
+  const now=()=>((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now());
+  // 指定の深さで候補を全部評価して最善手を返す。
+  // deadline を渡すと、途中で時間切れになった時点で打ち切る（その深さの結果は捨てる）。
+  const pickAt=(d, deadline)=>{
+    let best=null, bestScore = side===-1? -Infinity : Infinity;
+    for(const m of cand){
+      const s=simulate(board,m,side,capYou,capEnemy);
+      if(s.king) return {m, mate:true};
+      const raw = d<=0 ? evaluate(s.nb,s.ncy,s.nce)
+                       : search(s.nb,s.ncy,s.nce,d,-side,-Infinity,Infinity);
+      const sc=raw + (Math.random()*8-4);
+      if(side===-1){ if(sc>bestScore){bestScore=sc;best=m;} }
+      else { if(sc<bestScore){bestScore=sc;best=m;} }
+      // 時間切れ：そこまでに読めた範囲の最善手を返す（候補は良い順に並んでいるので使える）
+      if(deadline && now()>deadline) return {m:best, partial:true};
+    }
+    return {m:best};
+  };
+  const budget = (depth==null) ? (SPEEDS[speedIdx]&&SPEEDS[speedIdx].budget) : 0;
+  if(budget && DEPTH>1){
+    // 反復深化：浅い方から順に読み、与えた時間の中でできるだけ深く読む。
+    // 途中で切れても「最後に読み切った深さの最善手」が残るので必ず手は返せる。
+    const deadline = now() + budget;
+    let best=null;
+    for(let d=2; d<=DEPTH; d++){
+      // 前の深さの最善手を先頭に持ってくると枝刈りがよく効き、同じ時間でより深く読める
+      if(best){ const i=cand.indexOf(best); if(i>0){ cand.splice(i,1); cand.unshift(best); } }
+      const r=pickAt(d, deadline);
+      if(r.mate) return r.m;
+      if(r.m) best=r.m;               // 途中までの結果も使う（先頭は前の深さの最善手）
+      if(r.partial || now()>=deadline) break;
+    }
+    return best||cand[0]||list[0];
   }
-  return best||cand[0]||list[0];
+  const r=pickAt(DEPTH);
+  return r.m||cand[0]||list[0];
 }
 
 // 演出を行うかは「音・演出トグル」と「速度（超高速）」だけで決める。
@@ -4611,12 +4637,8 @@ function cpuPickMove(side, depth){
 function fxEnabled(){ return !!SFX.on; }
 // 描画の間引きは超高速のときだけ。ただし演出ONなら毎手描く（描かないと演出が見えないため）。
 function renderThrottled(){ return !SFX.on && !!(SPEEDS[speedIdx] && SPEEDS[speedIdx].turbo); }
-// 超高速でも演出ONのときは、演出が見えるだけの最小の間隔をあける
-function stepDelay(){
-  const sp=SPEEDS[speedIdx]||{};
-  if(!sp.turbo) return sp.ms||0;
-  return SFX.on ? 170 : 0;
-}
+// 手と手の間隔。意図的に遅くはしない。演出ONのときだけ、演出が見える最小の間隔をあける。
+function stepDelay(){ return SFX.on ? 170 : 0; }
 // side の手を盤に反映。玉を取ったらその場で勝敗確定。
 // 第3引数は後方互換のため受け取るが使用しない（機構は指し手の主体で変わらない）。
 function applyMove(side,m){ applyMoveSilent(side,m,false); }
