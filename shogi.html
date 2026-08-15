@@ -3592,7 +3592,7 @@ function render(){
   }
   // 王手マス（超高速・リプレイ中はスキップ）。両者分チェック。
   let checkCells=new Set();
-  const turbo = SPEEDS[speedIdx]&&SPEEDS[speedIdx].turbo;
+  const turbo = !SFX.on && SPEEDS[speedIdx]&&SPEEDS[speedIdx].turbo;   // 演出ONなら間引かない
   if(!turbo && !gameOver){
     for(const pl of [1,-1]){
       const ci=checkInfo(pl);
@@ -4182,7 +4182,7 @@ function pushHistory(){
     capYou:[...capYou], capEnemy:[...capEnemy], to:null
   });
 }
-function recordKifu(rec){ kifu.push(rec); if(!(SPEEDS[speedIdx]&&SPEEDS[speedIdx].turbo)) updateReplayUI(); }
+function recordKifu(rec){ kifu.push(rec); if(!renderThrottled()) updateReplayUI(); }
 
 /* ===== 成り選択 ===== */
 document.getElementById('promoYes').onclick=()=>resolvePromo(true);
@@ -4251,7 +4251,7 @@ function scheduleAutoStep(){
   if(paused) return; // 一時停止中は自動進行しない
   const sp=SPEEDS[speedIdx];
   // 超高速は setTimeout(0) で詰めつつ、各手の間にイベントループを挟む（ボタン応答確保）
-  autoTimer=setTimeout(runAutoStep, sp.turbo?0:sp.ms);
+  autoTimer=setTimeout(runAutoStep, stepDelay());
 }
 let turboBatch=0;
 // CPUに1手だけ指させる（スケジュールはしない）。指せたらtrue。
@@ -4279,8 +4279,8 @@ function runAutoStep(){
   const sp=SPEEDS[speedIdx];
   if(!doAutoMove()) return;
   if(gameOver) return;
-  if(sp.turbo){
-    // 数手ごとに描画して体感速度を上げる
+  if(sp.turbo && !SFX.on){
+    // 数手ごとに描画して体感速度を上げる（演出OFFのときだけ）
     turboBatch++;
     if(turboBatch%6===0) render();
     scheduleAutoStep();
@@ -4604,11 +4604,17 @@ function cpuPickMove(side, depth){
 
 // 演出を行うかは「音・演出トグル」と「速度（超高速）」だけで決める。
 // 指し手が人間かCPUかでは絶対に分岐させない（機構を手番主体で変えないための共通判定）。
-function fxEnabled(){
-  return SFX.on && !(SPEEDS[speedIdx] && SPEEDS[speedIdx].turbo);
+// 演出は「音・演出トグル」だけで決める。速度では勝手に切らない（超高速でも演出は出る）。
+// 呼び出し側（人間/CPU）では絶対に分岐させない。
+function fxEnabled(){ return !!SFX.on; }
+// 描画の間引きは超高速のときだけ。ただし演出ONなら毎手描く（描かないと演出が見えないため）。
+function renderThrottled(){ return !SFX.on && !!(SPEEDS[speedIdx] && SPEEDS[speedIdx].turbo); }
+// 超高速でも演出ONのときは、演出が見えるだけの最小の間隔をあける
+function stepDelay(){
+  const sp=SPEEDS[speedIdx]||{};
+  if(!sp.turbo) return sp.ms||0;
+  return SFX.on ? 170 : 0;
 }
-// 描画の間引きも「速度設定（超高速）」だけで決める。呼び出し側（人間/CPU）では分岐させない。
-function renderThrottled(){ return !!(SPEEDS[speedIdx] && SPEEDS[speedIdx].turbo); }
 // side の手を盤に反映。玉を取ったらその場で勝敗確定。
 // 第3引数は後方互換のため受け取るが使用しない（機構は指し手の主体で変わらない）。
 function applyMove(side,m){ applyMoveSilent(side,m,false); }
