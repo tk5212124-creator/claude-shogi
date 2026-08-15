@@ -2740,13 +2740,17 @@ function setSennichiteMode(mode){
 }
 let posCount={};     // 局面出現回数（千日手判定用）
 let repLog=[];       // 各手の {局面キー, 指した側, 王手か}（シャンチー式千日手の判定用）
+/* 速度は「深さ」ではなく「1手にかける時間」で決める。
+   同じ深さでも盤や局面で必要な計算量はまるで違うので、深さを固定すると
+   軽い盤では余力を捨て、重い盤では待たされる。持ち時間で止めれば
+   どのゲームでも操作感が揃い、軽い局面ほど自然に深く読む。
+   超高速だけは即答が身上なので深さ1で固定する。
+   deep は「大盤でも絞りすぎない」印（熟考だけ）。 */
 const SPEEDS=[
-  // 熟考：深さではなく持ち時間で止める。2秒のあいだ1手ずつ深く読み直し、
-  // 読み切れた一番深い結論を採用する（読み切れなかった深さは丸ごと捨てる）。
-  {n:'熟考',ms:0,depth:8,budget:2000},
-  {n:'標準',ms:0,depth:3},
-  {n:'高速',ms:0,depth:2},
-  {n:'超高速',ms:0,depth:1,turbo:true}
+  {n:'熟考',  ms:0, depth:8, budget:2000, deep:true},
+  {n:'標準',  ms:0, depth:8, budget:400},
+  {n:'高速',  ms:0, depth:8, budget:80},
+  {n:'超高速',ms:0, depth:1, turbo:true}
 ];
 
 /* ===== 利き生成 ===== */
@@ -4780,9 +4784,11 @@ function cpuPickMove(side, depth){
   const BMAX=Math.max(NR,NC);
   // 熟考は時間で必ず止まるので、大盤でも深さを絞りすぎない。
   // 時間の見張りが無い速度（標準・高速・超高速）は、盤が広いと画面が固まるので従来どおり浅くする。
-  const budget = (depth==null) ? (SPEEDS[speedIdx]&&SPEEDS[speedIdx].budget) : 0;
-  if(BMAX>=18) DEPTH=Math.min(DEPTH, budget?2:1);   // 19路盤など広い盤＋多数の打ち手は浅く
-  else if(BMAX>=13) DEPTH=Math.min(DEPTH, budget?3:2);
+  const SP = (depth==null) ? SPEEDS[speedIdx] : null;
+  const budget = SP ? SP.budget : 0;
+  const deep = !!(SP && SP.deep);
+  if(BMAX>=18) DEPTH=Math.min(DEPTH, deep?2:1);   // 19路盤など広い盤＋多数の打ち手は浅く
+  else if(BMAX>=13) DEPTH=Math.min(DEPTH, deep?3:2);
   // 手の並べ替え。to地点のマスの駒だけでなく、その手で実際に起きる事象で採点する
   //（交点レイヤー・共有点や飛び越えの別層取り・成り・royal取り・獅子の複数取り）。
   // 手の並べ替え（αβの枝刈り効率を上げるためだけの安い採点）。
@@ -4806,7 +4812,7 @@ function cpuPickMove(side, depth){
   list.sort((a,b2)=>ordOf(b2)-ordOf(a));
   // 超高速(depth<=1)では、トップ候補だけ評価して即答する。
   // 大盤の絞り込みは以前ほど厳しくしなくてよい（探索自体が桁違いに速くなったため）。
-  const CAP = (DEPTH<=1) ? (BMAX>=16?18:24) : (BMAX>=16? (budget?64:18) : 0);
+  const CAP = (DEPTH<=1) ? (BMAX>=16?18:24) : (BMAX>=16? (deep?64:18) : 0);
   const cand = CAP ? list.slice(0, Math.min(list.length, CAP)) : list;
   // 指定の深さで候補を全部評価して最善手を返す（王が取れる手は即返す）
   const now=()=>((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now());
