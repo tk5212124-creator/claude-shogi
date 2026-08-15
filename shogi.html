@@ -4372,10 +4372,12 @@ function anyRoyalIn(cells, pts, side){
   return false;
 }
 function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻り値 {nb,ncy,nce,king}
-  const nb=b.map(row=>row.map(x=>x?{...x}:null));
+  // 駒オブジェクトはこのアプリでは書き換えられない（置き換えるか null にするかのどちらか）。
+  // なので読みの中では枠（行の配列）だけ複製すればよく、駒まで作り直す必要はない。
+  const nb=b.map(row=>row.slice());
   // 交点レイヤーも一緒にコピーして、読みの中でも2層のまま扱う
   const srcPts=(b&&b.L&&b.L.pts)||null;
-  const npts=srcPts? srcPts.map(row=>row.map(x=>x?{...x}:null)) : Array.from({length:NR+1},()=>Array(NC+1).fill(null));
+  const npts=srcPts? srcPts.map(row=>row.slice()) : Array.from({length:NR+1},()=>Array(NC+1).fill(null));
   linkLayers(nb, npts);
   const ncy=[...cy], nce=[...ce];
   if(m&&m.pass) return {nb,ncy,nce,king:false};   // パスは盤面を変えない
