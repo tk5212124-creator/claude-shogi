@@ -151,6 +151,19 @@
     display:flex;align-items:center;justify-content:center;
     font-size:.72rem;box-shadow:0 0 0 2px var(--sel), 0 2px 6px rgba(0,0,0,.5);}
   /* 「置く場所」バー（編集モード中に盤の直下へ出す） */
+  /* 編集モード中に盤の直下へ出すツール群 */
+  .edit-tools-bar{width:100%;max-width:430px;margin-top:8px;padding:8px 10px;border-radius:12px;
+    background:linear-gradient(160deg,#2f7d5e,#1f5e44);border:1px solid var(--sel);
+    box-shadow:0 4px 16px rgba(98,209,160,.25);}
+  #loadBox{width:100%;box-sizing:border-box;margin:6px 0;padding:8px;border-radius:8px;
+    background:rgba(12,9,26,.75);color:#e6dcff;border:1px solid rgba(139,107,255,.4);
+    font-size:.72rem;font-family:ui-monospace,monospace;resize:vertical;}
+  .etb-title{font-size:.72rem;color:#dff5ec;letter-spacing:.1em;margin:2px 0 5px;font-weight:700;}
+  .etb-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
+  .etb-grid button{flex:1 1 46%;font-size:.74rem;padding:7px 6px;min-height:36px;}
+  .etb-grid .bs-row{flex:1 1 100%;display:flex;align-items:center;gap:6px;margin:0;}
+  .etb-grid .bs-row label{font-size:.74rem;color:var(--gold);flex:0 0 auto;}
+  .etb-grid select{flex:1 1 auto;min-height:34px;font-size:.78rem;}
   .edit-layer-bar{background:linear-gradient(160deg,#4a3a6e,#2e2447);border-color:rgba(245,207,107,.5);
     box-shadow:0 4px 16px rgba(139,107,255,.3);}
   .edit-layer-bar span{color:var(--gold);flex:0 0 auto;}
@@ -836,6 +849,20 @@
       <option value="pt">◇ 線の交点</option>
     </select>
   </div>
+  <div class="edit-tools-bar" id="editToolsBar" style="display:none;">
+    <div class="etb-title">編集ツール</div>
+    <div class="etb-grid">
+      <button id="copyToEnemy">自陣の配置を敵にコピー</button>
+      <button id="copyToYou">敵陣の配置を自陣にコピー</button>
+      <button id="randomPower">ランダム置換（強さ近い）</button>
+      <button id="randomRank">ランダム置換（同じ格）</button>
+      <button id="randomFull">ランダム置換（完全）</button>
+      <button id="restoreCustom">記憶した配置に戻す</button>
+      <button id="clearBoard">盤を空にする（全部消す）</button>
+    </div>
+    <div class="etb-title">盤の設定</div>
+    <div class="etb-grid" id="etbBoardSlot"></div>
+  </div>
   <div class="multi-bar" id="multiBar" style="display:none;">
     <span id="multiCount">0マス選択中</span>
     <button class="primary" id="multiChange">まとめて変更</button>
@@ -869,7 +896,7 @@
   <div class="acc" id="accBoard">
    <button type="button" class="acc-head" id="accBoardHead">盤の設定<span class="acc-chev">∨</span></button>
    <div class="acc-body board-setup">
-    <div class="bs-row">
+    <div class="bs-row" id="bsRowPreset">
       <label for="presetSel">プリセット</label>
       <select id="presetSel">
         <optgroup label="将棋系">
@@ -895,7 +922,7 @@
       </select>
       <button id="applyPresetBtn">適用</button>
     </div>
-    <div class="bs-row">
+    <div class="bs-row" id="bsRowSize">
       <label for="rowRange">行</label>
       <select id="rowRange" class="bs-num"></select>
       <label for="colRange">列</label>
@@ -903,12 +930,12 @@
       <button id="applySizeBtn">作成</button>
     </div>
     <div class="bs-row"><span id="sizeVal" class="bs-size">9 行 × 9 列</span></div>
-    <div class="bs-row">
+    <div class="bs-row" id="bsRowPZ">
       <label for="pzSel">敵陣</label>
       <select id="pzSel" class="bs-num"></select>
       <span class="bs-size">段（一番奥から数えて）</span>
     </div>
-    <div class="bs-row">
+    <div class="bs-row" id="bsRowPt">
       <label for="ptSel">駒の置き方</label>
       <select id="ptSel">
         <option value="auto">囲碁・シャンチー・チャンギの駒は交点に置く</option>
@@ -918,7 +945,7 @@
       </select>
     </div>
     <div class="bs-note">※ 交点の駒とマスの駒は別の点にいるので、互いに取り合えません（斜めに動くときの障壁にはなります）。碁石が囲んだ駒は交点・マスに関係なく取れ、九宮の交差マス（×）だけは両方が置ける共有点として取り合えます。斜めに飛び越えて動く駒は交点の駒も取れます。</div>
-    <label class="bs-row bs-check"><input type="checkbox" id="bsPalace">
+    <label class="bs-row bs-check" id="bsPalaceLabel"><input type="checkbox" id="bsPalace">
       <span>九宮をつくる（シャンチー用。帥・将／仕・士は宮殿から出られない。列数が奇数なら3×3、偶数なら2×2）</span></label>
     <div class="bs-note bs-pending" id="bsPalaceNote" style="display:none;">※ 九宮・敵陣の変更は「適用」または「作成」を押すと反映されます</div>
     <div class="bs-note">「適用」「作成」で盤を作り直します（駒は編集ツールで配置）。初期配置は出典に基づく正確な配置です。</div>
@@ -928,15 +955,7 @@
    <button type="button" class="acc-head" id="accEditHead">編集ツール<span class="acc-chev">∨</span></button>
    <div class="acc-body board-setup">
     <div class="bs-note">開くと編集モードです。盤のマスをタップして駒を配置・変更できます（閉じると編集終了）。</div>
-    <div class="edit-bar-row">
-      <button id="copyToEnemy">自陣の配置を敵にコピー</button>
-      <button id="copyToYou">敵陣の配置を自陣にコピー</button>
-      <button id="randomPower">ランダム置換（強さ近い）</button>
-      <button id="randomRank">ランダム置換（同じ格）</button>
-      <button id="randomFull">ランダム置換（完全）</button>
-      <button id="restoreCustom">記憶した配置に戻す</button>
-      <button id="clearBoard">盤を空にする（全部消す）</button>
-    </div>
+    <div class="bs-note">ボタン類は編集モード中、盤のすぐ下（「置く場所」の下）にまとめて出ます。</div>
    </div>
   </div>
 
@@ -967,6 +986,22 @@
       <button id="rpExit">対局に戻る</button>
       <button id="rpCopy">📋 デバッグ情報をコピー</button>
     </div>
+  </div>
+
+  <div class="acc" id="accSave">
+   <button type="button" class="acc-head" id="accSaveHead">保存・読み込み<span class="acc-chev">∨</span></button>
+   <div class="acc-body board-setup">
+    <div class="bs-note">いまの盤・交点・持ち駒・ルール・棋譜をまとめて文字にします。コピーしておけば、あとで下の欄に貼り付けて続きから指せます（棋譜つきならリプレイも復元）。</div>
+    <div class="edit-bar-row">
+      <button class="primary" id="saveCopy">📋 盤面データをコピー</button>
+      <button id="saveCopyFull">📋 デバッグ情報ごとコピー</button>
+    </div>
+    <textarea id="loadBox" rows="4" placeholder="ここに盤面データ（またはデバッグ情報まるごと）を貼り付けて「読み込み」"></textarea>
+    <div class="edit-bar-row">
+      <button class="primary" id="loadBtn">▼ 読み込み（この局面から再開）</button>
+      <button id="loadClear">欄を消す</button>
+    </div>
+   </div>
   </div>
 
   <div id="resultBanner">
@@ -2461,9 +2496,10 @@ function kifuToText(){
   return kifu.map((k,i)=>{
     const who=k.side===1?'▲':'△';
     if(k.pass) return (i+1)+'. '+who+'パス（着手放棄）';
-    const to='('+(k.to?(k.to[0]+1)+'行'+(k.to[1]+1)+'列':'?')+')';
+    const L=k.pt?'◇':'';   // 交点の手は◇を付けて、マスの座標と区別する
+    const to=L+'('+(k.to?(k.to[0]+1)+'行'+(k.to[1]+1)+'列':'?')+')';
     if(k.drop) return (i+1)+'. '+who+((KANJI[k.drop]||k.drop))+' 打 '+to;
-    const from=k.from?('('+(k.from[0]+1)+'行'+(k.from[1]+1)+'列)'):'';
+    const from=k.from?(L+'('+(k.from[0]+1)+'行'+(k.from[1]+1)+'列)'):'';
     const nm=KANJI[k.code]||k.code;
     const pr=k.promo?(' 成→'+(KANJI[k.promoTo]||k.promoTo||'')):'';
     const cap=k.cap?(' 取:'+(KANJI[k.cap]||k.cap)):'';
@@ -2499,16 +2535,88 @@ function debugReport(){
   L.push('');
   L.push('--- 生データ(JSON) ---');
   try{
-    L.push(JSON.stringify({NR,NC,PZ,turn,youAreSente,gameOver,RULES,
-      board:board.map(r=>r.map(x=>x?{t:x.t,p:x.p,o:x.o||undefined}:null)),
-      capYou, capEnemy,
-      start: gameStartSnap? {board:gameStartSnap.board.map(r=>r.map(x=>x?{t:x.t,p:x.p}:null)),
-                             capYou:gameStartSnap.capYou, capEnemy:gameStartSnap.capEnemy}:null,
-      kifu}));
+    L.push(JSON.stringify(stateJSON()));
   }catch(e){ L.push('(JSON化に失敗: '+e.message+')'); }
   return L.join('\n');
 }
+// ===== 盤面データ（保存・復元） =====
+// 盤・交点・持ち駒・ルール・斜め線・棋譜・起点をまとめた復元可能な形。
+function stateJSON(){
+  ensurePts();
+  const lay=a=>(a||[]).map(r=>r.map(x=>x?{t:x.t,p:x.p,o:x.o||undefined}:null));
+  return {v:2, NR,NC,PZ,turn,youAreSente,gameOver,RULES,
+    board:lay(board), pts:lay(ptsBoard), diag:cellDiag.map(r=>r.slice()),
+    capYou:[...capYou], capEnemy:[...capEnemy],
+    start: gameStartSnap? {board:lay(gameStartSnap.board), pts:lay(gameStartSnap.pts),
+                           diag:gameStartSnap.diag?gameStartSnap.diag.map(r=>r.slice()):null,
+                           capYou:gameStartSnap.capYou, capEnemy:gameStartSnap.capEnemy,
+                           turn:gameStartSnap.turn}:null,
+    kifu:kifu.map(k=>({...k}))};
+}
+// 貼り付けた文字列から JSON 部分を取り出す（デバッグ情報まるごとでも読める）
+function extractJSON(text){
+  if(!text) return null;
+  const t=text.trim();
+  let i=t.indexOf('{'), j=t.lastIndexOf('}');
+  if(i<0||j<i) return null;
+  for(let k=i;k>=0;k=t.indexOf('{',k+1)){
+    try{ return JSON.parse(t.slice(k, j+1)); }catch(_){ }
+    if(k>j) break;
+  }
+  return null;
+}
+// 盤面データを読み込んで、その局面（棋譜があれば棋譜つき）から再開できるようにする
+function loadState(text){
+  const d=extractJSON(text);
+  if(!d || !Array.isArray(d.board)) { setStatus('盤面データを読み取れませんでした（JSONを貼り付けてください）','lose'); return false; }
+  exitReplay(); stopAutoLoop(); editing=false; multiSel=[]; sel=null; pendingPromo=null;
+  const lay=(a,rows,cols)=>Array.from({length:rows},(_,r)=>Array.from({length:cols},(_,c)=>{
+    const x=a&&a[r]&&a[r][c]; return x?{t:x.t,p:x.p,...(x.o?{o:x.o}:{})}:null; }));
+  NR=d.NR||d.board.length; NC=d.NC||(d.board[0]?d.board[0].length:9);
+  PZ=(d.PZ!==undefined)?d.PZ:0;
+  board=lay(d.board,NR,NC);
+  ptsBoard=lay(d.pts,NR+1,NC+1);
+  linkLayers(board, ptsBoard);
+  cellDiag=Array.from({length:NR},(_,r)=>Array.from({length:NC},(_,c)=>(d.diag&&d.diag[r]&&d.diag[r][c])||null));
+  capYou=[...(d.capYou||[])]; capEnemy=[...(d.capEnemy||[])];
+  if(d.RULES) Object.keys(RULES).forEach(k=>{ if(d.RULES[k]!==undefined) RULES[k]=d.RULES[k]; });
+  setSennichiteMode(RULES.sennichiteMode||'avoid');
+  youAreSente = d.youAreSente!==undefined? !!d.youAreSente : true;
+  turn = d.turn===-1? -1 : 1;
+  gameOver = false;             // 続きから指せるように必ず再開可能にする
+  history=[]; redoStack.length=0; posCount={}; repLog=[];
+  kifu = Array.isArray(d.kifu)? d.kifu.map(k=>({...k})) : [];
+  // 棋譜つきなら起点も復元してリプレイできるようにする
+  if(d.start && Array.isArray(d.start.board)){
+    gameStartSnap={ board:lay(d.start.board,NR,NC), pts:lay(d.start.pts,NR+1,NC+1),
+      capYou:[...(d.start.capYou||[])], capEnemy:[...(d.start.capEnemy||[])],
+      turn:(d.start.turn===-1?-1:1),
+      diag:(d.start.diag? d.start.diag.map(r=>r.slice()) : cellDiag.map(r=>r.slice())) };
+  } else { gameStartSnap = kifu.length? null : null; }
+  rememberSetup();
+  paused=true;
+  updateSenteLabel(); syncSizeUI(); refreshAutoLabels(); refreshEditLabel();
+  updateMultiBar(); updateEditBar(); updateReplayUI(); updatePlayPauseLabel();
+  render();
+  setStatus('盤面データを読み込みました（'+(kifu.length?kifu.length+'手の棋譜つき・':'')+'▶ 開始 で続きから）','win');
+  return true;
+}
 // クリップボードへコピー（非対応環境ではテキスト選択でフォールバック）
+async function copyText(text, label){
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(text); }
+    else throw new Error('no clipboard api');
+    setStatus(label+'をコピーしました（'+text.length+'文字）','win'); return true;
+  }catch(_){
+    const ta=document.createElement('textarea');
+    ta.value=text; ta.style.cssText='position:fixed;left:0;top:0;opacity:0;';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    let ok=false; try{ ok=document.execCommand('copy'); }catch(__){}
+    ta.remove();
+    setStatus(ok?(label+'をコピーしました（'+text.length+'文字）'):'コピーに失敗しました', ok?'win':'lose');
+    return ok;
+  }
+}
 async function copyDebugReport(){
   const text=debugReport();
   try{
@@ -4255,7 +4363,8 @@ function applyMoveSilent(side,m,_legacySilent){
     }
     recordKifu({side,from:[m.fr,m.fc],to:[m.tr,m.tc],code:pc.t,promo:!!promo0,promoTo:cpawnPromo?'cQ':(promoNew||undefined),cap:tg?tg.t:null,caps:m.caps||undefined,pt:m.pt||undefined});
     let tookRoyal = tg && isRoyal(tg.t);
-    if(tg && RULES.drops){ cap.push(capturedCode(tg)); }
+    // royal（玉・帥など）は持ち駒にしない。取られた側にまだ別のroyalが居ても打ち直せてはいけない
+    if(tg && RULES.drops && !isRoyal(tg.t)){ cap.push(capturedCode(tg)); }
     // 獅子の途中取り（caps：2枚取り・居喰いの対象）
     if(m.caps) for(const [cr,cc] of m.caps){
       const v=LB[cr][cc];
@@ -5375,6 +5484,18 @@ function setEditing(on){
 document.getElementById('accBoardHead').onclick=()=>{
   document.getElementById('accBoard').classList.toggle('open');
 };
+(function(){
+  const head=document.getElementById('accSaveHead');
+  if(head) head.onclick=()=>document.getElementById('accSave').classList.toggle('open');
+  const cp=document.getElementById('saveCopy');
+  if(cp) cp.onclick=()=>copyText(JSON.stringify(stateJSON()), '盤面データ');
+  const cf=document.getElementById('saveCopyFull');
+  if(cf) cf.onclick=()=>copyText(debugReport(), 'デバッグ情報');
+  const lb=document.getElementById('loadBtn');
+  if(lb) lb.onclick=()=>{ const t=document.getElementById('loadBox').value; loadState(t); };
+  const lc=document.getElementById('loadClear');
+  if(lc) lc.onclick=()=>{ document.getElementById('loadBox').value=''; };
+})();
 document.getElementById('accEditHead').onclick=()=>{
   const acc=document.getElementById('accEdit');
   setEditing(!acc.classList.contains('open'));
@@ -5778,9 +5899,27 @@ document.getElementById('pickModal').onclick=(e)=>{ if(e.target.id==='pickModal'
 buildPickGrid();
 
 // 複数選択バー
+// 盤の設定の主要な行を、編集モード中は盤の直下へ移す（終了したら元へ戻す）
+function moveBoardSetupRows(toBar){
+  const slot=document.getElementById('etbBoardSlot');
+  const home=document.querySelector('#accBoard .acc-body.board-setup');
+  if(!slot||!home) return;
+  const ids=['bsRowPreset','bsRowSize','bsRowPZ','bsRowPt'];
+  ids.forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    const target = toBar? slot : home;
+    if(el.parentElement!==target){
+      if(toBar) target.appendChild(el);
+      else home.insertBefore(el, document.getElementById('bsPalaceLabel')||null);
+    }
+  });
+}
 function updateMultiBar(){
   const lb=document.getElementById('editLayerBar');
   if(lb) lb.style.display = editing? 'flex':'none';   // 編集モードのあいだ出す
+  const tb=document.getElementById('editToolsBar');
+  if(tb) tb.style.display = editing? 'block':'none';
+  moveBoardSetupRows(!!editing);
   const bar=document.getElementById('multiBar');
   const cnt=document.getElementById('multiCount');
   if(!bar)return;
@@ -5842,18 +5981,26 @@ function randomPool(){
 }
 function randomReplace(mode){
   if(!editing)return;
-  const pool = randomPool();
+  ensurePts();
+  const poolAll = randomPool();
+  // マス／交点それぞれに置ける駒だけを候補にする（交点駒がマスに出てこないように）
+  const poolFor = isPt => poolAll.filter(t=>layerAllows(t,isPt));
+  for(const L of [board, ptsBoard]){
+  const isPtL = (L===ptsBoard);
+  const pool = poolFor(isPtL);
+  if(!pool.length) continue;
   const nonRoyal = pool.filter(t=>!isRoyal(t));
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-    const pc=board[r][c];
+  for(let r=0;r<LR(L);r++)for(let c=0;c<LC(L);c++){
+    const pc=L[r]&&L[r][c];
     if(!pc) continue;
     let cands;
     if(mode==='full'){
       // 完全ランダム：royalも含め全駒から選ぶ（royal保証は後処理で行う）
       cands=pool;
     } else if(isRoyal(pc.t)){
-      // 王・玉・太子・キングは、他のroyal駒へランダム置換
-      cands=ROYAL_LIST.filter(t=>t!==pc.t);
+      // 王・玉・太子・キングは、他のroyal駒へランダム置換（置ける側のものだけ）
+      cands=pool.filter(t=>isRoyal(t)&&t!==pc.t);
+      if(!cands.length) cands=[pc.t];
     } else if(mode==='power'){
       const base=basePower(pc.t);
       // 範囲を狭める（±2）。候補が少なければ広げて確保
@@ -5867,8 +6014,9 @@ function randomReplace(mode){
     }
     if(cands&&cands.length){
       const nt=cands[Math.floor(Math.random()*cands.length)];
-      board[r][c]={t:nt,p:pc.p};
+      L[r][c]={t:nt,p:pc.p};
     }
+  }
   }
   if(mode==='full') ensureRoyalEachSide();
   render();
