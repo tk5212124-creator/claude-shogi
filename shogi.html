@@ -3834,7 +3834,7 @@ function attemptMove(fr,fc,tr,tc){
   const canP=canPromoteMove(pc.t,fr,tr,me,!!(board[tr][tc]&&board[tr][tc].p!==me));
   if(canP){
     if(mustPromote(pc.t,tr,me)){ doMove(fr,fc,tr,tc,true,me); sel=null; afterPlayer(); return; }
-    pendingPromo={fr,fc,tr,tc};
+    pendingPromo={fr,fc,tr,tc,side:me};   // 成り確認は指した側で適用する（相手の手を自分の手にしない）
     document.getElementById('promoModal').classList.add('show');
     return;
   }
@@ -4063,10 +4063,10 @@ function recordKifu(rec){ kifu.push(rec); if(!(SPEEDS[speedIdx]&&SPEEDS[speedIdx
 document.getElementById('promoYes').onclick=()=>resolvePromo(true);
 document.getElementById('promoNo').onclick=()=>resolvePromo(false);
 function resolvePromo(yes){
-  const {fr,fc,tr,tc}=pendingPromo;
+  const {fr,fc,tr,tc,side}=pendingPromo;
   document.getElementById('promoModal').classList.remove('show');
   pendingPromo=null;
-  doMove(fr,fc,tr,tc,yes,1); sel=null; afterPlayer();
+  doMove(fr,fc,tr,tc,yes, side===undefined? turn : side); sel=null; afterPlayer();
 }
 
 /* ===== 進行 ===== */
