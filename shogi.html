@@ -4341,26 +4341,49 @@ function findKing(b,p){
     for(let r=0;r<LR(L);r++)for(let c=0;c<LC(L);c++){const pc=L[r]&&L[r][c];if(pc&&pc.p===p&&isRoyal(pc.t))return[r,c];}
   return null;
 }
+// 評価は読みの中でいちばん多く呼ばれる。点数の付け方は一切変えずに、
+// 盤を3周（findKing×2＋本体）していたのを2周に減らし、
+// 内側のループから LR/LC の呼び出しと行の添字引きを追い出してある。
 function evaluate(b,cy,ce){ // 相手(-1)視点で大きいほど良い
   let s=0;
-  const ek=findKing(b,-1), yk=findKing(b,1);
-  const layers=(b&&b.L&&b.L.pts)? [b, b.L.pts] : [b];
-  for(const L of layers)
-  for(let r=0;r<LR(L);r++)for(let c=0;c<LC(L);c++){
-    const pc=L[r]&&L[r][c]; if(!pc)continue;
-    let v=VALUE[pc.t];
-    if(pc.t!=='K'){
-      const adv = pc.p===-1? r : (NR-1-r);       // 前進ボーナス
-      v += adv*7;
-      // 敵玉への接近ボーナス（攻撃性）
-      const tk = pc.p===-1? yk : ek;
-      if(tk){ const d=Math.abs(r-tk[0])+Math.abs(c-tk[1]); v += Math.max(0,16-d)*4; }
-    }
-    s += pc.p===-1? v : -v;
+  const pts=(b&&b.L&&b.L.pts)||null;
+  const NL=pts?2:1;
+  // 玉の位置を1周でまとめて拾う。走査順は findKing と同じ（マス→交点／上から）なので
+  // 玉が複数居ても選ばれる1枚は従来と変わらない。
+  let ek=null, yk=null;
+  for(let li=0; li<NL && !(ek&&yk); li++){
+    const L=li?pts:b, RR=LR(L), CC=LC(L);
+    for(let r=0;r<RR && !(ek&&yk);r++){ const row=L[r]; if(!row) continue;
+      for(let c=0;c<CC;c++){ const pc=row[c];
+        if(pc && isRoyal(pc.t)){
+          if(pc.p===-1){ if(!ek){ ek=[r,c]; if(yk) break; } }
+          else if(!yk){ yk=[r,c]; if(ek) break; }
+        }
+      } }
+  }
+  const ekr=ek?ek[0]:0, ekc=ek?ek[1]:0, ykr=yk?yk[0]:0, ykc=yk?yk[1]:0;
+  for(let li=0; li<NL; li++){
+    const L=li?pts:b, RR=LR(L), CC=LC(L);
+    for(let r=0;r<RR;r++){ const row=L[r]; if(!row) continue;
+      const advE=r*7, advY=(NR-1-r)*7;              // 前進ボーナス（行で決まるので先に出す）
+      for(let c=0;c<CC;c++){
+        const pc=row[c]; if(!pc) continue;
+        let v=VALUE[pc.t];
+        if(pc.t!=='K'){
+          const en = pc.p===-1;
+          v += en? advE : advY;
+          // 敵玉への接近ボーナス（攻撃性）
+          if(en? yk : ek){
+            const d = en? (Math.abs(r-ykr)+Math.abs(c-ykc)) : (Math.abs(r-ekr)+Math.abs(c-ekc));
+            if(d<16) v += (16-d)*4;
+          }
+        }
+        s += pc.p===-1? v : -v;
+      } }
   }
   // 持ち駒（打てる駒は価値やや高め）
-  ce.forEach(t=>s += VALUE[t]*1.05);
-  cy.forEach(t=>s -= VALUE[t]*1.05);
+  for(let i=0;i<ce.length;i++) s += VALUE[ce[i]]*1.05;
+  for(let i=0;i<cy.length;i++) s -= VALUE[cy[i]]*1.05;
   // 玉の安全度：玉が盤端・囲いから出ているとペナルティ的に評価
   return s;
 }
