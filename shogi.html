@@ -161,6 +161,18 @@
   .edit-tools-bar{width:100%;max-width:430px;margin-top:8px;padding:8px 10px;border-radius:12px;
     background:linear-gradient(160deg,#2f7d5e,#1f5e44);border:1px solid var(--sel);
     box-shadow:0 4px 16px rgba(98,209,160,.25);}
+  /* 使い方（？）ボタンとヘルプ本文 */
+  #helpBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:10px;z-index:120;
+    width:38px;height:38px;min-height:0;padding:0;border-radius:50%;font-size:1.15rem;font-weight:900;
+    background:linear-gradient(160deg,#4a3a6e,#2e2447);border:1px solid rgba(245,207,107,.55);color:var(--gold);
+    box-shadow:0 2px 10px rgba(0,0,0,.5);}
+  .help-body{max-height:64vh;overflow-y:auto;text-align:left;font-size:.8rem;line-height:1.7;color:#e6dcff;}
+  .help-body h3{color:var(--gold);font-size:.86rem;margin:12px 0 4px;letter-spacing:.06em;}
+  .help-body h3:first-child{margin-top:0;}
+  .help-body p{margin:0 0 6px;}
+  .help-body ul{margin:0 0 6px;padding-left:1.1em;}
+  .help-body li{margin:2px 0;}
+  .help-body b{color:#fff;}
   #loadBox{width:100%;box-sizing:border-box;margin:6px 0;padding:8px;border-radius:8px;
     background:rgba(12,9,26,.75);color:#e6dcff;border:1px solid rgba(139,107,255,.4);
     font-size:.72rem;font-family:ui-monospace,monospace;resize:vertical;}
@@ -840,6 +852,7 @@
 </style>
 </head>
 <body>
+  <button type="button" id="helpBtn" title="使い方">？</button>
   <h1>将棋</h1>
   <div class="sub" id="senteLabel">対 局 ・ 先 手 が あ な た</div>
   <div class="sub" style="font-size:.62rem;color:#7d6e57;margin-top:-8px;">「編集ツール」で大局将棋 全209種＋成92種を配置できます</div>
@@ -1132,6 +1145,68 @@
           <button id="emDiagN" data-d="">なし</button>
         </div>
         <button id="diagClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="promo-modal" id="helpModal">
+    <div class="pick-box" style="max-width:min(94vw,460px);">
+      <p>使い方</p>
+      <div class="help-body">
+        <h3>これは何？</h3>
+        <p>本将棋から大局将棋・チェス・シャンチー・チャンギ・どうぶつしょうぎ・オセロ・囲碁・はさみ将棋まで、
+           1つの盤で遊べるアプリです。ルールも駒も盤の形も自由に組み替えられます。</p>
+
+        <h3>対局する</h3>
+        <ul>
+          <li><b>▶ 開始</b>で対局開始。<b>⏸ 一時停止</b>で止まります。</li>
+          <li><b>あなた／相手</b>のボタンで <b>手動⇄CPU</b> を切り替え。CPU同士の観戦もできます。</li>
+          <li><b>速度</b>は CPU の考える速さ（超高速では演出を省きます）。</li>
+          <li>駒はタップして選び、光った場所をタップで移動。持ち駒は上下の欄からタップ。</li>
+          <li><b>◀ 待った</b>で1手戻す、<b>▶❘ 1手進める</b>でCPUに1手だけ指させます。</li>
+        </ul>
+
+        <h3>盤や駒を変える（盤の設定）</h3>
+        <ul>
+          <li><b>プリセット</b>…15種類の初期配置。「適用」で切り替わります。</li>
+          <li><b>行 × 列</b>…盤の大きさ（3〜40）。「作成」で変更（駒は消えません）。</li>
+          <li><b>敵陣</b>…何段目までを敵陣（成りゾーン）にするか。</li>
+          <li><b>駒の置き方</b>…マスの中／線の交点。囲碁・シャンチー・チャンギの駒は交点に置きます。</li>
+          <li><b>九宮をつくる</b>…シャンチー用の宮を作ります。</li>
+        </ul>
+
+        <h3>駒を並べ替える（編集ツール）</h3>
+        <p>「編集ツール」を開くと編集モードです。盤の外を長押ししても入れます。</p>
+        <ul>
+          <li>マスや交点を<b>長押し</b>→ 駒の変更・説明・複数選択・宮マス変更。</li>
+          <li>駒を<b>ドラッグ</b>して移動。<b>持ち駒欄</b>へ落とすと持ち駒に、<b>ゴミ箱</b>へ落とすと削除。</li>
+          <li><b>置く場所</b>で「マスの中／線の交点」を選んでから置きます。</li>
+          <li>自陣⇄敵陣のコピー、ランダム置換、盤を空にする、記憶した配置に戻す、も編集モード中に出ます。</li>
+          <li>駒一覧の各見出しにある<b>プリセット配置</b>で、選んだ場所を左上にして自陣ぶんを並べられます。</li>
+        </ul>
+
+        <h3>ルールを変える（ルール設定）</h3>
+        <ul>
+          <li>持ち駒・二歩・千日手・パス・成る条件（敵陣／最奥／駒を取ったら）など。</li>
+          <li><b>取り切るまで戦う</b>…王の有無に関係なく、相手の駒を全部取ったら勝ち。</li>
+          <li>シャンチー（王不見王・宮から出る）／チャンギ（ビッチャングン・馬象の並び）も個別に設定できます。</li>
+        </ul>
+
+        <h3>保存・読み込み</h3>
+        <ul>
+          <li><b>ルール・初期配置をコピー</b>…いまの盤とルールを文字にします。貼り付ければ同じ設定で始められます。</li>
+          <li><b>棋譜（ルール・初期配置含む）をコピー</b>…指し手つき。貼り付ければ<b>途中から再開</b>できます。</li>
+        </ul>
+
+        <h3>その他</h3>
+        <ul>
+          <li><b>棋譜リプレイ</b>…指した手を再生・コマ送りで見返せます。</li>
+          <li><b>音・演出</b>…効果音と演出のON/OFF。<b>BGM</b>は別ボタン。</li>
+          <li><b>先後入替</b>…あなたと相手を入れ替えます。</li>
+        </ul>
+      </div>
+      <div class="pick-actions">
+        <button class="primary" id="helpClose">閉じる</button>
       </div>
     </div>
   </div>
@@ -1552,8 +1627,8 @@ TP['XK']={n:'Shuai(Xiangqi)',k:'帥',pr:null,v:99999,fl:['xiangqi','royal'],m:[[
 TP['XKb']={n:'Jiang(Xiangqi)',k:'將',pr:null,v:99999,fl:['xiangqi','royal'],m:[[-1,0,1],[1,0,1],[0,-1,1],[0,1,1]]};
 TP['XA']={n:'Advisor(Xiangqi)',k:'仕',pr:null,v:150,fl:['xiangqi'],m:[[-1,-1,1],[-1,1,1],[1,-1,1],[1,1,1]]};
 TP['XAb']={n:'Advisor(Xiangqi)',k:'士',pr:null,v:150,fl:['xiangqi'],m:[[-1,-1,1],[-1,1,1],[1,-1,1],[1,1,1]]};
-TP['XE']={n:'Elephant(Xiangqi)',k:'相',pr:null,v:170,fl:['xiangqi'],m:[[-2,-2,'J'],[-2,2,'J'],[2,-2,'J'],[2,2,'J']]};
-TP['XEb']={n:'Elephant(Xiangqi)',k:'象',pr:null,v:170,fl:['xiangqi'],m:[[-2,-2,'J'],[-2,2,'J'],[2,-2,'J'],[2,2,'J']]};
+TP['XE']={n:'Elephant(Xiangqi)',k:'相',pr:null,v:170,fl:['xiangqi','noriver'],m:[[-2,-2,'J'],[-2,2,'J'],[2,-2,'J'],[2,2,'J']]};
+TP['XEb']={n:'Elephant(Xiangqi)',k:'象',pr:null,v:170,fl:['xiangqi','noriver'],m:[[-2,-2,'J'],[-2,2,'J'],[2,-2,'J'],[2,2,'J']]};
 TP['XH']={n:'Horse(Xiangqi)',k:'傌',pr:null,v:330,fl:['xiangqi'],m:[[-2,-1,'J'],[-2,1,'J'],[2,-1,'J'],[2,1,'J'],[-1,-2,'J'],[-1,2,'J'],[1,-2,'J'],[1,2,'J']]};
 TP['XHb']={n:'Horse(Xiangqi)',k:'馬',pr:null,v:330,fl:['xiangqi'],m:[[-2,-1,'J'],[-2,1,'J'],[2,-1,'J'],[2,1,'J'],[-1,-2,'J'],[-1,2,'J'],[1,-2,'J'],[1,2,'J']]};
 TP['XR']={n:'Chariot(Xiangqi)',k:'俥',pr:null,v:600,fl:['xiangqi'],m:[[-1,0,'F'],[1,0,'F'],[0,-1,'F'],[0,1,'F']]};
@@ -1561,9 +1636,9 @@ TP['XRb']={n:'Chariot(Xiangqi)',k:'車',pr:null,v:600,fl:['xiangqi'],m:[[-1,0,'F
 TP['XC']={n:'Cannon(Xiangqi)',k:'炮',pr:null,v:450,fl:['xiangqi','cannon'],m:[[-1,0,'F'],[1,0,'F'],[0,-1,'F'],[0,1,'F']]};
 TP['XCb']={n:'Cannon(Xiangqi)',k:'砲',pr:null,v:450,fl:['xiangqi','cannon'],m:[[-1,0,'F'],[1,0,'F'],[0,-1,'F'],[0,1,'F']]};
 TP['XP']={n:'Soldier(Xiangqi)',k:'兵',pr:'+XP',v:100,fl:['xiangqi','xpawn'],m:[[-1,0,1]]};
-TP['+XP']={n:'Soldier crossed',k:'兵',pr:null,v:200,fl:['xiangqi'],m:[[-1,0,1],[0,-1,1],[0,1,1]]};
+TP['+XP']={n:'Soldier crossed',k:'兵成',pr:null,v:200,fl:['xiangqi'],m:[[-1,0,1],[0,-1,1],[0,1,1]]};
 TP['XPb']={n:'Soldier(Xiangqi)',k:'卒',pr:'+XPb',v:100,fl:['xiangqi','xpawn'],m:[[-1,0,1]]};
-TP['+XPb']={n:'Soldier crossed',k:'卒',pr:null,v:200,fl:['xiangqi'],m:[[-1,0,1],[0,-1,1],[0,1,1]]};
+TP['+XPb']={n:'Soldier crossed',k:'卒成',pr:null,v:200,fl:['xiangqi'],m:[[-1,0,1],[0,-1,1],[0,1,1]]};
 const XIANGQI_LIST=['XK','XA','XE','XH','XR','XC','XP','XKb','XAb','XEb','XHb','XRb','XCb','XPb'];
 
 // ===== チャンギ（韓国将棋）の駒 =====
@@ -1602,6 +1677,8 @@ function blockCellsFor(t,dr,dc){
   if(ar===2&&ac===3) return [[0,sc],[sr,2*sc]];  // チャンギの象：横1＋斜め2 → 途中2マス
   return null;
 }
+// 河を渡れない駒（シャンチーの象・相）。fl:'noriver' を持つ駒。
+function cantCrossRiver(t){ const fl=(TP[t]&&TP[t].fl)||[]; return fl.includes('noriver'); }
 function isJCannon(t){ return t==='JC'||t==='JCb'; }
 function isJPawn(t){ return t==='JP'||t==='JPb'; }
 function isJPalaceBound(t){ return t==='JK'||t==='JKb'||t==='JA'||t==='JAb'; }
@@ -2906,6 +2983,13 @@ function moves(b,r,c){
       }
     }
   }
+  // 象・相は河を渡れない（自陣側の半分から出られない）。敵陣の深さ(PZ)を河の位置とする
+  if(cantCrossRiver(pc.t) && PZ>0){
+    const rows=LR(b);
+    const ownHalf = (rr)=> p===1 ? rr>=rows-PZ : rr<PZ;
+    if(!ownHalf(r)) return [];                       // すでに河の向こうなら動けない
+    return res.filter(([tr])=>ownHalf(tr));
+  }
   // 斜めに動ける駒は、半歩ずれた「もう一方のレイヤー」の点にも進める
   if(crossLayerOn(b,r,c)) res.push(...crossLayerMoves(b,r,c,p,flip,vecs));
   // 範囲攻撃（大将・副将・角将・飛将・猛龍・飛鰐）：格下駒を飛び越えて進める
@@ -3253,9 +3337,11 @@ function dropTargets(b,t,p){
   const rows=LR(b), cols=LC(b);
   // 宮から出られない駒（帥・將／仕・士／漢・楚）は、宮の外へは打てない
   const palaceOnly = isPalaceBound(t) && !RULES.palaceEscape;
+  const riverOnly = cantCrossRiver(t) && PZ>0;
   for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
     if(b[r]&&b[r][c])continue;
     if(palaceOnly && !(isPt? isPalacePoint(r,c) : isPalaceCell(r,c))) continue;
+    if(riverOnly && !(p===1 ? r>=rows-PZ : r<PZ)) continue;   // 象は河を渡れない
     // 行き所のない駒の禁止
     const last = p===1?0:rows-1, last2 = p===1?[0,1]:[rows-2,rows-1];
     if(t==='hP'||t==='hL'||t==='P'||t==='L'){ if(r===last)continue; }
@@ -3962,7 +4048,7 @@ function goCaptureScan(){
     for(const [dr,dc] of orth){
       const nr=r+dr,nc=c+dc;
       if(nr<0||nr>=NR||nc<0||nc>=NC) continue;          // 盤端は壁＝囲み成立側
-      const n=pieceAt(nr,nc);
+      const n=layer[nr]&&layer[nr][nc];   // 隣は同じ層で見る（別層の点は半マスずれていて隣ではない）
       if(!n || n.p!==enemy){ surrounded=false; break; } // 空 or 敵でない(味方含む)＝囲まれていない
     }
     if(surrounded) caps.push([r,c,enemy,q.t,layer]);
@@ -3987,7 +4073,7 @@ function goSurroundCapture(r,c,side){
       let surr=true;
       for(const [ar,ac] of orth){
         const rr=nr+ar, cc=nc+ac; if(rr<0||rr>=NR||cc<0||cc>=NC) continue;  // 盤端は壁
-        const t=pieceAt(rr,cc);
+        const t=layer[rr]&&layer[rr][cc];   // 同じ層の縦横4方だけを見る
         if(!t || t.p!==side){ surr=false; break; }
       }
       if(surr){ if(RULES.drops && !isRoyal(q.t)) cap.push(capturedCode(q)); layer[nr][nc]=null; n++; }
@@ -6297,6 +6383,12 @@ function openRuleModal(){
   document.getElementById('rDrawBothEnter').checked=RULES.drawBothEnter;
   document.getElementById('ruleModal').classList.add('show');
 }
+(function(){
+  const b=document.getElementById('helpBtn'), m=document.getElementById('helpModal');
+  if(b) b.onclick=()=>m.classList.add('show');
+  const c=document.getElementById('helpClose'); if(c) c.onclick=()=>m.classList.remove('show');
+  if(m) m.onclick=(e)=>{ if(e.target.id==='helpModal') m.classList.remove('show'); };
+})();
 document.getElementById('ruleBtn').onclick=openRuleModal;
 document.getElementById('ruleClose').onclick=()=>{ document.getElementById('ruleModal').classList.remove('show'); };
 document.getElementById('ruleModal').onclick=(e)=>{ if(e.target.id==='ruleModal') document.getElementById('ruleModal').classList.remove('show'); };
