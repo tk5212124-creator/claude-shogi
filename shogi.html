@@ -4041,17 +4041,13 @@ function goCaptureScan(){
   const orth=[[-1,0],[1,0],[0,-1],[0,1]];
   const caps=[];
   // 碁石の囲みは「マス・交点に関係なく」判定する（隣は2層のどちらでも可）
-  for(const layer of [board,ptsBoard])
-  for(let r=0;r<(layer===ptsBoard?NR+1:NR);r++)for(let c=0;c<(layer===ptsBoard?NC+1:NC);c++){
-    const q=layer[r]&&layer[r][c]; if(!q||!isGo(q.t))continue;
-    const enemy=-q.p; let surrounded=true;
-    for(const [dr,dc] of orth){
-      const nr=r+dr,nc=c+dc;
-      if(nr<0||nr>=NR||nc<0||nc>=NC) continue;          // 盤端は壁＝囲み成立側
-      const n=layer[nr]&&layer[nr][nc];   // 隣は同じ層で見る（別層の点は半マスずれていて隣ではない）
-      if(!n || n.p!==enemy){ surrounded=false; break; } // 空 or 敵でない(味方含む)＝囲まれていない
+  for(const layer of [board,ptsBoard]){
+    const isPt=(layer===ptsBoard);
+    for(let r=0;r<(isPt?NR+1:NR);r++)for(let c=0;c<(isPt?NC+1:NC);c++){
+      const q=layer[r]&&layer[r][c]; if(!q||!isGo(q.t))continue;
+      const enemy=-q.p;
+      if(isSurrounded(isPt,r,c,board,ptsBoard, n=>n.p===enemy)) caps.push([r,c,enemy,q.t,layer]);
     }
-    if(surrounded) caps.push([r,c,enemy,q.t,layer]);
   }
   for(const [r,c,enemy,t,layer] of caps){
     layer[r][c]=null;
@@ -4059,24 +4055,54 @@ function goCaptureScan(){
   }
   return caps.length;
 }
+/* ===== 囲みの判定 =====
+   同じ層の駒は「上下左右の4つ」、別の層の駒は「斜め半歩の4つ」で囲む。
+     対象がマス(r,c)   → その正方形の4頂点の交点 (r,c)(r,c+1)(r+1,c)(r+1,c+1)
+     対象が交点(R,C)   → その点を頂点とする4マス (R-1,C-1)(R-1,C)(R,C-1)(R,C)
+   盤の外は壁として囲み成立側に数える。 */
+function surroundNeighbors(isPt, r, c){
+  return {
+    same : [[r-1,c],[r+1,c],[r,c-1],[r,c+1]],
+    other: isPt ? [[r-1,c-1],[r-1,c],[r,c-1],[r,c]]
+                : [[r,c],[r,c+1],[r+1,c],[r+1,c+1]]
+  };
+}
+// (r,c) の駒（層 isPt）が ok を満たす駒だけに囲まれているか
+function isSurrounded(isPt, r, c, cells, pts, ok){
+  const N=surroundNeighbors(isPt,r,c);
+  const check=(list, arr, rows, cols)=>{
+    let real=0;
+    for(const [rr,cc] of list){
+      if(rr<0||rr>=rows||cc<0||cc>=cols) continue;     // 盤端は壁
+      const q=arr[rr]&&arr[rr][cc];
+      if(!q||!ok(q)) return false;
+      real++;
+    }
+    return real>0;                                     // 全部盤外なら囲みではない
+  };
+  const L=isPt?pts:cells, O=isPt?cells:pts;
+  const lr=isPt?NR+1:NR, lc=isPt?NC+1:NC;
+  const or=isPt?NR:NR+1, oc=isPt?NC:NC+1;
+  return check(N.same,L,lr,lc) || check(N.other,O,or,oc);
+}
 // 碁石を打った直後：その石が囲んだ領域の駒を、マス・交点に関係なく取る。
 function goSurroundCapture(r,c,side){
   ensurePts();
-  const orth=[[-1,0],[1,0],[0,-1],[0,1]];
   const cap = side===1? capYou : capEnemy;
   let n=0;
-  for(const [dr,dc] of orth){
-    const nr=r+dr, nc=c+dc; if(nr<0||nr>=NR||nc<0||nc>=NC) continue;
-    for(const layer of [board,ptsBoard]){
-      const q=layer[nr]&&layer[nr][nc];
-      if(!q||q.p===side||isGo(q.t)) continue;      // 碁石どうしは goCaptureScan が担当
-      let surr=true;
-      for(const [ar,ac] of orth){
-        const rr=nr+ar, cc=nc+ac; if(rr<0||rr>=NR||cc<0||cc>=NC) continue;  // 盤端は壁
-        const t=layer[rr]&&layer[rr][cc];   // 同じ層の縦横4方だけを見る
-        if(!t || t.p!==side){ surr=false; break; }
-      }
-      if(surr){ if(RULES.drops && !isRoyal(q.t)) cap.push(capturedCode(q)); layer[nr][nc]=null; n++; }
+  const N=surroundNeighbors(true,r,c);          // 打った石は交点レイヤー
+  const targets=[];
+  N.same.forEach(([rr,cc])=>targets.push([rr,cc,true]));    // 同じ層（交点）の上下左右
+  N.other.forEach(([rr,cc])=>targets.push([rr,cc,false]));  // 別の層（マス）の斜め半歩
+  for(const [nr,nc,isPt] of targets){
+    const rows=isPt?NR+1:NR, cols=isPt?NC+1:NC;
+    if(nr<0||nr>=rows||nc<0||nc>=cols) continue;
+    const layer=isPt?ptsBoard:board;
+    const q=layer[nr]&&layer[nr][nc];
+    if(!q||q.p===side||isGo(q.t)) continue;      // 碁石どうしは goCaptureScan が担当
+    if(isSurrounded(isPt,nr,nc,board,ptsBoard, t=>t.p===side)){
+      if(RULES.drops && !isRoyal(q.t)) cap.push(capturedCode(q));
+      layer[nr][nc]=null; n++;
     }
   }
   return n;
@@ -4401,32 +4427,32 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
   }
   // 囲碁の囲み取り。碁石は「囲んだ領域の駒はマス・交点に関係なく取れる」ので2層を通して数える
   function simGoCapture(){
-    const orth=[[-1,0],[1,0],[0,-1],[0,1]];
-    const at=(r,c)=>(nb[r]&&nb[r][c])||(npts[r]&&npts[r][c])||null;
-    for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-      for(const layer of [nb,npts]){
+    for(const layer of [nb,npts]){
+      const isPt=(layer===npts);
+      for(let r=0;r<(isPt?NR+1:NR);r++)for(let c=0;c<(isPt?NC+1:NC);c++){
         const q=layer[r]&&layer[r][c]; if(!q||!isGo(q.t))continue;
-        const enemy=-q.p; let surr=true;
-        for(const [dr,dc] of orth){ const nr=r+dr,nc=c+dc; if(nr<0||nr>=NR||nc<0||nc>=NC)continue;
-          const n=at(nr,nc); if(!n||n.p!==enemy){surr=false;break;} }
-        if(surr){ layer[r][c]=null; if(RULES.drops) (enemy===1?ncy:nce).push(q.t); }
+        const enemy=-q.p;
+        if(isSurrounded(isPt,r,c,nb,npts, n=>n.p===enemy)){
+          layer[r][c]=null; if(RULES.drops) (enemy===1?ncy:nce).push(q.t);
+        }
       }
     }
   }
   // 碁石が囲んだ領域の駒を取る（層に関係なく）。囲碁石を打った直後に判定する。
   function simGoSurround(r,c,side){
-    const orth=[[-1,0],[1,0],[0,-1],[0,1]];
-    for(const [dr,dc] of orth){
-      const nr=r+dr, nc=c+dc; if(nr<0||nr>=NR||nc<0||nc>=NC) continue;
-      for(const layer of [nb,npts]){
-        const q=layer[nr]&&layer[nr][nc];
-        if(!q||q.p===side||isGo(q.t)) continue;
-        let surr=true;
-        for(const [ar,ac] of orth){ const rr=nr+ar, cc=nc+ac;
-          if(rr<0||rr>=NR||cc<0||cc>=NC) continue;
-          const n=(nb[rr]&&nb[rr][cc])||(npts[rr]&&npts[rr][cc]);
-          if(!n||n.p!==side){ surr=false; break; } }
-        if(surr){ if(isRoyal(q.t)) king=true; else if(RULES.drops) myCap.push(demoteOf(q.t)); layer[nr][nc]=null; }
+    const N=surroundNeighbors(true,r,c);
+    const targets=[];
+    N.same.forEach(([rr,cc])=>targets.push([rr,cc,true]));
+    N.other.forEach(([rr,cc])=>targets.push([rr,cc,false]));
+    for(const [nr,nc,isPt] of targets){
+      const rows=isPt?NR+1:NR, cols=isPt?NC+1:NC;
+      if(nr<0||nr>=rows||nc<0||nc>=cols) continue;
+      const layer=isPt?npts:nb;
+      const q=layer[nr]&&layer[nr][nc];
+      if(!q||q.p===side||isGo(q.t)) continue;
+      if(isSurrounded(isPt,nr,nc,nb,npts, t=>t.p===side)){
+        if(isRoyal(q.t)) king=true; else if(RULES.drops) myCap.push(demoteOf(q.t));
+        layer[nr][nc]=null;
       }
     }
   }
