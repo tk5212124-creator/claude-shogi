@@ -930,6 +930,7 @@
     <div class="bs-note">開くと編集モードです。盤のマスをタップして駒を配置・変更できます（閉じると編集終了）。</div>
     <div class="edit-bar-row">
       <button id="copyToEnemy">自陣の配置を敵にコピー</button>
+      <button id="copyToYou">敵陣の配置を自陣にコピー</button>
       <button id="randomPower">ランダム置換（強さ近い）</button>
       <button id="randomRank">ランダム置換（同じ格）</button>
       <button id="randomFull">ランダム置換（完全）</button>
@@ -2046,7 +2047,7 @@ const clampDim=v=>Math.max(BOARD_MIN,Math.min(BOARD_MAX,v|0));
 let ptsBoard=[];
 function emptyBoard(){
   board=Array.from({length:NR},()=>Array(NC).fill(null));
-  ptsBoard=Array.from({length:NR},()=>Array(NC).fill(null));
+  ptsBoard=Array.from({length:NR+1},()=>Array(NC+1).fill(null));
   linkLayers(board, ptsBoard);
   initDiag();
 }
@@ -2060,9 +2061,9 @@ function linkLayers(cells, pts){
 function cloneLayer(a){ return (a||[]).map(row=>row.map(x=>x?{...x}:null)); }
 // board と同じ形の空の交点レイヤーを用意する（サイズ変更・復元後の保険）
 function ensurePts(){
-  if(!ptsBoard || ptsBoard.length!==NR || (ptsBoard[0]||[]).length!==NC){
+  if(!ptsBoard || ptsBoard.length!==NR+1 || (ptsBoard[0]||[]).length!==NC+1){
     const old=ptsBoard||[];
-    ptsBoard=Array.from({length:NR},(_,r)=>Array.from({length:NC},(_,c)=>(old[r]&&old[r][c])||null));
+    ptsBoard=Array.from({length:NR+1},(_,r)=>Array.from({length:NC+1},(_,c)=>(old[r]&&old[r][c])||null));
   }
   linkLayers(board, ptsBoard);
 }
@@ -2087,18 +2088,18 @@ function layerAllows(t, isPt){
 function syncLayers(){
   ensurePts();
   if(RULES.pointMode==='free') return;   // 自由配置は置いた場所をそのまま保つ
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-    const cell=board[r][c], pt=ptsBoard[r][c];
+  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){
+    const cell=(r<NR&&c<NC)?board[r][c]:null, pt=ptsBoard[r]&&ptsBoard[r][c];
     if(cell && goesOnPoint(cell.t)){                       // マス→交点へ
       if(!pt){ ptsBoard[r][c]=cell; board[r][c]=null; }
     }
-    if(pt && !goesOnPoint(pt.t)){                          // 交点→マスへ
+    if(pt && !goesOnPoint(pt.t) && r<NR && c<NC){          // 交点→マスへ（盤の外の交点はそのまま）
       if(!board[r][c]){ board[r][c]=pt; ptsBoard[r][c]=null; }
     }
   }
 }
 // (r,c) にある駒を層を問わず返す（描画・数え上げ用）
-function pieceAt(r,c){ return board[r][c] || (ptsBoard[r]&&ptsBoard[r][c]) || null; }
+function pieceAt(r,c){ return (board[r]&&board[r][c]) || (ptsBoard[r]&&ptsBoard[r][c]) || null; }
 // 九宮の交差マス（×）＝2層の共有点。ここだけは層をまたいで取り合える。
 function isSharedPoint(r,c){ return getDiag(r,c)==='x'; }
 // ===== マスの斜め線属性 =====
@@ -2313,7 +2314,7 @@ function resizeKeepPieces(rows, cols){
   const cy=[...capYou], ce=[...capEnemy];
   NR=rows; NC=cols;
   board=Array.from({length:NR},()=>Array(NC).fill(null));
-  ptsBoard=Array.from({length:NR},()=>Array(NC).fill(null));
+  ptsBoard=Array.from({length:NR+1},()=>Array(NC+1).fill(null));
   linkLayers(board, ptsBoard);
   cellDiag=Array.from({length:NR},()=>Array(NC).fill(null));
   const rr=Math.min(rows,oR), cc=Math.min(cols,oC);
@@ -2559,6 +2560,9 @@ function crossPointOf(b,r,c,dr,dc){
   if(rr<0||rr>=NR||cc<0||cc>=NC) return null;
   return [rr,cc];
 }
+// レイヤーごとの広さ。交点はマスの角なので、縦横とも1本ずつ多い。
+function LR(b){ return (b&&b.isPts)? NR+1 : NR; }
+function LC(b){ return (b&&b.isPts)? NC+1 : NC; }
 function otherLayer(b){ return (b&&b.L) ? (b.isPts? b.L.cells : b.L.pts) : null; }
 // 斜めに「飛び越えて」動く駒（馬・象・桂馬型など）が、跳び越える途中で通る相手レイヤーの点。
 // 走りの斜めは交点駒に塞がれるだけで取れないが、飛び越える駒はそこの駒を取れる。
@@ -2612,7 +2616,7 @@ function moves(b,r,c){
     const res=[];
     for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){
       let nr=r+dr, nc=c+dc, jumped=false;
-      while(nr>=0&&nr<NR&&nc>=0&&nc<NC){
+      while(nr>=0&&nr<LR(b)&&nc>=0&&nc<LC(b)){
         const q=b[nr][nc];
         if(!jumped){
           if(q){ if(isJCannon(q.t)) break;  // 包は台にできない
@@ -2632,7 +2636,7 @@ function moves(b,r,c){
     const res=[]; const dir = p===1? -1 : 1;
     const cand=[[r+dir,c],[r,c-1],[r,c+1]];
     for(const [nr,nc] of cand){
-      if(nr<0||nr>=NR||nc<0||nc>=NC) continue;
+      if(nr<0||nr>=LR(b)||nc<0||nc>=LC(b)) continue;
       const q=b[nr][nc]; if(!q||q.p!==p) res.push([nr,nc]);
     }
     res.push(...janggiDiagMoves(b,r,c,p,'step',true));  // 宮の斜め線に沿った前進
@@ -2644,7 +2648,7 @@ function moves(b,r,c){
     const res=[];
     for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){
       let nr=r+dr, nc=c+dc, jumped=false;
-      while(nr>=0&&nr<NR&&nc>=0&&nc<NC){
+      while(nr>=0&&nr<LR(b)&&nc>=0&&nc<LC(b)){
         const q=b[nr][nc];
         if(!jumped){
           if(!q){ res.push([nr,nc]); }        // 砲台の手前までは移動可
@@ -2662,7 +2666,7 @@ function moves(b,r,c){
     const res=[];
     for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){
       let nr=r+dr, nc=c+dc;
-      while(nr>=0&&nr<NR&&nc>=0&&nc<NC){
+      while(nr>=0&&nr<LR(b)&&nc>=0&&nc<LC(b)){
         if(b[nr][nc]) break;   // 駒があれば止まる
         res.push([nr,nc]);
         nr+=dr; nc+=dc;
@@ -2675,17 +2679,17 @@ function moves(b,r,c){
     const res=[];
     const dir = p===1? -1 : 1; // あなたは上(-1)、相手は下(+1)
     const one=r+dir;
-    if(one>=0&&one<NR && !b[one][c]){
+    if(one>=0&&one<LR(b) && !b[one][c]){
       res.push([one,c]);
       // 初期段なら2マス（両方空）
-      const startRow = p===1? NR-3 : 2;
+      const startRow = p===1? LR(b)-3 : 2;
       const two=r+dir*2;
-      if(r===startRow && two>=0&&two<NR && !b[two][c]) res.push([two,c]);
+      if(r===startRow && two>=0&&two<LR(b) && !b[two][c]) res.push([two,c]);
     }
     // 斜め取り（通常）
     for(const dc of [-1,1]){
       const nr=r+dir, nc=c+dc;
-      if(nr<0||nr>=NR||nc<0||nc>=NC)continue;
+      if(nr<0||nr>=LR(b)||nc<0||nc>=LC(b))continue;
       const tg=b[nr][nc];
       if(tg && tg.p!==p) res.push([nr,nc]);
     }
@@ -2695,7 +2699,7 @@ function moves(b,r,c){
       for(const dc of [-1,1]){
         if(ep.col===c+dc){
           const nr=r+dir, nc=c+dc;
-          if(nr>=0&&nr<NR&&nc>=0&&nc<NC && !b[nr][nc]) res.push([nr,nc]);
+          if(nr>=0&&nr<LR(b)&&nc>=0&&nc<LC(b) && !b[nr][nc]) res.push([nr,nc]);
         }
       }
     }
@@ -2710,11 +2714,11 @@ function moves(b,r,c){
     if(flip){ dr=-dr; dc=-dc; }
     if(v.r==='jump'){
       const nr=r+dr, nc=c+dc;
-      if(nr<0||nr>=NR||nc<0||nc>=NC)continue;
+      if(nr<0||nr>=LR(b)||nc<0||nc>=LC(b))continue;
       // シャンチー・チャンギの馬／象は駒を飛び越えられない（蹩馬腿・塞象眼）
       const bl=blockCellsFor(pc.t,dr,dc);
       if(bl && bl.some(([br,bc])=>{ const rr=r+br, cc=c+bc;
-        return rr>=0&&rr<NR&&cc>=0&&cc<NC&&b[rr][cc]; })) continue;
+        return rr>=0&&rr<LR(b)&&cc>=0&&cc<LC(b)&&b[rr][cc]; })) continue;
       const tg=b[nr][nc];
       if(tg&&tg.p===p)continue;
       if(sharedBlockAt(b,nr,nc,p))continue;   // 共有点に自駒
@@ -2722,7 +2726,7 @@ function moves(b,r,c){
     } else {
       const max = v.r===F? 99 : v.r;
       let nr=r+dr, nc=c+dc, cnt=0;
-      while(nr>=0&&nr<NR&&nc>=0&&nc<NC&&cnt<max){
+      while(nr>=0&&nr<LR(b)&&nc>=0&&nc<LC(b)&&cnt<max){
         // 斜めの通り道に相手レイヤーの駒があると、そこから先へは進めない
         if(diagBlocked(b,nr-dr,nc-dc,dr,dc)) break;
         const tg=b[nr][nc];
@@ -2742,7 +2746,7 @@ function moves(b,r,c){
       let dr=ddr, dc=ddc;
       if(flip){ dr=-dr; dc=-dc; }
       let nr=r+dr, nc=c+dc;
-      while(nr>=0&&nr<NR&&nc>=0&&nc<NC){
+      while(nr>=0&&nr<LR(b)&&nc>=0&&nc<LC(b)){
         const tg=b[nr][nc];
         if(tg){
           const tr2=pieceRank(tg.t);
@@ -2805,12 +2809,12 @@ function janggiDiagMoves(b,r,c,p,mode,forwardOnly){
     if(forwardOnly && dr!==fwd) continue;      // 兵・卒は前方の斜めのみ
     if(mode==='step'){
       const nr=r+dr, nc=c+dc;
-      if(nr<0||nr>=NR||nc<0||nc>=NC || !diagHas(nr,nc,d)) continue;
+      if(nr<0||nr>=LR(b)||nc<0||nc>=LC(b) || !diagHas(nr,nc,d)) continue;
       if(diagBlocked(b,r,c,dr,dc)) continue;             // 相手レイヤーの駒が斜めの通り道にある
       const q=b[nr][nc]; if(!q||q.p!==p) res.push([nr,nc]);
     } else if(mode==='slide'){
       let nr=r+dr, nc=c+dc;
-      while(nr>=0&&nr<NR&&nc>=0&&nc<NC&&diagHas(nr,nc,d)){
+      while(nr>=0&&nr<LR(b)&&nc>=0&&nc<LC(b)&&diagHas(nr,nc,d)){
         if(diagBlocked(b,nr-dr,nc-dc,dr,dc)) break;      // 相手レイヤーの駒が斜めの通り道にある
         const q=b[nr][nc];
         if(q){ if(q.p!==p) res.push([nr,nc]); break; }
@@ -2818,7 +2822,7 @@ function janggiDiagMoves(b,r,c,p,mode,forwardOnly){
       }
     } else {
       let nr=r+dr, nc=c+dc, jumped=false;
-      while(nr>=0&&nr<NR&&nc>=0&&nc<NC&&diagHas(nr,nc,d)){
+      while(nr>=0&&nr<LR(b)&&nc>=0&&nc<LC(b)&&diagHas(nr,nc,d)){
         const q=b[nr][nc];
         if(!jumped){ if(q){ if(isJCannon(q.t)) break; jumped=true; } }
         else { if(!q) res.push([nr,nc]); else { if(q.p!==p&&!isJCannon(q.t)) res.push([nr,nc]); break; } }
@@ -2900,7 +2904,7 @@ function lionMoves(b,r,c){
   const pc=b[r][c]; if(!pc||!hasLion(pc.t)) return [];
   const p=pc.p, full=((TP[pc.t]&&TP[pc.t].fl)||[]).includes('area2');
   const dirs=lionStepDirs(pc.t,p);
-  const inb=(x,y)=>x>=0&&x<NR&&y>=0&&y<NC;
+  const inb=(x,y)=>x>=0&&x<LR(b)&&y>=0&&y<LC(b);
   const out=[], seen=new Set();
   const add=(tr,tc,caps)=>{
     const key=tr+'_'+tc+'|'+caps.map(q=>q[0]+','+q[1]).sort().join(';');
@@ -2981,7 +2985,7 @@ function hookMoves(b,r,c){
 function jtMoves(b,r,c){
   const p=b[r][c].p, enemy=-p;
   let enemyJT=null;
-  for(let er=0;er<NR;er++)for(let ec=0;ec<NC;ec++){
+  for(let er=0;er<LR(b);er++)for(let ec=0;ec<LC(b);ec++){
     const q=b[er][ec]; if(q&&q.p===enemy&&q.t==='JT') enemyJT=[er,ec];
   }
   // (tr,tc)が敵駒(その駒自身を除く)に効かれているか。対象マスを一旦空けて判定するため、
@@ -2990,7 +2994,7 @@ function jtMoves(b,r,c){
     if(enemyJT && !(enemyJT[0]===tr&&enemyJT[1]===tc)) return true; // 相手自在天王は全マスに効く
     const saved=b[tr][tc]; b[tr][tc]=null;
     let def=false;
-    for(let er=0;er<NR&&!def;er++)for(let ec=0;ec<NC&&!def;ec++){
+    for(let er=0;er<LR(b)&&!def;er++)for(let ec=0;ec<LC(b)&&!def;ec++){
       const q=b[er][ec]; if(!q||q.p!==enemy||q.t==='JT')continue;
       if(moves(b,er,ec).some(([a,bb])=>a===tr&&bb===tc)) def=true;
     }
@@ -2998,7 +3002,7 @@ function jtMoves(b,r,c){
     return def;
   }
   const res=[];
-  for(let r2=0;r2<NR;r2++)for(let c2=0;c2<NC;c2++){
+  for(let r2=0;r2<LR(b);r2++)for(let c2=0;c2<LC(b);c2++){
     if(r2===r&&c2===c)continue;
     const q=b[r2][c2];
     if(!q){ res.push([r2,c2]); continue; }   // 空マスへは自由
@@ -3093,10 +3097,8 @@ function isRoyal(t){ return t==='hK'||t==='hKw'||t==='mK'||t==='K'||t==='CP'||t=
 // 指定プレイヤーのroyal駒（玉・太子）が盤上または持ち駒に残っているか
 function hasRoyal(p){
   ensurePts();
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-    const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) return true;
-    const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===p&&isRoyal(q.t)) return true;
-  }
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) return true; }
+  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===p&&isRoyal(q.t)) return true; }
   const cap = p===1?capYou:capEnemy;
   if(cap.some(isRoyal)) return true;
   return false;
@@ -3105,13 +3107,15 @@ function hasRoyal(p){
 function checkInfo(p){
   ensurePts();
   const royals=[];
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++)for(const L of [board,ptsBoard]){
-    const pc=L[r]&&L[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) royals.push([r,c,L]);
-  }
+  for(const L of [board,ptsBoard])
+    for(let r=0;r<LR(L);r++)for(let c=0;c<LC(L);c++){
+      const pc=L[r]&&L[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) royals.push([r,c,L]);
+    }
   if(!royals.length) return {check:false,cells:[]};
   const key=new Set(royals.map(([r,c,L])=>r+'_'+c+'_'+(L===ptsBoard?'p':'c')));
   const hit=new Set();
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++)for(const L of [board,ptsBoard]){
+  for(const L of [board,ptsBoard])
+    for(let r=0;r<LR(L);r++)for(let c=0;c<LC(L);c++){
     const pc=L[r]&&L[r][c];
     if(pc&&pc.p===-p){
       const tag=(L===ptsBoard?'p':'c');
@@ -3147,8 +3151,8 @@ function renderPtLayer(bd, movable, checkCells){
   ensurePts();
   const layer=document.createElement('div'); layer.className='pt-layer';
   let any=false;
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-    const pc=ptsBoard[r][c]; if(!pc) continue;
+  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){
+    const pc=ptsBoard[r]&&ptsBoard[r][c]; if(!pc) continue;
     any=true;
     const w=document.createElement('div');
     w.className='pt-slot'+(movable&&movable.has('P'+r+'_'+c)?' movable':'')
@@ -3169,9 +3173,9 @@ function renderPtLayer(bd, movable, checkCells){
   }
   // 編集モードで「交点」を選んでいるときは、空の交点もタップできるようにマーカーを出す
   if(editing && editLayerIsPt()){
-    for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-      if(ptsBoard[r][c]) continue;
-      const msIdx = multiSel.length? multiSel.findIndex(s=>s.r===r&&s.c===c) : -1;
+    for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){
+      if(ptsBoard[r]&&ptsBoard[r][c]) continue;
+      const msIdx = multiSel.length? multiSel.findIndex(s=>s.r===r&&s.c===c&&s.pt) : -1;
       const w=document.createElement('div');
       w.className='pt-slot pt-edit'+(msIdx>=0?' multisel':'');
       w.dataset.r=r; w.dataset.c=c; w.dataset.pt='1';
@@ -3183,9 +3187,9 @@ function renderPtLayer(bd, movable, checkCells){
     // マス側を選んでいるときは何もしない（マス側でバッジを描く）
   }
   // 交点の駒の複数選択マーカー
-  if(editing && editLayerIsPt()) [...layer.querySelectorAll('.pt-slot:not(.pt-edit)')].forEach(w=>{
+  if(editing) [...layer.querySelectorAll('.pt-slot:not(.pt-edit)')].forEach(w=>{
     const r=+w.dataset.r, c=+w.dataset.c;
-    const i=multiSel.findIndex(s=>s.r===r&&s.c===c);
+    const i=multiSel.findIndex(s=>s.r===r&&s.c===c&&s.pt);
     if(i>=0){ w.classList.add('multisel');
       const bg=document.createElement('div'); bg.className='ms-badge'; bg.textContent=i+1; w.appendChild(bg); }
   });
@@ -3266,7 +3270,7 @@ function render(){
     if(checkCells.has(r+'_'+c)) cell.classList.add('check');
     if(sel&&!sel.drop&&!sel.pt&&sel.r===r&&sel.c===c)cell.classList.add('sel');
     if(history.length){const lm=history[history.length-1].to; if(lm&&lm[0]===r&&lm[1]===c)cell.classList.add('last');}
-    const msIdx = (multiSel.length && !(editing&&editLayerIsPt()))? multiSel.findIndex(s=>s.r===r&&s.c===c) : -1;
+    const msIdx = multiSel.length? multiSel.findIndex(s=>s.r===r&&s.c===c&&!s.pt) : -1;
     if(msIdx>=0){
       cell.classList.add('multisel');
       const badge=document.createElement('div');
@@ -3650,7 +3654,8 @@ function goCaptureScan(){
   const orth=[[-1,0],[1,0],[0,-1],[0,1]];
   const caps=[];
   // 碁石の囲みは「マス・交点に関係なく」判定する（隣は2層のどちらでも可）
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++)for(const layer of [board,ptsBoard]){
+  for(const layer of [board,ptsBoard])
+  for(let r=0;r<(layer===ptsBoard?NR+1:NR);r++)for(let c=0;c<(layer===ptsBoard?NC+1:NC);c++){
     const q=layer[r]&&layer[r][c]; if(!q||!isGo(q.t))continue;
     const enemy=-q.p; let surrounded=true;
     for(const [dr,dc] of orth){
@@ -3918,7 +3923,7 @@ document.getElementById('passBtn').onclick=()=>{
 function findKing(b,p){
   const layers=(b&&b.L&&b.L.pts)? [b, b.L.pts] : [b];
   for(const L of layers)
-    for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){const pc=L[r]&&L[r][c];if(pc&&pc.p===p&&isRoyal(pc.t))return[r,c];}
+    for(let r=0;r<LR(L);r++)for(let c=0;c<LC(L);c++){const pc=L[r]&&L[r][c];if(pc&&pc.p===p&&isRoyal(pc.t))return[r,c];}
   return null;
 }
 function evaluate(b,cy,ce){ // 相手(-1)視点で大きいほど良い
@@ -3926,7 +3931,7 @@ function evaluate(b,cy,ce){ // 相手(-1)視点で大きいほど良い
   const ek=findKing(b,-1), yk=findKing(b,1);
   const layers=(b&&b.L&&b.L.pts)? [b, b.L.pts] : [b];
   for(const L of layers)
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
+  for(let r=0;r<LR(L);r++)for(let c=0;c<LC(L);c++){
     const pc=L[r]&&L[r][c]; if(!pc)continue;
     let v=VALUE[pc.t];
     if(pc.t!=='K'){
@@ -3949,7 +3954,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
   const nb=b.map(row=>row.map(x=>x?{...x}:null));
   // 交点レイヤーも一緒にコピーして、読みの中でも2層のまま扱う
   const srcPts=(b&&b.L&&b.L.pts)||null;
-  const npts=srcPts? srcPts.map(row=>row.map(x=>x?{...x}:null)) : Array.from({length:NR},()=>Array(NC).fill(null));
+  const npts=srcPts? srcPts.map(row=>row.map(x=>x?{...x}:null)) : Array.from({length:NR+1},()=>Array(NC+1).fill(null));
   linkLayers(nb, npts);
   const ncy=[...cy], nce=[...ce];
   if(m&&m.pass) return {nb,ncy,nce,king:false};   // パスは盤面を変えない
@@ -4084,8 +4089,8 @@ function genMoves(b,p,cy,ce){
   const layers=[[b,false]];
   if(b&&b.L&&b.L.pts&&ptLayerOn()) layers.push([b.L.pts,true]);
   for(const [lb,isPt] of layers){
-    for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-      const pc=lb[r][c];
+    for(let r=0;r<LR(lb);r++)for(let c=0;c<LC(lb);c++){
+      const pc=lb[r]&&lb[r][c];
       if(pc&&pc.p===p){
         moves(lb,r,c).forEach(([tr,tc])=>{
           const canP=canPromoteMove(pc.t,r,tr,p,!!(lb[tr][tc]&&lb[tr][tc].p!==p));
@@ -4865,7 +4870,7 @@ function hasAnyLegalMove(side){
   ensurePts();
   for(const [L,isPt] of [[board,false],[ptsBoard,true]]){
     if(isPt && !ptLayerOn()) continue;
-    for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
+    for(let r=0;r<LR(L);r++)for(let c=0;c<LC(L);c++){
       const pc=L[r]&&L[r][c];
       if(pc&&pc.p===side){
         const base=isPt?{pt:true}:{};
@@ -4889,8 +4894,8 @@ function hasAnyLegalMove(side){
 function sidePieces(side){
   ensurePts();
   let n=0;
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===side) n++;
-    const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===side) n++; }
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===side) n++; }
+  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===side) n++; }
   n += (side===1?capYou:capEnemy).length;
   return n;
 }
@@ -4954,7 +4959,7 @@ function judgeXiangqiRepetition(key){
 function snapRestore(snap){
   board=cloneLayer(snap.board);
   NR=board.length; NC=board[0]?board[0].length:NR;   // 盤サイズも復元局面に合わせる
-  ptsBoard = snap.pts ? cloneLayer(snap.pts) : Array.from({length:NR},()=>Array(NC).fill(null));
+  ptsBoard = snap.pts ? cloneLayer(snap.pts) : Array.from({length:NR+1},()=>Array(NC+1).fill(null));
   linkLayers(board, ptsBoard);
   capYou=[...snap.capYou]; capEnemy=[...snap.capEnemy];
 }
@@ -5044,7 +5049,7 @@ function enterReplay(){
 function exitReplay(){
   if(replaying && savedLive){
     board=cloneLayer(savedLive.board);
-    ptsBoard = savedLive.pts? cloneLayer(savedLive.pts) : Array.from({length:NR},()=>Array(NC).fill(null));
+    ptsBoard = savedLive.pts? cloneLayer(savedLive.pts) : Array.from({length:NR+1},()=>Array(NC+1).fill(null));
     linkLayers(board, ptsBoard);
     capYou=[...savedLive.capYou]; capEnemy=[...savedLive.capEnemy];
     history=savedLive.history.map(h=>({...h})); turn=savedLive.turn; gameOver=savedLive.gameOver;
@@ -5220,7 +5225,7 @@ function restoreSetup(){
   if(gameStartSnap){
     board=cloneLayer(gameStartSnap.board);
     NR=board.length; NC=board[0]?board[0].length:NR;
-    ptsBoard = gameStartSnap.pts ? cloneLayer(gameStartSnap.pts) : Array.from({length:NR},()=>Array(NC).fill(null));
+    ptsBoard = gameStartSnap.pts ? cloneLayer(gameStartSnap.pts) : Array.from({length:NR+1},()=>Array(NC+1).fill(null));
     linkLayers(board, ptsBoard);
     capYou=[...gameStartSnap.capYou]; capEnemy=[...gameStartSnap.capEnemy];
     if(gameStartSnap.diag) cellDiag=gameStartSnap.diag.map(row=>row.slice());
@@ -5592,9 +5597,10 @@ document.getElementById('emDiagOpen').onclick=()=>{
 };
 
 // 複数選択
-function toggleMultiSel(r,c){
-  const i=multiSel.findIndex(s=>s.r===r&&s.c===c);
-  if(i>=0) multiSel.splice(i,1); else multiSel.push({r,c});
+function toggleMultiSel(r,c,isPt){
+  const pt = (isPt===undefined)? editLayerIsPt() : !!isPt;   // どちらの側を選んでいるか
+  const i=multiSel.findIndex(s=>s.r===r&&s.c===c&&!!s.pt===pt);
+  if(i>=0) multiSel.splice(i,1); else multiSel.push({r,c,pt});
   render();
   if(multiSel.length>0) setStatus('複数選択中：'+multiSel.length+'マス／別マスをタップで追加、下のボタンで変更');
   else setStatus('編集中：駒をタップ');
@@ -5788,21 +5794,35 @@ function updateEditBar(){
   if(acc) acc.classList.toggle('open', editing); // 編集状態とアコーディオンの開閉を同期
 }
 // 自陣（あなたの駒）の配置を、上下対称に敵側へコピー
+// 片側の配置を点対称(180°回転)に写して、もう片側を作り直す。
+// マスの駒・交点の駒の両方をそれぞれのレイヤーのまま写す。
+function copySideTo(from){
+  ensurePts();
+  const to=-from;
+  const snapC=cloneLayer(board), snapP=cloneLayer(ptsBoard);
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++) if(board[r][c]&&board[r][c].p===to) board[r][c]=null;
+  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++) if(ptsBoard[r]&&ptsBoard[r][c]&&ptsBoard[r][c].p===to) ptsBoard[r][c]=null;
+  let n=0;
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
+    const pc=snapC[r][c];
+    if(pc&&pc.p===from){ board[NR-1-r][NC-1-c]={...pc,p:to}; n++; }
+  }
+  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){
+    const q=snapP[r]&&snapP[r][c];
+    if(q&&q.p===from){ ptsBoard[NR-r][NC-c]={...q,p:to}; n++; }  // 交点は0..NRを反転
+  }
+  if(from===1) capEnemy=[...capYou]; else capYou=[...capEnemy];
+  return n;
+}
 document.getElementById('copyToEnemy').onclick=()=>{
   if(!editing)return;
-  // まず敵駒を全消去
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ if(board[r][c]&&board[r][c].p===-1) board[r][c]=null; }
-  // あなたの駒を点対称(180°回転)位置に相手駒として配置
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-    const pc=board[r][c];
-    if(pc&&pc.p===1){
-      const nr=NR-1-r, nc=NC-1-c;
-      board[nr][nc]={...pc,p:-1};
-    }
-  }
-  // 持ち駒もコピー（あなたの持ち駒 → 相手の持ち駒）
-  capEnemy=[...capYou];
-  render(); setStatus('自陣の配置と持ち駒を敵側にコピーしました');
+  const n=copySideTo(1);
+  render(); setStatus('自陣の配置と持ち駒を敵側にコピーしました（'+n+'枚）');
+};
+document.getElementById('copyToYou').onclick=()=>{
+  if(!editing)return;
+  const n=copySideTo(-1);
+  render(); setStatus('敵陣の配置と持ち駒を自陣にコピーしました（'+n+'枚）');
 };
 // ランダム置換：強さが近い別駒に
 const ROYAL_LIST=['K','CP','cK']; // 玉将・太子・キング
@@ -5868,7 +5888,8 @@ function ensureRoyalEachSide(){
 }
 document.getElementById('clearBoard').onclick=()=>{
   ensurePts();
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ board[r][c]=null; ptsBoard[r][c]=null; }
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++) board[r][c]=null;
+  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++) if(ptsBoard[r]) ptsBoard[r][c]=null;
   capYou.length=0; capEnemy.length=0;
   sel=null; multiSel=[]; updateMultiBar(); render();
   setStatus('盤を空にしました（駒も持ち駒も全部消しました）');
@@ -5880,7 +5901,7 @@ document.getElementById('restoreCustom').onclick=()=>{
   if(customStart){
     if(replaying) exitReplay(); // リプレイ中だと後で savedLive に上書きされるため先に抜ける
     board=cloneLayer(customStart.board);
-    ptsBoard = customStart.pts? cloneLayer(customStart.pts) : Array.from({length:NR},()=>Array(NC).fill(null));
+    ptsBoard = customStart.pts? cloneLayer(customStart.pts) : Array.from({length:NR+1},()=>Array(NC+1).fill(null));
     linkLayers(board, ptsBoard);
     capYou=[...customStart.capYou]; capEnemy=[...customStart.capEnemy];
     render(); setStatus('記憶した配置に戻しました');
@@ -5984,7 +6005,7 @@ function captureState(){
 }
 function restoreState(s){
   board=dcopyBoard(s.board); NR=board.length; NC=board[0]?board[0].length:NR; capYou=[...s.capYou]; capEnemy=[...s.capEnemy];
-  ptsBoard = s.pts? cloneLayer(s.pts) : Array.from({length:NR},()=>Array(NC).fill(null));
+  ptsBoard = s.pts? cloneLayer(s.pts) : Array.from({length:NR+1},()=>Array(NC+1).fill(null));
   linkLayers(board, ptsBoard);
   history=s.history.map(h=>({to:h.to?[...h.to]:null, board:h.board?dcopyBoard(h.board):null, pts:h.pts?cloneLayer(h.pts):null, capYou:h.capYou?[...h.capYou]:null, capEnemy:h.capEnemy?[...h.capEnemy]:null}));
   kifu=s.kifu.map(k=>({...k})); turn=s.turn; gameOver=s.gameOver; gameStartSnap=s.gameStartSnap;
@@ -6005,7 +6026,7 @@ document.getElementById('undo').onclick=()=>{
   const st=history[history.length-1];                 // 最後の着手の直前の局面
   const lastSide = kifu.length ? kifu[kifu.length-1].side : -turn;
   board=cloneLayer(st.board);
-  ptsBoard = st.pts? cloneLayer(st.pts) : Array.from({length:NR},()=>Array(NC).fill(null));
+  ptsBoard = st.pts? cloneLayer(st.pts) : Array.from({length:NR+1},()=>Array(NC+1).fill(null));
   linkLayers(board, ptsBoard);
   capYou=[...st.capYou]; capEnemy=[...st.capEnemy];
   history.pop();
