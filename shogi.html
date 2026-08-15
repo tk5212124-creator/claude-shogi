@@ -948,7 +948,8 @@
         <option value="auto">囲碁・シャンチー・チャンギの駒は交点に置く</option>
         <option value="cell">すべての駒をマスの中に置く</option>
         <option value="point">すべての駒を交点に置く</option>
-        <option value="free">すべての駒をマスにも交点にも置ける</option>
+        <option value="free">すべての駒をマスにも交点にも置ける（交差宮マスからは行き来できる）</option>
+        <option value="freeMove">すべての駒がマスにも交点にも常時進める</option>
       </select>
     </div>
     <div class="bs-note">※ 交点の駒とマスの駒は別の点にいるので、互いに取り合えません（斜めに動くときの障壁にはなります）。碁石が囲んだ駒は交点・マスに関係なく取れ、九宮の交差マス（×）だけは両方が置ける共有点として取り合えます。斜めに飛び越えて動く駒は交点の駒も取れます。</div>
@@ -2122,7 +2123,7 @@ function goesOnPoint(t){
 // 編集でその駒をその側へ置けるか
 function layerAllows(t, isPt){
   const m=RULES.pointMode;
-  if(m==='free')  return true;    // どちらにも置ける
+  if(m==='free'||m==='freeMove') return true;    // どちらにも置ける
   if(m==='cell')  return !isPt;
   if(m==='point') return !!isPt;
   return !!isPt === isPointPiece(t);   // 'auto'
@@ -2130,7 +2131,7 @@ function layerAllows(t, isPt){
 // 駒の種類に応じて2層へ振り分け直す（設定変更・配置後に呼ぶ）
 function syncLayers(){
   ensurePts();
-  if(RULES.pointMode==='free') return;   // 自由配置は置いた場所をそのまま保つ
+  if(RULES.pointMode==='free'||RULES.pointMode==='freeMove') return;   // 自由配置は置いた場所をそのまま保つ
   for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){
     const cell=(r<NR&&c<NC)?board[r][c]:null, pt=ptsBoard[r]&&ptsBoard[r][c];
     if(cell && goesOnPoint(cell.t)){                       // マス→交点へ
@@ -2737,6 +2738,40 @@ function sharedBlockAt(b,r,c,p){
   const q=o[r][c];
   return !!(q && q.p===p);
 }
+/* ===== 層をまたぐ移動 =====
+   マスの中心と交点は「斜め半歩」ずれている。だから斜めに動ける駒だけが層を行き来できる。
+   マス(r,c)から斜め(sr,sc)へ  → 最初の交点は (r+(sr>0?1:0), c+(sc>0?1:0))、以後 (sr,sc) ずつ
+   交点(R,C)から斜め(sr,sc)へ  → 最初のマスは (R+(sr>0?0:-1), C+(sc>0?0:-1))、以後 (sr,sc) ずつ */
+function crossLayerOn(b,r,c){
+  if(RULES.pointMode==='freeMove') return true;                 // 常時どちらへも進める
+  if(RULES.pointMode==='free') return isSharedPoint(r,c);       // 交差宮マスに居るときだけ
+  return false;
+}
+function crossLayerMoves(b,r,c,p,flip,vecs){
+  const o=otherLayer(b); if(!o) return [];
+  const isPt=!!(b&&b.isPts);
+  const oR=isPt?NR:NR+1, oC=isPt?NC:NC+1;
+  const out=[], seen=new Set();
+  for(const v of vecs){
+    let dr=v.dr, dc=v.dc; if(flip){dr=-dr;dc=-dc;}
+    if(!dr||!dc) continue;                        // 斜め成分が無い駒は層をまたげない
+    if(Math.abs(dr)!==Math.abs(dc)) continue;     // 45度の斜めだけ
+    const sr=Math.sign(dr), sc=Math.sign(dc);
+    const max = (v.r===Infinity||v.r===99)? 99 : (v.r==='jump'? Math.abs(dr) : Math.abs(dr)*(v.r||1));
+    let R = isPt ? r+(sr>0?0:-1) : r+(sr>0?1:0);
+    let C = isPt ? c+(sc>0?0:-1) : c+(sc>0?1:0);
+    for(let k=0;k<max;k++){
+      if(R<0||R>=oR||C<0||C>=oC) break;
+      const q=o[R]&&o[R][C];
+      if(q&&q.p===p) break;
+      const key=R+'_'+C;
+      if(!seen.has(key)){ seen.add(key); out.push([R,C,1]); }   // 1 = もう一方のレイヤー
+      if(q) break;
+      R+=sr; C+=sc;
+    }
+  }
+  return out;
+}
 function moves(b,r,c){
   const pc=b[r][c]; if(!pc)return[];
   const p=pc.p;
@@ -2871,6 +2906,8 @@ function moves(b,r,c){
       }
     }
   }
+  // 斜めに動ける駒は、半歩ずれた「もう一方のレイヤー」の点にも進める
+  if(crossLayerOn(b,r,c)) res.push(...crossLayerMoves(b,r,c,p,flip,vecs));
   // 範囲攻撃（大将・副将・角将・飛将・猛龍・飛鰐）：格下駒を飛び越えて進める
   if(hasRangeAttack(pc.t)){
     const myRank=pieceRank(pc.t);
@@ -3251,7 +3288,8 @@ function isLegalMove(m, p, b){
     const sig=cs=>(cs||[]).map(q=>q[0]+','+q[1]).sort().join(';');
     return lionMoves(lbd, m.fr, m.fc).some(x=>x.tr===m.tr&&x.tc===m.tc && sig(x.caps)===sig(m.caps));
   }
-  return moves(lbd, m.fr, m.fc).some(([r,c])=>r===m.tr&&c===m.tc);
+  const wantOther = (m.toPt!==undefined) && (!!m.toPt !== !!m.pt);
+  return moves(lbd, m.fr, m.fc).some(([r,c,x])=>r===m.tr&&c===m.tc&&(!!x===wantOther));
 }
 // 局面キー（盤＋手番＋持ち駒）。任意の局面に使える共通形式。
 function posKeyOf(b, tn, cy, ce){
@@ -3432,11 +3470,15 @@ function render(){
       dropTargets(L,sel.t,sp).forEach(([r,c])=>{ if(isLegalMove(isPt?{drop:sel.t,tr:r,tc:c,pt:true}:{drop:sel.t,tr:r,tc:c},sp)) movable.add(mkey(isPt,r,c)); }); }
     else if(sel.pt){
       const mv=ptsBoard[sel.r]&&ptsBoard[sel.r][sel.c], mp=mv?mv.p:turn;
-      if(mv) moves(ptsBoard,sel.r,sel.c).forEach(([r,c])=>{ if(isLegalMove({fr:sel.r,fc:sel.c,tr:r,tc:c,pt:true},mp)) movable.add(mkey(true,r,c)); });
+      if(mv) moves(ptsBoard,sel.r,sel.c).forEach(([r,c,x])=>{
+        const mm={fr:sel.r,fc:sel.c,tr:r,tc:c,pt:true}; if(x) mm.toPt=false;
+        if(isLegalMove(mm,mp)) movable.add(mkey(!x,r,c)); });
     }
     else {
       const mv=board[sel.r][sel.c], mp=mv?mv.p:turn;
-      moves(board,sel.r,sel.c).forEach(([r,c])=>{ if(isLegalMove({fr:sel.r,fc:sel.c,tr:r,tc:c},mp)) movable.add(mkey(false,r,c)); });
+      moves(board,sel.r,sel.c).forEach(([r,c,x])=>{
+        const mm={fr:sel.r,fc:sel.c,tr:r,tc:c}; if(x) mm.toPt=true;
+        if(isLegalMove(mm,mp)) movable.add(mkey(!!x,r,c)); });
       // 獅子型：2歩先・取って戻る先なども可動表示
       const lp=board[sel.r][sel.c];
       if(lp&&hasLion(lp.t)) lionMoves(board,sel.r,sel.c).forEach(m=>{ if(!(m.tr===sel.r&&m.tc===sel.c) && isLegalMove(m,lp.p)) movable.add(m.tr+'_'+m.tc); });
@@ -3713,12 +3755,25 @@ function onCell(r,c,isPt){
   // 交点の駒を動かす（レイヤーは同じまま）
   if(sel && sel.pt && !sel.drop){
     const sp=ptsBoard[sel.r]&&ptsBoard[sel.r][sel.c];
-    if(sp && isPt && moves(ptsBoard,sel.r,sel.c).some(([a,b])=>a===r&&b===c)){
-      if(!isLegalMove({fr:sel.r,fc:sel.c,tr:r,tc:c,pt:true}, me)){ setStatus('千日手になるため、その手は指せません','think'); return; }
-      applyMoveSilent(me,{fr:sel.r,fc:sel.c,tr:r,tc:c,pt:true},false); sel=null; afterPlayer(); return;
+    if(sp){
+      const hit=moves(ptsBoard,sel.r,sel.c).find(([a,b,x])=>a===r&&b===c&&(!!x===!isPt));
+      if(hit){
+        const mm={fr:sel.r,fc:sel.c,tr:r,tc:c,pt:true}; if(hit[2]) mm.toPt=false;
+        if(!isLegalMove(mm, me)){ setStatus('千日手になるため、その手は指せません','think'); return; }
+        applyMoveSilent(me,mm,false); sel=null; afterPlayer(); return;
+      }
     }
     if(pc&&pc.p===me){ sel={r,c,pt:!!isPt}; render(); return; }
     sel=null; render(); return;
+  }
+  // マスの駒を選んでいて交点をタップ＝層をまたぐ手
+  if(sel && !sel.drop && !sel.pt && isPt){
+    const hit=moves(board,sel.r,sel.c).find(([a,b,x])=>a===r&&b===c&&x);
+    if(hit){
+      const mm={fr:sel.r,fc:sel.c,tr:r,tc:c,toPt:true};
+      if(!isLegalMove(mm, me)){ setStatus('千日手になるため、その手は指せません','think'); return; }
+      applyMoveSilent(me,mm,false); sel=null; afterPlayer(); return;
+    }
   }
   if(sel){
     if(sel.drop){
@@ -3739,7 +3794,7 @@ function onCell(r,c,isPt){
       // キャスリング（キングを横2マス）
       const cast=castlingMove(sel.r,sel.c,r,c);
       if(cast){ doCastling(sel.r,sel.c,r,c,cast,me); sel=null; afterPlayer(); return; }
-      if(moves(board,sel.r,sel.c).some(([a,b])=>a===r&&b===c)){
+      if(moves(board,sel.r,sel.c).some(([a,b,x])=>a===r&&b===c&&!x)){
         if(!isLegalMove({fr:sel.r,fc:sel.c,tr:r,tc:c}, me)){ setStatus('千日手になるため、その手は指せません','think'); return; }
         attemptMove(sel.r,sel.c,r,c); return;
       }
@@ -4193,6 +4248,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
   if(m&&m.pass) return {nb,ncy,nce,king:false};   // パスは盤面を変えない
   const lb = (m&&m.pt)? npts : nb;                // この手が動くレイヤー
   const ob = (m&&m.pt)? nb : npts;                // もう一方のレイヤー
+  const db = (m&&m.toPt!==undefined) ? (m.toPt? npts : nb) : lb;   // 着地するレイヤー
 
   const myCap = p===-1? nce : ncy;
   let king=false;
@@ -4281,7 +4337,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     if(m.drop==='OTH') simOthelloFlip(m.tr,m.tc,p); // 打ったオセロの裏返しを読みに反映
     if(isGo(m.drop)) simGoSurround(m.tr,m.tc,lb[m.tr][m.tc].p);
   } else {
-    const pc=lb[m.fr][m.fc]; const tg=lb[m.tr][m.tc];
+    const pc=lb[m.fr][m.fc]; const tg=db[m.tr]&&db[m.tr][m.tc];
     if(!pc) return {nb,ncy,nce,king:false};
     const igui = m.fr===m.tr && m.fc===m.tc; // 居喰い：動かない
     if(tg && tg.p!==p){ // 移動先の敵を取る（居喰いでは自駒なので除外）
@@ -4306,8 +4362,8 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     }
     const promo = m.promo!==undefined ? m.promo
       : (!igui && canPromoteMove(pc.t,m.fr,m.tr,p, !!(tg&&tg.p!==p)||!!(m.caps&&m.caps.length)));
-    lb[m.tr][m.tc]={t:promo?(promoteCode(pc.t)||pc.t):pc.t,p};
-    if(!igui) lb[m.fr][m.fc]=null;
+    db[m.tr][m.tc]={t:promo?(promoteCode(pc.t)||pc.t):pc.t,p};
+    if(!igui||db!==lb) lb[m.fr][m.fc]=null;
     if(pc.t==='HASA') simHasamiCapture(m.tr,m.tc,p); // はさみ取りを読みに反映
     if(hasFire(pc.t)) simFireBurn(m.tr,m.tc,p);      // 火鬼の焼き取りを読みに反映
   }
@@ -4325,9 +4381,12 @@ function genMoves(b,p,cy,ce){
     for(let r=0;r<LR(lb);r++)for(let c=0;c<LC(lb);c++){
       const pc=lb[r]&&lb[r][c];
       if(pc&&pc.p===p){
-        moves(lb,r,c).forEach(([tr,tc])=>{
-          const canP=canPromoteMove(pc.t,r,tr,p,!!(lb[tr][tc]&&lb[tr][tc].p!==p));
+        moves(lb,r,c).forEach(([tr,tc,x])=>{
+          const dstPt = x? !isPt : isPt;                 // x=1 ならもう一方のレイヤーへ
+          const dst = dstPt? (lb.L.pts) : (lb.L.cells);
+          const canP=canPromoteMove(pc.t,r,tr,p,!!(dst[tr]&&dst[tr][tc]&&dst[tr][tc].p!==p));
           const base=isPt?{pt:true}:{};
+          if(x) base.toPt=dstPt;
           if(canP){
             list.push({...base,fr:r,fc:c,tr,tc,promo:true});
             if(!mustPromote(pc.t,tr,p)) list.push({...base,fr:r,fc:c,tr,tc,promo:false});
@@ -4445,6 +4504,7 @@ function applyMoveSilent(side,m,_legacySilent){
   ensurePts();
   const LB = m.pt ? ptsBoard : board;   // この手が動くレイヤー
   const OB = m.pt ? board : ptsBoard;   // もう一方のレイヤー
+  const DB = (m.toPt!==undefined) ? (m.toPt? ptsBoard : board) : LB;   // 着地するレイヤー
   if(m.drop){
     recordKifu({side,drop:m.drop,to:[m.tr,m.tc],pt:m.pt||undefined});
     // 囲碁の駒は固有の色（所有者）で盤に出る＝相手の碁石を打つと相手の駒になる
@@ -4462,8 +4522,8 @@ function applyMoveSilent(side,m,_legacySilent){
     }
   }else{
     const pc=LB[m.fr][m.fc];
-    const igui = m.fr===m.tr && m.fc===m.tc; // 獅子の居喰い：動かず隣を取る
-    const tg=igui? null : LB[m.tr][m.tc]; // 居喰いは移動先=自駒なので取り対象外
+    const igui = (DB===LB) && m.fr===m.tr && m.fc===m.tc; // 獅子の居喰い：動かず隣を取る
+    const tg=igui? null : (DB[m.tr]&&DB[m.tr][m.tc]); // 居喰いは移動先=自駒なので取り対象外
     // チェスポーン昇格判定
     const cpawnPromo = pc.t==='cP' && (m.tr===(side===1?0:NR-1));
     const captured0 = !!(tg&&tg.p!==side)||!!(m.caps&&m.caps.length);
@@ -4481,7 +4541,7 @@ function applyMoveSilent(side,m,_legacySilent){
         promoNew = (fin!==pc.t) ? fin : null;
       }
     }
-    recordKifu({side,from:[m.fr,m.fc],to:[m.tr,m.tc],code:pc.t,promo:!!promo0,promoTo:cpawnPromo?'cQ':(promoNew||undefined),cap:tg?tg.t:null,caps:m.caps||undefined,pt:m.pt||undefined});
+    recordKifu({side,from:[m.fr,m.fc],to:[m.tr,m.tc],code:pc.t,promo:!!promo0,promoTo:cpawnPromo?'cQ':(promoNew||undefined),cap:tg?tg.t:null,caps:m.caps||undefined,pt:m.pt||undefined,toPt:(m.toPt!==undefined?m.toPt:undefined)});
     let tookRoyal = tg && isRoyal(tg.t);
     // royal（玉・帥など）は持ち駒にしない。取られた側にまだ別のroyalが居ても打ち直せてはいけない
     if(tg && RULES.drops && !isRoyal(tg.t)){ cap.push(capturedCode(tg)); }
@@ -4520,7 +4580,7 @@ function applyMoveSilent(side,m,_legacySilent){
         rr+=sr; cc+=sc;
       }
     }
-    LB[m.tr][m.tc]=np;
+    DB[m.tr][m.tc]=np;
     if(!igui) LB[m.fr][m.fc]=null;
     if(pc.t==='HASA'){ hasamiCapture(m.tr,m.tc,side); }
     if(hasFire(pc.t)){ fireBurn(m.tr,m.tc,side); }   // 火鬼：移動後に隣接敵を焼く
@@ -5108,7 +5168,9 @@ function hasAnyLegalMove(side){
       const pc=L[r]&&L[r][c];
       if(pc&&pc.p===side){
         const base=isPt?{pt:true}:{};
-        for(const [tr,tc] of moves(L,r,c)){ if(isLegalMove({...base,fr:r,fc:c,tr,tc},side)) return true; }
+        for(const [tr,tc,x] of moves(L,r,c)){
+          const mm={...base,fr:r,fc:c,tr,tc}; if(x) mm.toPt=!isPt;
+          if(isLegalMove(mm,side)) return true; }
         if(hasLion(pc.t)){
           for(const lm of lionMoves(L,r,c)){ if(!(lm.tr===r&&lm.tc===c) && isLegalMove({...lm,...base},side)) return true; }
         }
@@ -5202,6 +5264,7 @@ function applyKifuStep(rec){
   if(rec.pass){ return; }          // パスは盤面を変えない
   ensurePts();
   const LBk = rec.pt ? ptsBoard : board;   // 交点の手は交点レイヤーへ再現する
+  const DBk = (rec.toPt!==undefined) ? (rec.toPt? ptsBoard : board) : LBk;
   if(rec.drop){
     LBk[rec.to[0]][rec.to[1]]={t:rec.drop,p:isGo(rec.drop)?goOwner(rec.drop):rec.side};
     const cap=rec.side===1?capYou:capEnemy;
@@ -5243,8 +5306,8 @@ function applyKifuStep(rec){
     }
     const igui = fr===tr && fc===tc; // 居喰いは動かない
     const newCode = rec.promoTo ? rec.promoTo : (rec.promo?(promoteCode(rec.code)||rec.code):rec.code);
-    LBk[tr][tc]={t:newCode, p:rec.side};
-    if(!igui) LBk[fr][fc]=null;
+    DBk[tr][tc]={t:newCode, p:rec.side};
+    if(!igui||DBk!==LBk) LBk[fr][fc]=null;
     if(rec.code==='HASA') hasamiCapture(tr,tc,rec.side); // はさみ取りを再現
     if(hasFire(rec.code)) fireBurn(tr,tc,rec.side);      // 火鬼の焼き取りを再現
   }
