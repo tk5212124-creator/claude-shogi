@@ -389,7 +389,20 @@ cellDiag[r][c]   … そのマスの斜め線属性   （NR × NC）
 
 ---
 
-## 12. 開発
+## 12. CPU の改良を外に依頼する
+
+`docs/cpu-extract.md` に、CPU 探索まわりのコードだけを切り出してある。
+外部（ChatGPT 等）に改良を頼むときはこのファイルをそのまま渡せばよい。中身は:
+
+- 壊してはいけない前提（人間とCPUで機構を変えない／勝敗ルール／2層・宮・オセロ・囲碁）
+- 使ってよい既存APIと、盤・手・RULES の形
+- 現状のコード（SPEEDS / evaluate / simulate / genMoves / search / cpuPickMove ほか）
+- まだ入っていないもの（killer/history → Zobrist+TT → make/unmake → eventDelta …）
+- 直したコードの戻し方と受け入れ条件
+
+---
+
+## 13. 開発
 
 ```
 # ローカル確認
