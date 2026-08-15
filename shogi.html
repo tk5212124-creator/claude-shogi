@@ -4686,9 +4686,11 @@ function orderInSearch(b, m, side, ply, prevKey, ttMove){
 const SEARCH_ABORT={abort:true};
 let searchNodes=0, searchDeadline=0;
 function searchTick(){
+  searchNodes++;   // 節点数は常に数える（計測用。1手ごとに lastSearchNodes へ移す）
   if(!searchDeadline) return;
-  if((++searchNodes & 255)===0 && ((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())>searchDeadline) throw SEARCH_ABORT;
+  if((searchNodes & 255)===0 && ((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())>searchDeadline) throw SEARCH_ABORT;
 }
+let lastSearchNodes=0;   // 直前の1手で読んだ節点数（計測用。探索の中身には影響しない）
 function search(b,cy,ce,depth,side,alpha,beta,ply,prevKey){
   if(depth===0) return evaluate(b,cy,ce);
   searchTick();
@@ -4771,10 +4773,81 @@ function search(b,cy,ce,depth,side,alpha,beta,ply,prevKey){
   }
 }
 
+/* ===== 局所反復（同じ2マスの往復）への減点 =====
+   局面が完全に一致しないと千日手回避は働かないので、相手が別の駒を少しずつ動かしていると
+   自分だけ同じ2マスを延々と往復し続けることがある。これを止める。
+
+   ・合法手は1つも減らさない。ルートで「同じくらいの価値なら往復以外を選ぶ」だけ。
+   ・探索の中身には触らないので読む節点数は増えない（棋譜を数手見るだけ）。
+   ・取る手・成る手・打つ手には掛けない。
+   ・最近ずっと何も起きていないとき（取り・成り・打ち・持ち駒の増減が無い）だけ働かせる。
+   ・減点には上限がある。だから「往復しか安全な手がない」ときは往復を選べるままにする。
+     （最後の royal を守る手や、他が全部大損の局面では上限を超える差がつくため） */
+const REP_PEN_STEP=24;    // 往復1回ごとの減点
+const REP_PEN_MAX =90;    // 減点の上限（歩1枚=60より少し上。これ以上の差があれば往復を許す）
+const REP_QUIET_MIN=4;    // 何手「何も起きていない」ら働かせるか
+// 直近で何も起きていない手数（取り・成り・打ち・持ち駒の増減のどれかで途切れる）
+function noProgressCount(){
+  const handNow=capYou.length+capEnemy.length;
+  let n=0;
+  for(let i=kifu.length-1;i>=0 && n<64;i--){
+    const k=kifu[i];
+    if(!k || k.cap || k.promo || k.drop || k.pass) break;
+    if((k.xcaps&&k.xcaps.length) || (k.caps&&k.caps.length)) break;
+    const h=history[i];   // i手目を指す直前の状態。持ち駒が変わっていれば何かが起きている
+    if(h && h.capYou && h.capEnemy && (h.capYou.length+h.capEnemy.length)!==handNow) break;
+    n++;
+  }
+  return n;
+}
+// 手が何かを取るか（安いところだけ見る。ルートでしか呼ばないので多少の取りこぼしは許容）
+function rootMoveCaptures(side, m){
+  if(m.drop||m.pass) return false;
+  if(m.caps && m.caps.length) return true;
+  const DB=(m.toPt!==undefined)?(m.toPt?ptsBoard:board):(m.pt?ptsBoard:board);
+  const q=DB && DB[m.tr] && DB[m.tr][m.tc];
+  if(q && q.p!==side) return true;
+  const OB=m.pt? board : ptsBoard;                 // 交差宮マスの共有点にいる別レイヤーの敵
+  if(typeof isSharedPoint==='function' && isSharedPoint(m.tr,m.tc)){
+    const z=OB && OB[m.tr] && OB[m.tr][m.tc];
+    if(z && z.p!==side) return true;
+  }
+  return false;
+}
+// この手が「直前の自分の手をそのまま巻き戻す手」なら、その往復が何回続いているかを返す
+function repeatCycles(side, m){
+  if(m.drop||m.pass||m.promo) return 0;
+  if(rootMoveCaptures(side,m)) return 0;
+  const lay=(k)=>{ const a=k.pt?1:0; return [a, (k.toPt!==undefined?(k.toPt?1:0):a)]; };
+  const L=m.pt?1:0, DL=(m.toPt!==undefined)?(m.toPt?1:0):L;
+  const own=[];
+  for(let i=kifu.length-1;i>=0 && own.length<32;i--) if(kifu[i].side===side) own.push(kifu[i]);
+  const k0=own[0];
+  if(!k0 || !k0.from || !k0.to) return 0;
+  const [k0L,k0DL]=lay(k0);
+  // 直前の自分の手が B→A で、今の手が A→B（＝ぴったり逆戻り）か
+  if(!(k0DL===L  && k0.to[0]===m.fr   && k0.to[1]===m.fc &&
+       k0L===DL  && k0.from[0]===m.tr && k0.from[1]===m.tc)) return 0;
+  let n=1;
+  for(let i=1;i<own.length;i++){
+    const k=own[i];
+    if(!k.from||!k.to||k.cap||k.promo||k.drop) break;
+    if((k.xcaps&&k.xcaps.length)||(k.caps&&k.caps.length)) break;
+    const [kl,kdl]=lay(k);
+    const fA=k.from[0]===m.fr&&k.from[1]===m.fc&&kl===L;
+    const tA=k.to[0]===m.fr  &&k.to[1]===m.fc  &&kdl===L;
+    const fB=k.from[0]===m.tr&&k.from[1]===m.tc&&kl===DL;
+    const tB=k.to[0]===m.tr  &&k.to[1]===m.tc  &&kdl===DL;
+    if((fA&&tB)||(fB&&tA)) n++; else break;
+  }
+  return n;
+}
+
 // side=-1(相手) or 1(あなた) の最善手を選ぶ。評価は常に相手(-1)視点なので
 // side=-1は最大化、side=1は最小化したい手を選ぶ。
 function cpuPickMove(side, depth){
   clearOrderTables();   // 並べ替えの記憶は1手ごとにリセット（古い局面の情報を引きずらない）
+  searchNodes=0;
   let list=genMoves(board,side,capYou,capEnemy);
   // 実際に指す手は人間と同じ合法判定を通す（千日手回避で禁じた手は候補から除く）
   if(RULES.banSennichite) list=list.filter(m=>isLegalMove(m,side));
@@ -4823,17 +4896,30 @@ function cpuPickMove(side, depth){
      「同点以上の手」は今までどおり正確な値が返り、劣る手だけ途中で打ち切れる。
      → 選ばれる手も、同点のときの等確率選択も変わらないまま枝刈りだけが効く。 */
   const EPS=1e-6;
+  // 往復への減点は候補ごとに1回だけ求める（棋譜を数手見るだけなので安い）
+  const quiet=noProgressCount();
+  const penOf=(m)=>{
+    if(quiet<REP_QUIET_MIN) return 0;
+    const n=repeatCycles(side,m);
+    return n? Math.min(REP_PEN_MAX, REP_PEN_STEP*n) : 0;
+  };
+  const penCache=new Map();
+  const pen=(m)=>{ let v=penCache.get(m); if(v===undefined){ v=penOf(m); penCache.set(m,v); } return v; };
   const pickAt=(d, deadline)=>{
     let best=null, bestScore = side===-1? -Infinity : Infinity, ties=0;
     for(const m of cand){
       let sc;
       try{
         const s=simulate(board,m,side,capYou,capEnemy);
-        if(s.king) return {m, mate:true};
+        if(s.king) return {m, mate:true};   // 相手royalを取る手は減点しない
+        // 窓は減点後の最善で絞る。減点は0以上なので、減点前の値がこれを下回る手は
+        // 減点後も最善を超えられない＝切ってよい（選ばれる手は変わらない）
         const lo = (side===-1 && isFinite(bestScore)) ? bestScore-EPS : -Infinity;
         const hi = (side===1  && isFinite(bestScore)) ? bestScore+EPS :  Infinity;
         sc = d<=0 ? evaluate(s.nb,s.ncy,s.nce)
                   : search(s.nb,s.ncy,s.nce,d,-side,lo,hi,1,mvKey(m));
+        const p=pen(m);
+        if(p) sc = side===-1 ? sc-p : sc+p;   // 指す側にとって不利な向きに寄せる
       }catch(e){
         // 読んでいる途中で時間切れ。この手の分は結論が出ていないので捨て、
         // ここまでに読み終えた範囲の最善手を返す（候補は良い順なので使える）
@@ -4866,10 +4952,11 @@ function cpuPickMove(side, depth){
         if(r.partial || now()>=deadline) break;
       }
       return best||cand[0]||list[0];
-    } finally { searchDeadline = 0; }
+    } finally { searchDeadline = 0; lastSearchNodes = searchNodes; }
   }
   searchDeadline = 0;   // 深さ指定のときは時間で打ち切らない
   const r=pickAt(DEPTH);
+  lastSearchNodes = searchNodes;
   return r.m||cand[0]||list[0];
 }
 
