@@ -4435,6 +4435,17 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
       if(q && q.p!==side){ if(isRoyal(q.t)) king=true; else if(RULES.drops) myCap.push(capturedCode(q)); nb[rr][cc]=null; }
     }
   }
+  // 盤に碁石が1つも無ければ囲み取りは絶対に起きない。毎節点の全面走査をやめるため、
+  // 「碁石がいるか」を局面から導いて親から引き継ぐ（呼び出し元が人かCPUかでは変えない）。
+  // 碁石は打つ以外で増えないので、親に居なければ子にも居ない。取られて減る分は安全側に無視。
+  function boardHasGo(cells, pts){
+    for(let li=0; li<(pts?2:1); li++){
+      const L=li?pts:cells, RR=LR(L), CC=LC(L);
+      for(let r=0;r<RR;r++){ const row=L[r]; if(!row) continue;
+        for(let c=0;c<CC;c++){ const q=row[c]; if(q&&isGo(q.t)) return true; } }
+    }
+    return false;
+  }
   // 囲碁の囲み取り。碁石は「囲んだ領域の駒はマス・交点に関係なく取れる」ので2層を通して数える
   function simGoCapture(){
     for(const layer of [nb,npts]){
@@ -4502,7 +4513,9 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     if(pc.t==='HASA') simHasamiCapture(m.tr,m.tc,p); // はさみ取りを読みに反映
     if(hasFire(pc.t)) simFireBurn(m.tr,m.tc,p);      // 火鬼の焼き取りを読みに反映
   }
-  simGoCapture(); // 囲碁の囲み取りを読みに反映
+  const hadGo = (b && b._go!==undefined) ? b._go : boardHasGo(b, srcPts);
+  nb._go = hadGo || !!(m.drop && isGo(m.drop)) || (cy.some(isGo)||ce.some(isGo));
+  if(nb._go) simGoCapture(); // 囲碁の囲み取りを読みに反映
   // 実ゲームと同じ判定にする：royal を1枚取っただけでは勝ちにしない。
   // 相手の royal が盤上から全て消えたときだけ「勝ち」。取り切るルールでは royal では決着しない。
   if(king) king = !RULES.captureAll && !anyRoyalIn(nb, npts, -p);
