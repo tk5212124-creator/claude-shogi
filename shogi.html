@@ -2890,12 +2890,43 @@ function moves(b,r,c){
   // 鉤行型：直進後に直角に曲がって走る到達先を追加
   if(isHook(pc.t)) hookMoves(b,r,c).forEach(([a,bb])=>res.push([a,bb]));
   // 九宮（宮殿）：帥/將・仕/士は九宮の外へ出られない
-  if(isPalaceBound(pc.t)){   // 九宮の設定に関係なく、帥/將・仕/士は宮マスの外へ出られない
-    // チャンギの王・士は宮の斜め線に沿っても動ける
+  if(isPalaceBound(pc.t)){   // 九宮の設定に関係なく、帥/將・仕/士は宮の外へ出られない
+    const isPt = !!(b&&b.isPts);
+    if(isPt){
+      // 交点に居るとき：判定は「宮マスに引かれた斜め線の端点かどうか」だけ。
+      // 盤のどこに宮があっても同じように動ける。
+      const here=ptDiagDirs(r,c);
+      if(RULES.palaceEscape) { if(isJPalaceBound(pc.t)) res.push(...janggiDiagMoves(b,r,c,p,'step')); return res; }
+      if(!isPalacePoint(r,c)) return [];                         // 宮の点に居ない
+      const okDiag=new Set(here.map(d=>d[0]+','+d[1]));
+      let out=res.filter(([tr,tc])=>{
+        const dr=Math.sign(tr-r), dc=Math.sign(tc-c);
+        if(!isPalacePoint(tr,tc)) return false;                  // 行き先も宮の点
+        if(dr&&dc) return okDiag.has(dr+','+dc);                 // 斜めは線に沿ってのみ
+        return true;                                             // 縦横は宮の点どうしなら可
+      });
+      // チャンギの王・士は宮の斜め線に沿っても動ける（自分の動きに斜めが無くても）
+      if(isJPalaceBound(pc.t)) for(const [dr,dc] of here){
+        const nr=r+dr, nc=c+dc;
+        if(nr<0||nr>=LR(b)||nc<0||nc>=LC(b)) continue;
+        if(!isPalacePoint(nr,nc)) continue;
+        if(diagBlocked(b,r,c,dr,dc)) continue;
+        const q=b[nr][nc]; if(q&&q.p===p) continue;
+        if(!out.some(([a,bb])=>a===nr&&bb===nc)) out.push([nr,nc]);
+      }
+      return out;
+    }
+    // マスの中に居るとき：仕/士は斜め線の向きだけ、帥/漢は宮のマス（＋交差マスの縦横1マス隣）
     if(isJPalaceBound(pc.t)) res.push(...janggiDiagMoves(b,r,c,p,'step'));
     if(RULES.palaceEscape) return res;                           // 宮の外にも出られる設定
     if(!isPalaceCell(r,c)) return [];                            // 宮の外に居る場合は動けない
-    return res.filter(([tr,tc])=>isPalaceCell(tr,tc));           // 宮のマスへだけ動ける
+    return res.filter(([tr,tc])=>{
+      if(!isPalaceCell(tr,tc)) return false;
+      const dr=tr-r, dc=tc-c;
+      // 仕・士（斜めにしか動かない駒）は、そのマスに引かれた線の向きにだけ進める
+      if(dr&&dc && !diagHas(r,c, dr===dc?'l':'r')) return false;
+      return true;
+    });
   }
   // チャンギの車は宮の斜め線に沿って走れる
   if((pc.t==='JR'||pc.t==='JRb')) res.push(...janggiDiagMoves(b,r,c,p,'slide'));
@@ -2923,23 +2954,53 @@ function isPalaceCell(r,c){
 }
 // マス(r,c)が斜め線 d（'l'=＼ / 'r'=／）を持つか（交差は両方を持つ）
 function diagHas(r,c,d){ const g=getDiag(r,c); return g===d||g==='x'; }
+/* ===== 交点から見た宮 =====
+   斜め線はマスの中に引かれ、その両端はマスの角＝交点。だから交点(R,C)が宮の点かどうかは
+   「その交点に線の端が来ているか」で決まる（盤のどこに宮があっても同じ判定になる）。
+   ＼ を持つマス(R,C) の線は 交点(R,C)→(R+1,C+1)、
+   ／ を持つマス(R,C) の線は 交点(R,C+1)→(R+1,C)。 */
+function ptDiagDirs(R,C){
+  const has=(r,c,d)=> r>=0&&r<NR&&c>=0&&c<NC && diagHas(r,c,d);
+  const out=[];
+  if(has(R,C,'l'))     out.push([ 1, 1]);   // ＼ の下向き
+  if(has(R-1,C-1,'l')) out.push([-1,-1]);   // ＼ の上向き
+  if(has(R-1,C,'r'))   out.push([-1, 1]);   // ／ の上向き
+  if(has(R,C-1,'r'))   out.push([ 1,-1]);   // ／ の下向き
+  return out;
+}
+// 交点(R,C)が宮の点か＝その交点を角に持つマスのどれかが宮マス（斜め線あり）なら宮の点。
+// 宮マスの外周の交点（辺の真ん中）も宮に含まれるので、帥は宮の中を縦横に動ける。
+function isPalacePoint(R,C){
+  for(const [dr,dc] of [[-1,-1],[-1,0],[0,-1],[0,0]]){
+    const r=R+dr, c=C+dc;
+    if(r>=0&&r<NR&&c>=0&&c<NC&&getDiag(r,c)) return true;
+  }
+  return false;
+}
+function ptHasDir(R,C,dr,dc){ return ptDiagDirs(R,C).some(d=>d[0]===dr&&d[1]===dc); }
+// レイヤーに応じた「宮の点／宮のマス」判定
+function inPalaceOf(b,r,c){ return (b&&b.isPts)? isPalacePoint(r,c) : isPalaceCell(r,c); }
 // チャンギ：宮の斜め線に沿った移動。線が続く間だけ進める。
 // mode: 'step'（王・士・兵）／'slide'（車）／'jump'（包）
 function janggiDiagMoves(b,r,c,p,mode,forwardOnly){
   const res=[];
-  const dirs=[['l',-1,-1],['l',1,1],['r',-1,1],['r',1,-1]];
+  const isPt = !!(b&&b.isPts);
+  // 交点なら「その交点から伸びている線の向き」、マスなら「そのマスが持つ線の向き」
+  const dirs = isPt ? ptDiagDirs(r,c).map(([dr,dc])=>[(dr===dc?'l':'r'),dr,dc])
+                    : [['l',-1,-1],['l',1,1],['r',-1,1],['r',1,-1]];
+  const cont = (rr,cc,d,dr,dc)=> isPt ? ptHasDir(rr,cc,dr,dc) : diagHas(rr,cc,d);
   const fwd = p===1? -1 : 1;
   for(const [d,dr,dc] of dirs){
-    if(!diagHas(r,c,d)) continue;
+    if(!isPt && !diagHas(r,c,d)) continue;
     if(forwardOnly && dr!==fwd) continue;      // 兵・卒は前方の斜めのみ
     if(mode==='step'){
       const nr=r+dr, nc=c+dc;
-      if(nr<0||nr>=LR(b)||nc<0||nc>=LC(b) || !diagHas(nr,nc,d)) continue;
+      if(nr<0||nr>=LR(b)||nc<0||nc>=LC(b) || !cont(nr,nc,d,dr,dc)) continue;
       if(diagBlocked(b,r,c,dr,dc)) continue;             // 相手レイヤーの駒が斜めの通り道にある
       const q=b[nr][nc]; if(!q||q.p!==p) res.push([nr,nc]);
     } else if(mode==='slide'){
       let nr=r+dr, nc=c+dc;
-      while(nr>=0&&nr<LR(b)&&nc>=0&&nc<LC(b)&&diagHas(nr,nc,d)){
+      while(nr>=0&&nr<LR(b)&&nc>=0&&nc<LC(b)&&cont(nr,nc,d,dr,dc)){
         if(diagBlocked(b,nr-dr,nc-dc,dr,dc)) break;      // 相手レイヤーの駒が斜めの通り道にある
         const q=b[nr][nc];
         if(q){ if(q.p!==p) res.push([nr,nc]); break; }
@@ -2947,7 +3008,7 @@ function janggiDiagMoves(b,r,c,p,mode,forwardOnly){
       }
     } else {
       let nr=r+dr, nc=c+dc, jumped=false;
-      while(nr>=0&&nr<LR(b)&&nc>=0&&nc<LC(b)&&diagHas(nr,nc,d)){
+      while(nr>=0&&nr<LR(b)&&nc>=0&&nc<LC(b)&&cont(nr,nc,d,dr,dc)){
         const q=b[nr][nc];
         if(!jumped){ if(q){ if(isJCannon(q.t)) break; jumped=true; } }
         else { if(!q) res.push([nr,nc]); else { if(q.p!==p&&!isJCannon(q.t)) res.push([nr,nc]); break; } }
