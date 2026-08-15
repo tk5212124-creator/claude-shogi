@@ -991,19 +991,20 @@
     </div>
     <div class="replay-row" style="margin-top:6px;margin-bottom:0;">
       <button id="rpExit">対局に戻る</button>
-      <button id="rpCopy">📋 デバッグ情報をコピー</button>
+      <button id="rpCopy">📋 棋譜（ルール・初期配置含む）をコピー</button>
     </div>
   </div>
 
   <div class="acc" id="accSave">
    <button type="button" class="acc-head" id="accSaveHead">保存・読み込み<span class="acc-chev">∨</span></button>
    <div class="acc-body board-setup">
-    <div class="bs-note">いまの盤・交点・持ち駒・ルール・棋譜をまとめて文字にします。コピーしておけば、あとで下の欄に貼り付けて続きから指せます（棋譜つきならリプレイも復元）。</div>
+    <div class="bs-note">「ルール・初期配置」＝いまの盤・交点・持ち駒・ルール・斜め線。「棋譜」＝それに指し手を足したもの。</div>
     <div class="edit-bar-row">
-      <button class="primary" id="saveCopy">📋 盤面データをコピー</button>
-      <button id="saveCopyFull">📋 デバッグ情報ごとコピー</button>
+      <button class="primary" id="saveCopy">📋 ルール・初期配置をコピー</button>
+      <button id="saveCopyFull">📋 棋譜（ルール・初期配置含む）をコピー</button>
     </div>
-    <textarea id="loadBox" rows="4" placeholder="ここに盤面データ（またはデバッグ情報まるごと）を貼り付けて「読み込み」"></textarea>
+    <textarea id="loadBox" rows="4" placeholder="ここにコピーしたものを貼り付けて「読み込み」"></textarea>
+    <div class="bs-note">コピーした<b>ルール・初期配置</b>を貼るとそのルール・その配置から始められます。<b>棋譜</b>を貼れば、その対局の続きから再開できます（リプレイも見られます）。</div>
     <div class="edit-bar-row">
       <button class="primary" id="loadBtn">▼ 読み込み（この局面から再開）</button>
       <button id="loadClear">欄を消す</button>
@@ -2388,7 +2389,10 @@ function presetGrid(key){
   const sv={board, pts:ptsBoard, diag:cellDiag, NR, NC, PZ, cy:capYou, ce:capEnemy};
   board=[]; ptsBoard=[]; capYou=[]; capEnemy=[];
   applyPreset(key);
-  const g=board.map(row=>row.map(x=>x?{...x}:null));
+  // 交点に置くプリセット（シャンチー・チャンギ）は ptsBoard に入るので、2層を1枚に重ねて返す
+  const rows=Math.max(board.length, ptsBoard.length), cols=Math.max(board[0]?board[0].length:0, ptsBoard[0]?ptsBoard[0].length:0);
+  const g=Array.from({length:rows},(_,r)=>Array.from({length:cols},(_,c)=>{
+    const x=(board[r]&&board[r][c])||(ptsBoard[r]&&ptsBoard[r][c]); return x?{...x}:null; }));
   // 現在の盤（駒・交点・斜め線・持ち駒）を丸ごと戻す
   board=sv.board; ptsBoard=sv.pts; cellDiag=sv.diag;
   NR=sv.NR; NC=sv.NC; PZ=sv.PZ; capYou=sv.cy; capEnemy=sv.ce;
@@ -5597,9 +5601,12 @@ document.getElementById('accBoardHead').onclick=()=>{
   const head=document.getElementById('accSaveHead');
   if(head) head.onclick=()=>document.getElementById('accSave').classList.toggle('open');
   const cp=document.getElementById('saveCopy');
-  if(cp) cp.onclick=()=>copyText(JSON.stringify(stateJSON()), '盤面データ');
+  if(cp) cp.onclick=()=>{
+    const d=stateJSON(); d.kifu=[]; d.start=null; d.gameOver=false;   // 指し手は含めない
+    copyText(JSON.stringify(d), 'ルール・初期配置');
+  };
   const cf=document.getElementById('saveCopyFull');
-  if(cf) cf.onclick=()=>copyText(debugReport(), 'デバッグ情報');
+  if(cf) cf.onclick=()=>copyText(debugReport(), '棋譜（ルール・初期配置つき）');
   const lb=document.getElementById('loadBtn');
   if(lb) lb.onclick=()=>{ const t=document.getElementById('loadBox').value; loadState(t); };
   const lc=document.getElementById('loadClear');
