@@ -4365,6 +4365,12 @@ function evaluate(b,cy,ce){ // 相手(-1)視点で大きいほど良い
   return s;
 }
 function dropTargetsRaw(b,t,p){ return dropTargets(b,t,p); } // 後方互換のため残置（中身はdropTargetsに統合）
+// 任意の2層の盤に side の royal が残っているか（探索用。実ゲームの hasRoyalOnBoard と同じ考え方）
+function anyRoyalIn(cells, pts, side){
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const q=cells[r]&&cells[r][c]; if(q&&q.p===side&&isRoyal(q.t)) return true; }
+  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=pts[r]&&pts[r][c]; if(q&&q.p===side&&isRoyal(q.t)) return true; }
+  return false;
+}
 function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻り値 {nb,ncy,nce,king}
   const nb=b.map(row=>row.map(x=>x?{...x}:null));
   // 交点レイヤーも一緒にコピーして、読みの中でも2層のまま扱う
@@ -4495,6 +4501,9 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     if(hasFire(pc.t)) simFireBurn(m.tr,m.tc,p);      // 火鬼の焼き取りを読みに反映
   }
   simGoCapture(); // 囲碁の囲み取りを読みに反映
+  // 実ゲームと同じ判定にする：royal を1枚取っただけでは勝ちにしない。
+  // 相手の royal が盤上から全て消えたときだけ「勝ち」。取り切るルールでは royal では決着しない。
+  if(king) king = !RULES.captureAll && !anyRoyalIn(nb, npts, -p);
   return {nb,ncy,nce,king};
 }
 
@@ -4583,12 +4592,23 @@ function cpuPickMove(side, depth){
   const BMAX=Math.max(NR,NC);
   if(BMAX>=18) DEPTH=Math.min(DEPTH,1);   // 19路盤など広い盤＋多数の打ち手は浅く
   else if(BMAX>=13) DEPTH=Math.min(DEPTH,2);
-  // 取りの大きい手を先に（αβ効率化）
-  list.sort((a,b2)=>{
-    const ca=board[a.tr]&&board[a.tr][a.tc]?VALUE[board[a.tr][a.tc].t]:0;
-    const cb=board[b2.tr]&&board[b2.tr][b2.tc]?VALUE[board[b2.tr][b2.tc].t]:0;
-    return cb-ca;
-  });
+  // 手の並べ替え。to地点のマスの駒だけでなく、その手で実際に起きる事象で採点する
+  //（交点レイヤー・共有点や飛び越えの別層取り・成り・royal取り・獅子の複数取り）。
+  // 手の並べ替え（αβの枝刈り効率を上げるためだけの安い採点）。
+  // 旧実装は交点の手でも board[tr][tc] を見ていたため、交点レイヤーの取りが常に0点だった。
+  // 行き先のレイヤーを正しく見て、royal を取る手と成りを優先する。
+  const ordScore=(m)=>{
+    if(m.pass) return -1000;
+    if(m.drop) return 0;
+    const DBs = (m.toPt!==undefined) ? (m.toPt? ptsBoard : board) : (m.pt? ptsBoard : board);
+    const q = DBs && DBs[m.tr] && DBs[m.tr][m.tc];
+    let sc = (q && q.p!==side) ? (isRoyal(q.t) ? 100000 : (VALUE[q.t]||0)) : 0;
+    if(m.promo) sc += 50;
+    return sc;
+  };
+  const ordCache=new Map();
+  const ordOf=(m)=>{ let v=ordCache.get(m); if(v===undefined){ v=ordScore(m); ordCache.set(m,v); } return v; };
+  list.sort((a,b2)=>ordOf(b2)-ordOf(a));
   // 超高速(depth<=1)や大盤では、トップ候補だけ評価して時間短縮
   const cand = (DEPTH<=1 || BMAX>=16) ? list.slice(0, Math.min(list.length, BMAX>=16?18:24)) : list;
   // 指定の深さで候補を全部評価して最善手を返す（王が取れる手は即返す）
@@ -4596,15 +4616,15 @@ function cpuPickMove(side, depth){
   // 指定の深さで候補を全部評価して最善手を返す。
   // deadline を渡すと、途中で時間切れになった時点で打ち切る（その深さの結果は捨てる）。
   const pickAt=(d, deadline)=>{
-    let best=null, bestScore = side===-1? -Infinity : Infinity;
+    let best=null, bestScore = side===-1? -Infinity : Infinity, ties=0;
     for(const m of cand){
       const s=simulate(board,m,side,capYou,capEnemy);
       if(s.king) return {m, mate:true};
-      const raw = d<=0 ? evaluate(s.nb,s.ncy,s.nce)
-                       : search(s.nb,s.ncy,s.nce,d,-side,-Infinity,Infinity);
-      const sc=raw + (Math.random()*8-4);
-      if(side===-1){ if(sc>bestScore){bestScore=sc;best=m;} }
-      else { if(sc<bestScore){bestScore=sc;best=m;} }
+      const sc = d<=0 ? evaluate(s.nb,s.ncy,s.nce)
+                      : search(s.nb,s.ncy,s.nce,d,-side,-Infinity,Infinity);
+      // ランダム加点はしない。完全に同点のときだけ、候補の中から等確率で選ぶ
+      if(sc===bestScore){ ties++; if(Math.random()<1/ties) best=m; }
+      else if(side===-1? sc>bestScore : sc<bestScore){ bestScore=sc; best=m; ties=1; }
       // 時間切れ：そこまでに読めた範囲の最善手を返す（候補は良い順に並んでいるので使える）
       if(deadline && now()>deadline) return {m:best, partial:true};
     }
