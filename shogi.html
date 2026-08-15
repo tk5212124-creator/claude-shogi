@@ -913,6 +913,8 @@
       <select id="ptSel">
         <option value="auto">囲碁・シャンチー・チャンギの駒は交点に置く</option>
         <option value="cell">すべての駒をマスの中に置く</option>
+        <option value="point">すべての駒を交点に置く</option>
+        <option value="free">すべての駒をマスにも交点にも置ける</option>
       </select>
     </div>
     <div class="bs-note">※ 交点の駒とマスの駒は別の点にいるので、互いに取り合えません（斜めに動くときの障壁にはなります）。碁石が囲んだ駒は交点・マスに関係なく取れ、九宮の交差マス（×）だけは両方が置ける共有点として取り合えます。斜めに飛び越えて動く駒は交点の駒も取れます。</div>
@@ -932,6 +934,7 @@
       <button id="randomRank">ランダム置換（同じ格）</button>
       <button id="randomFull">ランダム置換（完全）</button>
       <button id="restoreCustom">記憶した配置に戻す</button>
+      <button id="clearBoard">盤を空にする（全部消す）</button>
     </div>
    </div>
   </div>
@@ -2065,11 +2068,25 @@ function ensurePts(){
 }
 // 交点置きが有効か（設定＝'point' か、'auto' で交点駒が居るとき）
 function ptLayerOn(){ return RULES.pointMode!=='cell'; }
-// この駒が交点に乗るか（囲碁・シャンチー・チャンギの駒だけ）
-function goesOnPoint(t){ return ptLayerOn() && isPointPiece(t); }
+// この駒を既定でどちらへ置くか（プリセット配置・持ち駒打ちの行き先）
+function goesOnPoint(t){
+  const m=RULES.pointMode;
+  if(m==='cell')  return false;   // すべてマスの中
+  if(m==='point') return true;    // すべて交点
+  return isPointPiece(t);         // 'auto'（既定）と 'free' は駒の種類で決める
+}
+// 編集でその駒をその側へ置けるか
+function layerAllows(t, isPt){
+  const m=RULES.pointMode;
+  if(m==='free')  return true;    // どちらにも置ける
+  if(m==='cell')  return !isPt;
+  if(m==='point') return !!isPt;
+  return !!isPt === isPointPiece(t);   // 'auto'
+}
 // 駒の種類に応じて2層へ振り分け直す（設定変更・配置後に呼ぶ）
 function syncLayers(){
   ensurePts();
+  if(RULES.pointMode==='free') return;   // 自由配置は置いた場所をそのまま保つ
   for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
     const cell=board[r][c], pt=ptsBoard[r][c];
     if(cell && goesOnPoint(cell.t)){                       // マス→交点へ
@@ -2288,6 +2305,25 @@ function setupJanggi(){
   for(const c of [0,2,4,6,8]){ board[3][c]={t:'JPb',p:-1}; board[6][c]={t:'JP',p:1}; } // 卒・兵
 }
 
+// 盤の大きさだけ変え、駒（マス・交点の両方）と斜め線・持ち駒は残す。
+// はみ出す範囲の駒は落ちる。
+function resizeKeepPieces(rows, cols){
+  ensurePts();
+  const ob=board, op=ptsBoard, od=cellDiag, oR=NR, oC=NC;
+  const cy=[...capYou], ce=[...capEnemy];
+  NR=rows; NC=cols;
+  board=Array.from({length:NR},()=>Array(NC).fill(null));
+  ptsBoard=Array.from({length:NR},()=>Array(NC).fill(null));
+  linkLayers(board, ptsBoard);
+  cellDiag=Array.from({length:NR},()=>Array(NC).fill(null));
+  const rr=Math.min(rows,oR), cc=Math.min(cols,oC);
+  for(let r=0;r<rr;r++)for(let c=0;c<cc;c++){
+    if(ob[r]&&ob[r][c]) board[r][c]={...ob[r][c]};
+    if(op&&op[r]&&op[r][c]) ptsBoard[r][c]={...op[r][c]};
+    if(od&&od[r]) cellDiag[r][c]=od[r][c]||null;
+  }
+  capYou=cy; capEnemy=ce;   // 持ち駒も残す
+}
 // プリセット適用（盤・成りゾーンを設定）
 const PRESETS={
   hon:setupStartBoard, heian:setupHeian, sho:setupSho, mini:setupMinishogi,
@@ -2301,28 +2337,36 @@ function applyPreset(key){
 }
 // プリセットの駒配置（盤グリッド）を、現在の盤・サイズ・持ち駒を壊さずに取得する
 function presetGrid(key){
-  const sv={board, NR, NC, PZ, cy:capYou, ce:capEnemy};
-  board=[]; capYou=[]; capEnemy=[];
+  const sv={board, pts:ptsBoard, diag:cellDiag, NR, NC, PZ, cy:capYou, ce:capEnemy};
+  board=[]; ptsBoard=[]; capYou=[]; capEnemy=[];
   applyPreset(key);
   const g=board.map(row=>row.map(x=>x?{...x}:null));
-  board=sv.board; NR=sv.NR; NC=sv.NC; PZ=sv.PZ; capYou=sv.cy; capEnemy=sv.ce;
+  // 現在の盤（駒・交点・斜め線・持ち駒）を丸ごと戻す
+  board=sv.board; ptsBoard=sv.pts; cellDiag=sv.diag;
+  NR=sv.NR; NC=sv.NC; PZ=sv.PZ; capYou=sv.cy; capEnemy=sv.ce;
+  linkLayers(board, ptsBoard);
   return g;
 }
 // プリセットの配置を (r0,c0) を左上として現在の盤へ重ねる（盤に入りきる分だけ）
 function stampPreset(key, r0, c0){
+  ensurePts();
   const g=presetGrid(key);
   const rows=board.length, cols=board[0]?board[0].length:0;
   let n=0;
   for(let r=0;r<g.length;r++)for(let c=0;c<g[r].length;c++){
     const tr=r0+r, tc=c0+c;
-    if(tr>=0&&tr<rows&&tc>=0&&tc<cols){ board[tr][tc]= g[r][c]?{...g[r][c]}:null;
-      if(ptsBoard[tr]) ptsBoard[tr][tc]=null; n++; }
+    if(tr>=0&&tr<rows&&tc>=0&&tc<cols){
+      const src=g[r][c];
+      if(src){ (goesOnPoint(src.t)?ptsBoard:board)[tr][tc]={...src}; }
+      else { board[tr][tc]=null; ptsBoard[tr][tc]=null; }   // プリセットの空マスは両方クリア
+      n++; }
   }
   return n;
 }
 // プリセットのうち side 側の駒だけを配置。side駒の外接矩形の左上を (r0,c0) に合わせ、
 // 自駒のみを書き込む（他のマスや相手駒は触らない）。
 function stampPresetSide(key, r0, c0, side){
+  ensurePts();
   const g=presetGrid(key);
   let minR=Infinity, minC=Infinity;
   for(let r=0;r<g.length;r++)for(let c=0;c<g[r].length;c++){
@@ -2335,7 +2379,9 @@ function stampPresetSide(key, r0, c0, side){
     const cell=g[r][c];
     if(cell&&cell.p===side){
       const tr=r0+(r-minR), tc=c0+(c-minC);
-      if(tr>=0&&tr<rows&&tc>=0&&tc<cols){ board[tr][tc]={...cell}; n++; }
+      if(tr>=0&&tr<rows&&tc>=0&&tc<cols){
+        (goesOnPoint(cell.t)?ptsBoard:board)[tr][tc]={...cell};   // 駒の種類で置く側を決め、もう一方は消さない
+        n++; }
     }
   }
   return n;
@@ -5266,12 +5312,12 @@ document.getElementById('applyPresetBtn').onclick=()=>{
     rR.value=rows; cR.value=cols;
     const wantPalace=document.getElementById('bsPalace').checked; // 押した時点の指定
     const pzEl=document.getElementById('pzSel'); const wantPZ=pzEl?+pzEl.value:null;
-    newGameWithBoard(()=>makeEmptyBoard(rows, cols));
+    const keepY=[...capYou], keepE=[...capEnemy];         // 持ち駒も残す
+    newGameWithBoard(()=>{ resizeKeepPieces(rows, cols); capYou=keepY; capEnemy=keepE; });
     if(wantPZ!==null) PZ=Math.min(wantPZ, NR);
     if(pzEl) pzEl.dataset.touched='';
     RULES.palace=wantPalace; applyPalaceDiag(); syncSizeUI(); render();
-    const sel=document.getElementById('presetSel'); if(sel) sel.value='empty';
-    setStatus('空盤 '+NR+' 行 × '+NC+' 列 を作りました（編集ツールで駒を配置）');
+    setStatus('盤を '+NR+' 行 × '+NC+' 列 にしました（駒はそのまま。空にするなら編集ツールの「盤を空にする」）');
   };
   if(btn) btn.onclick=rebuild;
 })();
@@ -5384,7 +5430,7 @@ function pieceMatches(t){
 // 「置く場所」に置ける駒だけを一覧に出す（説明モード・持ち駒追加のときは全部出す）
 function layerMatches(t){
   if(!editing || infoOnly || capPickSide) return true;
-  return editLayerIsPt() === isPointPiece(t);
+  return layerAllows(t, editLayerIsPt());
 }
 function buildPickGrid(){
   const mode=currentSortMode();
@@ -5686,11 +5732,10 @@ function applyPick(t){
   }
   ensurePts();
   // 交点には囲碁・シャンチー・チャンギの駒しか置けない。逆にそれらはマスの中に置けない。
-  if(editLayerIsPt() !== isPointPiece(t)){
+  if(!layerAllows(t, editLayerIsPt())){
     closePick();
-    setStatus(isPointPiece(t)
-      ? (KANJI[t]||t)+'（囲碁・シャンチー・チャンギの駒）は線の交点にしか置けません'
-      : (KANJI[t]||t)+'は線の交点には置けません（囲碁・シャンチー・チャンギの駒だけ）','lose');
+    setStatus((KANJI[t]||t)+'は'+(editLayerIsPt()?'線の交点':'マスの中')
+      +'には置けません（盤の設定「駒の置き方」で変えられます）','lose');
     render(); return;
   }
   const putAt=(r,c)=>{
@@ -5821,6 +5866,13 @@ function ensureRoyalEachSide(){
     }
   }
 }
+document.getElementById('clearBoard').onclick=()=>{
+  ensurePts();
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ board[r][c]=null; ptsBoard[r][c]=null; }
+  capYou.length=0; capEnemy.length=0;
+  sel=null; multiSel=[]; updateMultiBar(); render();
+  setStatus('盤を空にしました（駒も持ち駒も全部消しました）');
+};
 document.getElementById('randomPower').onclick=()=>randomReplace('power');
 document.getElementById('randomRank').onclick=()=>randomReplace('rank');
 document.getElementById('randomFull').onclick=()=>randomReplace('full');
