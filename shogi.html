@@ -1161,7 +1161,7 @@
         <ul>
           <li><b>▶ 開始</b>で対局開始。<b>⏸ 一時停止</b>で止まります。</li>
           <li><b>あなた／相手</b>のボタンで <b>手動⇄CPU</b> を切り替え。CPU同士の観戦もできます。</li>
-          <li><b>速度</b>は CPU の考える速さ（超高速では演出を省きます）。</li>
+          <li><b>速度</b>は CPU の考える速さ。演出は「音・演出」トグルだけで決まり、速度では切れません。</li>
           <li>駒はタップして選び、光った場所をタップで移動。持ち駒は上下の欄からタップ。</li>
           <li><b>◀ 待った</b>で1手戻す、<b>▶❘ 1手進める</b>でCPUに1手だけ指させます。</li>
         </ul>
@@ -2599,7 +2599,9 @@ function kifuToText(){
     const from=k.from?(L+'('+(k.from[0]+1)+'行'+(k.from[1]+1)+'列)'):'';
     const nm=KANJI[k.code]||k.code;
     const pr=k.promo?(' 成→'+(KANJI[k.promoTo]||k.promoTo||'')):'';
-    const cap=k.cap?(' 取:'+(KANJI[k.cap]||k.cap)):'';
+    // 同じ層の取り＋相手レイヤーの取り（共有点・飛び越え）をまとめて出す
+    const shown = (k.cap?[k.cap]:[]).concat(k.xcapCodes||[]);
+    const cap = shown.length? (' 取:'+shown.map(t=>KANJI[t]||t).join('・')) : '';
     return (i+1)+'. '+who+nm+' '+from+'→'+to+pr+cap;
   }).join('\n');
 }
@@ -4672,7 +4674,21 @@ function applyMoveSilent(side,m,_legacySilent){
         promoNew = (fin!==pc.t) ? fin : null;
       }
     }
-    recordKifu({side,from:[m.fr,m.fc],to:[m.tr,m.tc],code:pc.t,promo:!!promo0,promoTo:cpawnPromo?'cQ':(promoNew||undefined),cap:tg?tg.t:null,caps:m.caps||undefined,pt:m.pt||undefined,toPt:(m.toPt!==undefined?m.toPt:undefined)});
+    // 相手レイヤーの駒を取る分を先に洗い出す（棋譜に残すため着手記録より前に集める）
+    //   ・九宮の交差マス（2層の共有点）に居る敵
+    //   ・斜めに飛び越えて動く駒が跳び越えた先に居る敵
+    const xcaps=[];
+    const shTg = OB[m.tr] && OB[m.tr][m.tc];
+    if(isSharedPoint(m.tr,m.tc) && shTg && shTg.p!==side) xcaps.push([m.tr,m.tc,shTg.t]);
+    for(const [cr,cc] of crossJumpPoints(LB, pc.t, m.fr, m.fc, m.tr, m.tc, side)){
+      const v=OB[cr] && OB[cr][cc];
+      if(v && v.p!==side && !xcaps.some(x=>x[0]===cr&&x[1]===cc)) xcaps.push([cr,cc,v.t]);
+    }
+    recordKifu({side,from:[m.fr,m.fc],to:[m.tr,m.tc],code:pc.t,promo:!!promo0,promoTo:cpawnPromo?'cQ':(promoNew||undefined),
+      cap: tg? tg.t : null,
+      xcaps: xcaps.length? xcaps.map(x=>[x[0],x[1]]) : undefined,
+      xcapCodes: xcaps.length? xcaps.map(x=>x[2]) : undefined,
+      caps:m.caps||undefined,pt:m.pt||undefined,toPt:(m.toPt!==undefined?m.toPt:undefined)});
     let tookRoyal = tg && isRoyal(tg.t);
     // royal（玉・帥など）は持ち駒にしない。取られた側にまだ別のroyalが居ても打ち直せてはいけない
     if(tg && RULES.drops && !isRoyal(tg.t)){ cap.push(capturedCode(tg)); }
@@ -4681,16 +4697,9 @@ function applyMoveSilent(side,m,_legacySilent){
       const v=LB[cr][cc];
       if(v){ if(isRoyal(v.t)) tookRoyal=true; else if(RULES.drops) cap.push(capturedCode(v)); LB[cr][cc]=null; }
     }
-    // 九宮の交差マス（2層の共有点）では、もう一方のレイヤーの敵も取れる
-    const shTg = OB[m.tr] && OB[m.tr][m.tc];
-    if(isSharedPoint(m.tr,m.tc) && shTg && shTg.p!==side){
-      if(isRoyal(shTg.t)) tookRoyal=true; else if(RULES.drops) cap.push(capturedCode(shTg));
-      OB[m.tr][m.tc]=null;
-    }
-    // 斜めに飛び越えて動く駒は、跳び越えた先の相手レイヤーの駒も取れる
-    for(const [cr,cc] of crossJumpPoints(LB, pc.t, m.fr, m.fc, m.tr, m.tc, side)){
+    for(const [cr,cc] of xcaps){
       const v=OB[cr] && OB[cr][cc];
-      if(v && v.p!==side){ if(isRoyal(v.t)) tookRoyal=true; else if(RULES.drops) cap.push(capturedCode(v)); OB[cr][cc]=null; }
+      if(v){ if(isRoyal(v.t)) tookRoyal=true; else if(RULES.drops) cap.push(capturedCode(v)); OB[cr][cc]=null; }
     }
     const newCode = cpawnPromo ? 'cQ' : (promoNew || pc.t);
     _fxPromo = !!(promoNew || cpawnPromo);
@@ -5447,6 +5456,9 @@ function applyKifuStep(rec){
       const v=LBk[cr][cc];
       if(v){ if(RULES.drops && !isRoyal(v.t)) (rec.side===1?capYou:capEnemy).push(capturedCode(v)); LBk[cr][cc]=null; }
     }
+    // 相手レイヤーの取り（共有点・飛び越え）を再現する
+    if(rec.xcaps){ const OBk = (rec.pt? board : ptsBoard);
+      for(const [cr,cc] of rec.xcaps){ if(OBk[cr]) OBk[cr][cc]=null; } }
     const igui = fr===tr && fc===tc; // 居喰いは動かない
     const newCode = rec.promoTo ? rec.promoTo : (rec.promo?(promoteCode(rec.code)||rec.code):rec.code);
     DBk[tr][tc]={t:newCode, p:rec.side};
