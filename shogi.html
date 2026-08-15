@@ -4551,20 +4551,80 @@ function genMoves(b,p,cy,ce){
 
 // αβ探索：手番sideから見て、相手(-1)視点の評価を返す
 const MATE=1e7;
-function search(b,cy,ce,depth,side,alpha,beta){
+/* ===== 手の並べ替え用の記憶（killer / history / counter）=====
+   合法手の集合も評価値も変えない。「どの順に読むか」だけを変えて枝刈りを効かせる。
+   1手ごとにクリアするので、局面が変わっても古い情報を引きずらない。 */
+let killers=[], histTable=new Map(), counters=new Map();
+function clearOrderTables(){ killers=[]; histTable=new Map(); counters=new Map(); }
+// 手を数値キーにする（座標は 0..40 なので衝突しない）
+function mvKey(m){
+  if(!m) return -1;
+  if(m.pass) return -2;
+  const L = (m.pt?1:0) | (m.toPt?2:0);
+  if(m.drop) return 90000000 + L*2000 + (m.tr*41+m.tc);
+  return (((m.fr*41+m.fc)*1681) + (m.tr*41+m.tc))*4 + L;
+}
+// 探索中の並べ替え点数。取りの価値＋killer/counter/history。
+function orderInSearch(b, m, side, ply, prevKey){
+  if(m.pass) return -1000;
+  let sc=0;
+  if(!m.drop){
+    const pts=(b.L&&b.L.pts)||null;
+    const DB = (m.toPt!==undefined) ? (m.toPt? pts : b.L.cells) : (m.pt? pts : b);
+    const q = DB && DB[m.tr] && DB[m.tr][m.tc];
+    if(q && q.p!==side) sc += isRoyal(q.t) ? 1000000 : (VALUE[q.t]||0)*16;
+    // 獅子型の途中取り（居喰い含む）も「取り」として先に読む
+    if(m.caps) for(const cc of m.caps){
+      const z=b[cc[0]] && b[cc[0]][cc[1]];
+      if(z && z.p!==side) sc += isRoyal(z.t) ? 1000000 : (VALUE[z.t]||0)*16;
+    }
+    if(m.promo) sc += 400;
+  }
+  const k=mvKey(m);
+  const kk=killers[ply];
+  if(kk){ if(kk[0]===k) sc += 9000; else if(kk[1]===k) sc += 8000; }
+  if(prevKey!==undefined && counters.get(prevKey)===k) sc += 7000;
+  sc += (histTable.get(k)||0);
+  return sc;
+}
+function search(b,cy,ce,depth,side,alpha,beta,ply,prevKey){
   if(depth===0) return evaluate(b,cy,ce);
+  ply = ply||0;
   const list=genMoves(b,side,cy,ce);
   if(!list.length){ // 手詰まり＝玉を取られる前提でその側の負け
     return side===-1? -MATE : MATE;
   }
+  // 良い手から読む（取り→killer→counter→history→静かな手）
+  if(list.length>1){
+    const sc=new Map();
+    for(const m of list) sc.set(m, orderInSearch(b,m,side,ply,prevKey));
+    list.sort((x,y)=>sc.get(y)-sc.get(x));
+  }
+  const isCap=(m)=>{
+    if(m.drop||m.pass) return false;
+    if(m.caps && m.caps.length) return true;
+    const pts=(b.L&&b.L.pts)||null;
+    const DB=(m.toPt!==undefined)?(m.toPt?pts:b.L.cells):(m.pt?pts:b);
+    const q=DB&&DB[m.tr]&&DB[m.tr][m.tc];
+    return !!(q&&q.p!==side);
+  };
+  // beta cutoff を起こした静かな手を覚える（次からその手を先に読む）
+  const remember=(m)=>{
+    if(isCap(m)) return;
+    const k=mvKey(m);
+    const kk=killers[ply]||(killers[ply]=[0,0]);
+    if(kk[0]!==k){ kk[1]=kk[0]; kk[0]=k; }
+    histTable.set(k,(histTable.get(k)||0)+depth*depth);
+    if(prevKey!==undefined) counters.set(prevKey,k);
+  };
   if(side===-1){ // 相手＝最大化
     let val=-Infinity;
     for(const m of list){
       const s=simulate(b,m,-1,cy,ce);
       if(s.king){ return MATE+depth; } // あなたの玉を取れる→即勝ち（早いほど高評価）
-      val=Math.max(val,search(s.nb,s.ncy,s.nce,depth-1,1,alpha,beta));
+      val=Math.max(val,search(s.nb,s.ncy,s.nce,depth-1,1,alpha,beta,ply+1,mvKey(m)));
       alpha=Math.max(alpha,val);
-      if(alpha>=beta)break;
+      if(alpha>=beta){ remember(m); break; }
     }
     return val;
   } else { // あなた＝最小化
@@ -4572,9 +4632,9 @@ function search(b,cy,ce,depth,side,alpha,beta){
     for(const m of list){
       const s=simulate(b,m,1,cy,ce);
       if(s.king){ return -MATE-depth; } // 相手の玉を取れる→相手にとって即負け
-      val=Math.min(val,search(s.nb,s.ncy,s.nce,depth-1,-1,alpha,beta));
+      val=Math.min(val,search(s.nb,s.ncy,s.nce,depth-1,-1,alpha,beta,ply+1,mvKey(m)));
       beta=Math.min(beta,val);
-      if(alpha>=beta)break;
+      if(alpha>=beta){ remember(m); break; }
     }
     return val;
   }
@@ -4583,6 +4643,7 @@ function search(b,cy,ce,depth,side,alpha,beta){
 // side=-1(相手) or 1(あなた) の最善手を選ぶ。評価は常に相手(-1)視点なので
 // side=-1は最大化、side=1は最小化したい手を選ぶ。
 function cpuPickMove(side, depth){
+  clearOrderTables();   // 並べ替えの記憶は1手ごとにリセット（古い局面の情報を引きずらない）
   let list=genMoves(board,side,capYou,capEnemy);
   // 実際に指す手は人間と同じ合法判定を通す（千日手回避で禁じた手は候補から除く）
   if(RULES.banSennichite) list=list.filter(m=>isLegalMove(m,side));
@@ -4603,6 +4664,10 @@ function cpuPickMove(side, depth){
     const DBs = (m.toPt!==undefined) ? (m.toPt? ptsBoard : board) : (m.pt? ptsBoard : board);
     const q = DBs && DBs[m.tr] && DBs[m.tr][m.tc];
     let sc = (q && q.p!==side) ? (isRoyal(q.t) ? 100000 : (VALUE[q.t]||0)) : 0;
+    if(m.caps) for(const cc of m.caps){
+      const z=board[cc[0]] && board[cc[0]][cc[1]];
+      if(z && z.p!==side) sc += isRoyal(z.t) ? 100000 : (VALUE[z.t]||0);
+    }
     if(m.promo) sc += 50;
     return sc;
   };
@@ -4621,7 +4686,7 @@ function cpuPickMove(side, depth){
       const s=simulate(board,m,side,capYou,capEnemy);
       if(s.king) return {m, mate:true};
       const sc = d<=0 ? evaluate(s.nb,s.ncy,s.nce)
-                      : search(s.nb,s.ncy,s.nce,d,-side,-Infinity,Infinity);
+                      : search(s.nb,s.ncy,s.nce,d,-side,-Infinity,Infinity,1,mvKey(m));
       // ランダム加点はしない。完全に同点のときだけ、候補の中から等確率で選ぶ
       if(sc===bestScore){ ties++; if(Math.random()<1/ties) best=m; }
       else if(side===-1? sc>bestScore : sc<bestScore){ bestScore=sc; best=m; ties=1; }
