@@ -3330,6 +3330,14 @@ function demoteOf(t){ return (isPromoted(t) && DEMOTE[t]) ? DEMOTE[t] : t; }
 // 取られたら負けの駒（玉将 or 太子）。
 function isRoyal(t){ return t==='hK'||t==='hKw'||t==='mK'||t==='K'||t==='CP'||t==='cK'||t==='JT'||t==='zLion'||!!(TP[t]&&TP[t].fl&&TP[t].fl.includes('royal')); }
 // 指定プレイヤーのroyal駒（玉・太子）が盤上または持ち駒に残っているか
+// 勝敗判定に使うのはこちら：盤上（マス・交点の両方）に royal が残っているか。
+// 持ち駒は数えない（「盤面から味方のroyal駒がなくなったら決着」）。
+function hasRoyalOnBoard(p){
+  ensurePts();
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) return true; }
+  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===p&&isRoyal(q.t)) return true; }
+  return false;
+}
 function hasRoyal(p){
   ensurePts();
   for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) return true; }
@@ -3852,7 +3860,7 @@ function doMoveChessPromo(fr,fc,tr,tc,toCode,p){
   board[fr][fc]=null;
   history[history.length-1].to=[tr,tc];
   pendingFx=computeFx(_prev,p,{fr,fc,tr,tc},true);
-  if(!RULES.captureAll && tookRoyal && !hasRoyal(-p)){ endGame(p); return; }
+  if(!RULES.captureAll && tookRoyal && !hasRoyalOnBoard(-p)){ endGame(p); return; }
   checkSennichite();
 }
 // キャスリング：cKが横に2マス動く手を検出。可能なら{rookFrom,rookTo}を返す。
@@ -4592,18 +4600,19 @@ function applyMoveSilent(side,m,_legacySilent){
       }
     }
     // 「取り切るまで戦う」ONのときは王を取られても終局しない（勝敗は全滅のみ）
-    if(!RULES.captureAll && tookRoyal && !hasRoyal(-side)){
+    if(!RULES.captureAll && tookRoyal && !hasRoyalOnBoard(-side)){
       history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side); return;
     }
-    if(!RULES.captureAll && !hasRoyal(-side)){ history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side); return; }
+    if(!RULES.captureAll && !hasRoyalOnBoard(-side)){ history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side); return; }
   }
   goCaptureScan(); // 囲碁：縦横4方を囲まれた碁石を取る（色は保持して持ち駒へ）
   history[history.length-1].to=[m.tr,m.tc];
   if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo);
-  // royal を失ったかの最終判定。打ち込み（オセロの裏返し）・囲碁の囲み取り・はさみ取り・
-  // 火鬼の焼き取りなど、移動以外で王が盤から消える経路もここで拾う。
+  // 勝敗の一般則：盤上から味方の royal が居なくなった側の負け。
+  // 取られた・裏返された・囲まれた・焼かれた…どの理由でも同じ扱いにする。
+  // 「取り切るまで戦う」ルールのときだけ別（王の有無では決着しない）。
   if(!RULES.captureAll){
-    const meHas=hasRoyal(side), foeHas=hasRoyal(-side);
+    const meHas=hasRoyalOnBoard(side), foeHas=hasRoyalOnBoard(-side);
     if(!foeHas || !meHas){
       render();
       // 王を残している側の勝ち。両方失ったら指した側の勝ち。
