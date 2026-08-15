@@ -141,11 +141,15 @@
     background:radial-gradient(circle,#8ff0c4,#2f9e73);box-shadow:0 0 10px rgba(98,209,160,.9);}
   .pt-slot.movable.empty::after{width:34%;height:34%;}
   /* 編集モードで交点を選んでいるとき：空の交点にも掴める目印を出す */
-  .pt-slot.pt-edit::before{content:"";position:absolute;width:22%;height:22%;border-radius:50%;
+  .pt-slot.pt-edit::before{content:"";position:absolute;top:50%;left:50%;
+    transform:translate(-50%,-50%);width:22%;height:22%;border-radius:50%;
     border:1px dashed rgba(245,207,107,.55);}
-  .pt-slot.multisel::before{content:"";position:absolute;inset:8%;border-radius:50%;
-    background:rgba(98,209,160,.4);box-shadow:0 0 0 2px var(--sel);border:none;}
-  .pt-slot .ms-badge{position:absolute;top:-2px;left:-2px;}
+  .pt-slot.multisel::before{content:none;}
+  .board .pt-layer .pt-slot > .ms-badge{position:absolute;top:50%;left:50%;right:auto;bottom:auto;
+    transform:translate(-50%,-50%);margin:0;
+    width:64%;height:64%;min-width:0;padding:0;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:.72rem;box-shadow:0 0 0 2px var(--sel), 0 2px 6px rgba(0,0,0,.5);}
   /* 「置く場所」バー（編集モード中に盤の直下へ出す） */
   .edit-layer-bar{background:linear-gradient(160deg,#4a3a6e,#2e2447);border-color:rgba(245,207,107,.5);
     box-shadow:0 4px 16px rgba(139,107,255,.3);}
@@ -5377,6 +5381,11 @@ function pieceMatches(t){
   const s=[t,KANJI[t]||'',ENAME[t]||'',dispName(t)||'',desc].join(' ').toLowerCase();
   return s.indexOf(q)>=0;
 }
+// 「置く場所」に置ける駒だけを一覧に出す（説明モード・持ち駒追加のときは全部出す）
+function layerMatches(t){
+  if(!editing || infoOnly || capPickSide) return true;
+  return editLayerIsPt() === isPointPiece(t);
+}
 function buildPickGrid(){
   const mode=currentSortMode();
   const basicSet=new Set(BASIC_LIST);
@@ -5398,7 +5407,7 @@ function buildPickGrid(){
   const fill=(gridId,lblId,list,lblText)=>{
     const g=document.getElementById(gridId); if(!g)return;
     g.innerHTML='';
-    const filtered=sortList(list, mode).filter(pieceMatches);
+    const filtered=sortList(list, mode).filter(pieceMatches).filter(layerMatches);
     filtered.forEach(t=>mkPickBtn(t,g));
     setDisp(lblId, filtered.length>0);
     const lbl=document.getElementById(lblId); if(lbl&&lblText) lbl.textContent=lblText;
@@ -5451,13 +5460,13 @@ function syncEditLayerUI(){
 (function(){
   const el=document.getElementById('editLayerSel'); if(!el) return;
   el.onchange=e=>{
-    editLayer=e.target.value; sel=null; render();
+    editLayer=e.target.value; sel=null; buildPickGrid(); render();
     setStatus(editLayerIsPt()?'これから置く駒は「線の交点」に置きます'
                             :'これから置く駒は「マスの中」に置きます');
   };
 })();
 function openEditMenu(r,c,forcePt){
-  ensurePts();
+  ensurePts(); buildPickGrid();
   // 交点の駒を直接つかんだときだけ「置く場所」を交点に合わせる。
   // 空マスのタップで選択中の「置く場所」を勝手に戻さない。
   if(forcePt===true || forcePt==='cell'){ editLayer = (forcePt===true)? 'pt':'cell'; syncEditLayerUI(); }
@@ -5469,6 +5478,9 @@ function openEditMenu(r,c,forcePt){
   document.getElementById('emInfo').style.display = pc?'':'none';
   const sw=document.getElementById('emSwapLayer');
   if(sw) sw.textContent = isPt? '□ マスの中に切替' : '◇ 交点に切替';
+  // 斜め線はマスの属性なので、交点を編集しているときは出さない
+  const dg=document.getElementById('emDiagOpen');
+  if(dg) dg.style.display = isPt? 'none' : '';
   document.getElementById('editMenuModal').classList.add('show');
 }
 function closeEditMenu(){ document.getElementById('editMenuModal').classList.remove('show'); menuCell=null; }
@@ -5549,12 +5561,14 @@ let infoOnly=false, previewType=null;
 let capPickSide=0; // 持ち駒追加モード（0=オフ, 1/-1=対象陣営）
 function openCapPick(p){
   capPickSide=p; editCell=null; multiSel=[]; infoOnly=false;
+  buildPickGrid();
   document.getElementById('pickTitle').textContent=(p===1?'あなた':'相手')+'の持ち駒に追加';
   showList();
   document.getElementById('pickModal').classList.add('show');
 }
 function openPickList(){
   capPickSide=0;
+  buildPickGrid();   // 「置く場所」に合う駒だけを出すため、開くたびに作り直す
   const target = multiSel.length>0 ? ('選択した'+multiSel.length+'マスを変更')
     : (editCell ? ((board[editCell.r][editCell.c]?'駒を変更':'空マスに駒を置く')) : '駒の図鑑');
   document.getElementById('pickTitle').textContent = infoOnly?'駒の説明':target;
@@ -5671,6 +5685,14 @@ function applyPick(t){
     return;
   }
   ensurePts();
+  // 交点には囲碁・シャンチー・チャンギの駒しか置けない。逆にそれらはマスの中に置けない。
+  if(editLayerIsPt() !== isPointPiece(t)){
+    closePick();
+    setStatus(isPointPiece(t)
+      ? (KANJI[t]||t)+'（囲碁・シャンチー・チャンギの駒）は線の交点にしか置けません'
+      : (KANJI[t]||t)+'は線の交点には置けません（囲碁・シャンチー・チャンギの駒だけ）','lose');
+    render(); return;
+  }
   const putAt=(r,c)=>{
     const L = editLayerIsPt()? ptsBoard : board;      // 編集ツールで選んだ側へ置く
     const cur=L[r][c]; const owner=cur?cur.p:editSide;
