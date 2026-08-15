@@ -4773,6 +4773,112 @@ function search(b,cy,ce,depth,side,alpha,beta,ply,prevKey){
   }
 }
 
+/* ===== Cheap EventDelta：その手で「実際に何が起きるか」を安く見積もる =====
+   超高速や広い盤では、読む前に候補を上位18〜24手へ絞っている。そこに本当の有力手が
+   入っていなければ、その後どれだけ深く読んでも救えない。
+   ところがこのアプリの「取り」は行き先のマスの駒だけではない。交差宮マスの共有点、
+   斜めの飛び越し、獅子の複数取り、オセロの裏返し、碁石の囲み取り、火鬼の焼き、
+   はさみ、範囲攻撃…と種類が多く、旧来の採点はそのほとんどを0点にしていた。
+
+   ここでは候補ごとに simulate はせず、盤の局所走査だけで見積もる。
+   使い道は並べ替えと候補の足切りだけなので、多少の見落としがあっても
+   合法手・評価値・勝敗判定には一切影響しない。 */
+const ROYAL_V=100000;
+const ORTHO4=[[-1,0],[1,0],[0,-1],[0,1]];
+function pieceVal(t){ return isRoyal(t) ? ROYAL_V : (VALUE[t]||0); }
+// (r,c)から各方向へ、敵を挟んで自駒で閉じているなら、その挟まれた敵の価値合計
+function sandwichVal(r,c,side,dirs,B,RR,CC){
+  let s=0;
+  for(const [dr,dc] of dirs){
+    let rr=r+dr, cc=c+dc, sum=0, closed=false;
+    while(rr>=0&&rr<RR&&cc>=0&&cc<CC){
+      const q=B[rr][cc];
+      if(!q) break;
+      if(q.p===side){ closed=true; break; }
+      sum+=pieceVal(q.t); rr+=dr; cc+=dc;
+    }
+    if(closed) s+=sum;
+  }
+  return s;
+}
+// 碁石を打った直後に囲み取りできる駒の価値。判定の間だけ石を置き、必ず元に戻す
+function goDropGain(r,c,owner){
+  if(!ptsBoard[r] || ptsBoard[r][c]===undefined) return 0;
+  const prev=ptsBoard[r][c];
+  if(prev) return 0;
+  ptsBoard[r][c]={t:(owner===1?'GOB':'GOW'),p:owner};
+  let s=0;
+  try{
+    const N=surroundNeighbors(true,r,c), tg=[];
+    N.same.forEach(([rr,cc])=>tg.push([rr,cc,true]));
+    N.other.forEach(([rr,cc])=>tg.push([rr,cc,false]));
+    for(const [nr,nc,isPt] of tg){
+      const rows=isPt?NR+1:NR, cols=isPt?NC+1:NC;
+      if(nr<0||nr>=rows||nc<0||nc>=cols) continue;
+      const L=isPt?ptsBoard:board;
+      const z=L[nr] && L[nr][nc];
+      if(!z || z.p===owner || isGo(z.t)) continue;
+      if(isSurrounded(isPt,nr,nc,board,ptsBoard, t=>t.p===owner)) s+=pieceVal(z.t);
+    }
+  } finally { ptsBoard[r][c]=prev; }
+  return s;
+}
+function eventDelta(side, m){
+  if(m.pass) return -1000;
+  if(m.drop){
+    // 打ち込みで起きること：オセロの裏返し（所有者が入れ替わるので価値は2倍）と碁石の囲み取り
+    if(m.drop==='OTH') return 2*sandwichVal(m.tr,m.tc,side,ALL8,board,NR,NC);
+    if(isGo(m.drop))   return goDropGain(m.tr,m.tc, goOwner(m.drop)||side);
+    return 0;
+  }
+  const LB = m.pt? ptsBoard : board;                                  // 動く層
+  const OB = m.pt? board : ptsBoard;                                  // もう一方の層
+  const DB = (m.toPt!==undefined) ? (m.toPt? ptsBoard : board) : LB;  // 着地する層
+  const pc = LB[m.fr] && LB[m.fr][m.fc];
+  if(!pc) return 0;
+  let sc=0;
+  const q = DB[m.tr] && DB[m.tr][m.tc];                     // 通常の取り
+  if(q && q.p!==side) sc += pieceVal(q.t);
+  if(isSharedPoint(m.tr,m.tc)){                             // 共有点にいる別レイヤーの駒（xcaps）
+    const z=OB[m.tr] && OB[m.tr][m.tc];
+    if(z && z.p!==side) sc += pieceVal(z.t);
+  }
+  for(const [cr,cc] of crossJumpPoints(LB, pc.t, m.fr, m.fc, m.tr, m.tc, side)){
+    const z=OB[cr] && OB[cr][cc];                           // 飛び越した先の別レイヤーの駒（xcaps）
+    if(z && z.p!==side) sc += pieceVal(z.t);
+  }
+  if(m.caps) for(const cc of m.caps){                       // 獅子型の複数取り・居喰い
+    const z=LB[cc[0]] && LB[cc[0]][cc[1]];
+    if(z && z.p!==side) sc += pieceVal(z.t);
+  }
+  if(m.promo){                                              // 成りの価値の増分
+    const nt=promoteCode(pc.t);
+    if(nt) sc += Math.max(0,(VALUE[nt]||0)-(VALUE[pc.t]||0));
+  }
+  if(pc.t==='HASA') sc += sandwichVal(m.tr,m.tc,side,ORTHO4,board,NR,NC);
+  if(hasFire(pc.t)){                                        // 火鬼：隣接8方向の敵を焼く
+    for(const [dr,dc] of ALL8){
+      const rr=m.tr+dr, cc=m.tc+dc;
+      if(rr<0||rr>=NR||cc<0||cc>=NC) continue;
+      const z=board[rr][cc]; if(z && z.p!==side) sc += pieceVal(z.t);
+    }
+  }
+  if(hasRangeAttack(pc.t) && (m.fr===m.tr||m.fc===m.tc||Math.abs(m.tr-m.fr)===Math.abs(m.tc-m.fc))){
+    const sr=Math.sign(m.tr-m.fr), sc2=Math.sign(m.tc-m.fc);   // 範囲攻撃：間の格下駒を一掃
+    const RR=LR(LB), CC=LC(LB);
+    let rr=m.fr+sr, cc=m.fc+sc2;
+    while((rr!==m.tr||cc!==m.tc) && rr>=0&&rr<RR&&cc>=0&&cc<CC){
+      const mid=LB[rr][cc];
+      if(mid && !isRankless(mid.t) && pieceRank(mid.t)>pieceRank(pc.t))
+        sc += (mid.p!==side ? pieceVal(mid.t) : -pieceVal(mid.t));  // 自駒を巻き込むなら損
+      rr+=sr; cc+=sc2;
+    }
+  }
+  return sc;
+}
+/* 候補選別の中身を外から見るための記録。既定では何もしない（速度に影響させない）。 */
+const CPU_DIAG={enabled:false, last:null};
+
 /* ===== 局所反復（同じ2マスの往復）への減点 =====
    局面が完全に一致しないと千日手回避は働かないので、相手が別の駒を少しずつ動かしていると
    自分だけ同じ2マスを延々と往復し続けることがある。これを止める。
@@ -4864,29 +4970,70 @@ function cpuPickMove(side, depth){
   else if(BMAX>=13) DEPTH=Math.min(DEPTH, deep?3:2);
   // 手の並べ替え。to地点のマスの駒だけでなく、その手で実際に起きる事象で採点する
   //（交点レイヤー・共有点や飛び越えの別層取り・成り・royal取り・獅子の複数取り）。
-  // 手の並べ替え（αβの枝刈り効率を上げるためだけの安い採点）。
-  // 旧実装は交点の手でも board[tr][tc] を見ていたため、交点レイヤーの取りが常に0点だった。
-  // 行き先のレイヤーを正しく見て、royal を取る手と成りを優先する。
-  const ordScore=(m)=>{
+  // その手で実際に起きること（EventDelta）で採点する。打ち込みも 0 固定にはしない。
+  const cheapScore=(m)=>{
     if(m.pass) return -1000;
-    if(m.drop) return 0;
-    const DBs = (m.toPt!==undefined) ? (m.toPt? ptsBoard : board) : (m.pt? ptsBoard : board);
-    const q = DBs && DBs[m.tr] && DBs[m.tr][m.tc];
-    let sc = (q && q.p!==side) ? (isRoyal(q.t) ? 100000 : (VALUE[q.t]||0)) : 0;
-    if(m.caps) for(const cc of m.caps){
-      const z=board[cc[0]] && board[cc[0]][cc[1]];
-      if(z && z.p!==side) sc += isRoyal(z.t) ? 100000 : (VALUE[z.t]||0);
-    }
-    if(m.promo) sc += 50;
+    if(m.drop) return -1;
+    const DBs=(m.toPt!==undefined)?(m.toPt?ptsBoard:board):(m.pt?ptsBoard:board);
+    const q=DBs && DBs[m.tr] && DBs[m.tr][m.tc];
+    let sc=(q && q.p!==side)? pieceVal(q.t) : 0;
+    if(m.promo) sc+=50;
     return sc;
   };
-  const ordCache=new Map();
-  const ordOf=(m)=>{ let v=ordCache.get(m); if(v===undefined){ v=ordScore(m); ordCache.set(m,v); } return v; };
-  list.sort((a,b2)=>ordOf(b2)-ordOf(a));
+  /* 大局将棋のような巨大盤では、候補を1手読むだけでも高い。並べ替えを変えると
+     読む候補の顔ぶれが変わり、枝刈りの効き方まで変わってしまう（実測で2.7倍遅くなった）。
+     EventDelta で並べ替えるのは、それが実際に効く「盤は普通だが手数が多い」場合だけにする。 */
+  const useEventDelta = BMAX<16;
+  const ordScore=(m)=>{
+    if(!useEventDelta) return cheapScore(m);
+    let sc=eventDelta(side,m);
+    if(m.drop) sc -= 1;   // 同点なら盤上の手を先に見る（打ちは手数が多く時間を食うため）
+    return sc;
+  };
   // 超高速(depth<=1)では、トップ候補だけ評価して即答する。
   // 大盤の絞り込みは以前ほど厳しくしなくてよい（探索自体が桁違いに速くなったため）。
-  const CAP = (DEPTH<=1) ? (BMAX>=16?18:24) : (BMAX>=16? (deep?64:18) : 0);
-  const cand = CAP ? list.slice(0, Math.min(list.length, CAP)) : list;
+  /* 候補の上限。探索が桁違いに速くなったぶんを、ここを広げる方に使う。
+     ただし広げてよいのは「盤は普通の大きさなのに手数が多い」場合だけ。
+     大局将棋のように盤そのものが巨大な場合は、1手読むだけでも高いので従来どおり絞る。 */
+  const CAP = (DEPTH<=1) ? (BMAX>=16?18:96) : (BMAX>=16? (deep?64:18) : 0);
+  /* 二段構えにする。EventDelta は行き先のマス以外も見るぶん安くはないので、
+     4400手ある大局将棋で全合法手に掛けると採点だけで時間を使ってしまう。
+     まず「行き先の駒と成り」だけの安い採点で粗く絞り、残った手だけ丁寧に採点し直す。
+     絞る幅は最終的に使う候補数の4倍取ってあるので、丁寧な採点の出番は失われない。
+     採点は Map ではなく配列に持つ。キーがオブジェクトの Map は比較のたびに
+     ハッシュを引くので、数千手を並べ替えるとそれだけで無視できない時間になる。 */
+  let pool=list;
+  if(CAP && list.length>CAP*4){
+    const arr=list.map(m=>({m,s:cheapScore(m)}));
+    arr.sort((a,b2)=>b2.s-a.s);
+    pool=new Array(CAP*4);
+    for(let i=0;i<CAP*4;i++) pool[i]=arr[i].m;
+  }
+  const scored=pool.map(m=>({m,s:ordScore(m)}));
+  scored.sort((a,b2)=>b2.s-a.s);
+  pool=scored.map(x=>x.m);
+  const ordOf=(m)=>{ const e=scored.find(x=>x.m===m); return e? e.s : ordScore(m); };
+  /* 足切りは「何も起きない手」にだけ掛ける。
+     取り・成り・裏返し・囲み取りなど何かが起きる手（EventDelta>0）を切ってしまうと、
+     その後どれだけ深く読んでも取り返しがつかない。list は既に降順なので前から数えるだけ。
+     ただし際限なく増やすと超高速が超高速でなくなるので、上限も置く。 */
+  let cand=pool;
+  if(CAP){
+    // 大盤では取りの手だけで何百手にもなるので、ここは広げない（1手が高すぎる）
+    const room = (BMAX>=16) ? CAP : (()=>{
+      let nHot=0; while(nHot<scored.length && scored[nHot].s>0) nHot++;
+      return Math.max(CAP, Math.min(nHot, CAP*2));
+    })();
+    cand = pool.slice(0, Math.min(pool.length, room));
+  }
+  if(CPU_DIAG.enabled){
+    const desc=(m)=>m.pass?'パス':(m.drop? ('打'+m.drop+'→'+(m.tr+1)+','+(m.tc+1)+(m.pt?'◇':''))
+      : ((m.pt?'◇':'')+(m.fr+1)+','+(m.fc+1)+'→'+(m.toPt?'◇':'')+(m.tr+1)+','+(m.tc+1)+(m.promo?'成':'')));
+    CPU_DIAG.last={ 手番:side, 全合法手数:list.length, 候補数:cand.length, 上限:CAP||null, 深さ:DEPTH,
+      候補:cand.map(m=>({手:desc(m), moveOrderScore:ordOf(m), eventDelta:eventDelta(side,m), m})),
+      切り捨て:list.slice(cand.length).map(m=>({手:desc(m), moveOrderScore:ordOf(m)})),
+      best:null };
+  }
   // 指定の深さで候補を全部評価して最善手を返す（王が取れる手は即返す）
   const now=()=>((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now());
   // 指定の深さで候補を全部評価して最善手を返す。
@@ -4951,13 +5098,17 @@ function cpuPickMove(side, depth){
         if(r.m) best=r.m;               // 途中までの結果も使う（先頭は前の深さの最善手）
         if(r.partial || now()>=deadline) break;
       }
-      return best||cand[0]||list[0];
+      const pick = best||cand[0]||list[0];
+      if(CPU_DIAG.enabled && CPU_DIAG.last) CPU_DIAG.last.best=pick;
+      return pick;
     } finally { searchDeadline = 0; lastSearchNodes = searchNodes; }
   }
   searchDeadline = 0;   // 深さ指定のときは時間で打ち切らない
   const r=pickAt(DEPTH);
   lastSearchNodes = searchNodes;
-  return r.m||cand[0]||list[0];
+  const pick = r.m||cand[0]||list[0];
+  if(CPU_DIAG.enabled && CPU_DIAG.last) CPU_DIAG.last.best=pick;
+  return pick;
 }
 
 // 演出を行うかは「音・演出トグル」と「速度（超高速）」だけで決める。
