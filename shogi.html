@@ -4600,6 +4600,17 @@ function applyMoveSilent(side,m,_legacySilent){
   goCaptureScan(); // 囲碁：縦横4方を囲まれた碁石を取る（色は保持して持ち駒へ）
   history[history.length-1].to=[m.tr,m.tc];
   if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo);
+  // royal を失ったかの最終判定。打ち込み（オセロの裏返し）・囲碁の囲み取り・はさみ取り・
+  // 火鬼の焼き取りなど、移動以外で王が盤から消える経路もここで拾う。
+  if(!RULES.captureAll){
+    const meHas=hasRoyal(side), foeHas=hasRoyal(-side);
+    if(!foeHas || !meHas){
+      render();
+      // 王を残している側の勝ち。両方失ったら指した側の勝ち。
+      endGame(!foeHas ? side : -side);
+      return;
+    }
+  }
   if(!silent) render();
   checkSennichite();
 }
