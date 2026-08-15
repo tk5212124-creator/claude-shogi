@@ -3249,16 +3249,21 @@ function jtMoves(b,r,c){
 /* ===== 持ち駒を打てるマス ===== */
 function dropTargets(b,t,p){
   const res=[];
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
-    if(b[r][c])continue;
+  const isPt=!!(b&&b.isPts);
+  const rows=LR(b), cols=LC(b);
+  // 宮から出られない駒（帥・將／仕・士／漢・楚）は、宮の外へは打てない
+  const palaceOnly = isPalaceBound(t) && !RULES.palaceEscape;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    if(b[r]&&b[r][c])continue;
+    if(palaceOnly && !(isPt? isPalacePoint(r,c) : isPalaceCell(r,c))) continue;
     // 行き所のない駒の禁止
-    const last = p===1?0:NR-1, last2 = p===1?[0,1]:[NR-2,NR-1];
+    const last = p===1?0:rows-1, last2 = p===1?[0,1]:[rows-2,rows-1];
     if(t==='hP'||t==='hL'||t==='P'||t==='L'){ if(r===last)continue; }
     if(t==='hN'||t==='N'){ if(last2.includes(r))continue; }
     // 二歩（ルールで有効時のみ）。本将棋の歩 hP は hP同士、大局の歩 P は P同士で判定。
     if((t==='hP'||t==='P') && RULES.nifu){
       let dbl=false;
-      for(let rr=0;rr<NR;rr++){const q=b[rr][c]; if(q&&q.p===p&&q.t===t){dbl=true;break;}}
+      for(let rr=0;rr<rows;rr++){const q=b[rr]&&b[rr][c]; if(q&&q.p===p&&q.t===t){dbl=true;break;}}
       if(dbl)continue;
     }
     // オセロ駒：最低1枚裏返せる場所にしか置けない
