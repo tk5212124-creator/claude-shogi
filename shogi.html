@@ -1717,6 +1717,11 @@ TP['GOW']={n:'Go(white)',k:'碁白',pr:null,v:60,fl:['go'],m:[]};
 const GO_LIST=['GOB','GOW'];
 function isGo(t){ return t==='GOB'||t==='GOW'; }
 function goOwner(t){ return t==='GOB'?1 : t==='GOW'? -1 : 0; } // 碁石の固有の色（所有者）
+/* 碁石は「黒＝先手／白＝後手」と色そのもので持ち主が決まる。
+   誰が打っても、黒石は先手の石・白石は後手の石として扱う。
+   だから先手は盤上の黒石を、後手は白石を取れない（自分の石だから）。
+   色と持ち主が食い違うとこの前提が崩れるので、駒を作るときは必ずここを通す。 */
+function ownerOf(t, p){ return isGo(t) ? goOwner(t) : p; }
 
 // その他の将棋駒（大局将棋以外）：自在天王（摩訶大大将棋・玉将の成駒）。
 // 盤上のどこへでも1手で行ける（いくら駒を飛び越えてもよい）。
@@ -4154,6 +4159,9 @@ function doDrop(t,r,c,p){
 // (r,c)に置いた側pのオセロ駒が、8方向で自軍オセロ駒との間に挟んだ相手駒を裏返す（自軍に）
 // 裏返し：成駒は成る前に戻し、未成は成り駒にする。成りが無い駒はそのまま。
 function flipPiece(pc, newP){
+  // 碁石は色で持ち主が決まるので、裏返るときは色そのものを変える。
+  // 色を変えずに持ち主だけ変えると、先手の駒である黒石を先手が取れてしまう。
+  if(isGo(pc.t)) return {t:(newP===1?'GOB':'GOW'), p:newP};
   let nt, no;
   if(isPromoted(pc.t)){
     // 成駒 → 成る前に戻す（.o があればそれ、無ければ demoteOf で算出）
@@ -5263,7 +5271,7 @@ function applyMoveSilent(side,m,_legacySilent){
     }
     const newCode = cpawnPromo ? 'cQ' : (promoNew || pc.t);
     _fxPromo = !!(promoNew || cpawnPromo);
-    const np={t:newCode,p:side};
+    const np={t:newCode,p:ownerOf(newCode,side)};
     if(promoNew) np.o = pc.o || pc.t;
     else if(pc.o) np.o = pc.o;
     if(pc.t==='cK'||pc.t==='cR') np.moved=true;
@@ -6021,7 +6029,7 @@ function applyKifuStep(rec){
       for(const [cr,cc] of rec.xcaps){ if(OBk[cr]) OBk[cr][cc]=null; } }
     const igui = fr===tr && fc===tc; // 居喰いは動かない
     const newCode = rec.promoTo ? rec.promoTo : (rec.promo?(promoteCode(rec.code)||rec.code):rec.code);
-    DBk[tr][tc]={t:newCode, p:rec.side};
+    DBk[tr][tc]={t:newCode, p:ownerOf(newCode, rec.side)};
     if(!igui||DBk!==LBk) LBk[fr][fc]=null;
     if(rec.code==='HASA') hasamiCapture(tr,tc,rec.side); // はさみ取りを再現
     if(hasFire(rec.code)) fireBurn(tr,tc,rec.side);      // 火鬼の焼き取りを再現
@@ -6763,7 +6771,7 @@ function applyPick(t){
   const putAt=(r,c)=>{
     const L = editLayerIsPt()? ptsBoard : board;      // 編集ツールで選んだ側へ置く
     const cur=L[r][c]; const owner=cur?cur.p:editSide;
-    L[r][c]={t,p:owner};
+    L[r][c]={t,p:ownerOf(t,owner)};
   };
   if(multiSel.length>0){
     multiSel.forEach(({r,c})=>putAt(r,c));
@@ -6906,7 +6914,7 @@ function randomReplace(mode){
     }
     if(cands&&cands.length){
       const nt=cands[Math.floor(Math.random()*cands.length)];
-      L[r][c]={t:nt,p:pc.p};
+      L[r][c]={t:nt,p:ownerOf(nt,pc.p)};
     }
   }
   }
