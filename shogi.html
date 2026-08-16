@@ -4107,31 +4107,44 @@ function captureSurroundedScan(moverSide, touched){
 
    人の操作・打ち先の候補・CPUの読み・棋譜再生がすべてこの1組を使う。 */
 const ORTHO_4=[[-1,0],[1,0],[0,-1],[0,1]];
-// その辺が「別の層の2つ」で塞がれているか
-function edgeBlocked(O, isPt, r, c, dr, dc, OR, OC){
-  if(!O) return false;
-  let a, b;
-  if(!isPt){                                            // マスの辺を挟む交点2つ
-    if(dr===-1)      { a=[r,c];     b=[r,c+1]; }        // 上辺
-    else if(dr===1)  { a=[r+1,c];   b=[r+1,c+1]; }      // 下辺
-    else if(dc===-1) { a=[r,c];     b=[r+1,c]; }        // 左辺
-    else             { a=[r,c+1];   b=[r+1,c+1]; }      // 右辺
-  } else {                                              // 交点の辺を挟むマス2つ
-    if(dr===-1)      { a=[r-1,c-1]; b=[r-1,c]; }        // 上へ
-    else if(dr===1)  { a=[r,c-1];   b=[r,c]; }          // 下へ
-    else if(dc===-1) { a=[r-1,c-1]; b=[r,c-1]; }        // 左へ
-    else             { a=[r-1,c];   b=[r,c]; }          // 右へ
-  }
-  const occ=(q)=> (q[0]<0||q[0]>=OR||q[1]<0||q[1]>=OC) ? true            // 盤の外は壁
-                                                       : !!(O[q[0]]&&O[q[0]][q[1]]);
-  return occ(a) && occ(b);
+// マスに駒があるか（盤の外は壁として「ある」扱い）
+function cellOcc(cells,r,c){ return (r<0||r>=NR||c<0||c>=NC) ? true : !!(cells[r]&&cells[r][c]); }
+/* 交点(R,C)から (dr,dc) へ伸びる辺が、その辺を挟む「2マス」で塞がれているか。
+     上へ … マス (R-1,C-1) と (R-1,C)      下へ … マス (R,C-1) と (R,C)
+     左へ … マス (R-1,C-1) と (R,C-1)      右へ … マス (R-1,C) と (R,C)   */
+function ptEdgeBlocked(cells,R,C,dr,dc){
+  let a,b;
+  if(dr===-1)      { a=[R-1,C-1]; b=[R-1,C]; }
+  else if(dr===1)  { a=[R,C-1];   b=[R,C]; }
+  else if(dc===-1) { a=[R-1,C-1]; b=[R,C-1]; }
+  else             { a=[R-1,C];   b=[R,C]; }
+  return cellOcc(cells,a[0],a[1]) && cellOcc(cells,b[0],b[1]);
+}
+/* 交点が塞がっているか。駒があるか、または「4辺のうち2辺以上」が塞がっているとき。
+   辺の端点は必ず2つなので辺は「両方」、交点の辺は4本あるので「2本以上」で塞がり扱い。 */
+function pointBlocked(cells,pts,R,C){
+  if(R<0||R>NR||C<0||C>NC) return true;               // 盤の外は壁
+  if(pts && pts[R] && pts[R][C]) return true;
+  let n=0;
+  for(const [dr,dc] of ORTHO_4){ if(ptEdgeBlocked(cells,R,C,dr,dc) && ++n>=2) return true; }
+  return false;
+}
+/* マス(r,c)の (dr,dc) 側の辺が、その辺の両端の「2交点」で塞がれているか。
+     上辺 … 交点 (r,c)   と (r,c+1)        下辺 … 交点 (r+1,c) と (r+1,c+1)
+     左辺 … 交点 (r,c)   と (r+1,c)        右辺 … 交点 (r,c+1) と (r+1,c+1)  */
+function cellEdgeBlocked(cells,pts,r,c,dr,dc){
+  let a,b;
+  if(dr===-1)      { a=[r,c];     b=[r,c+1]; }
+  else if(dr===1)  { a=[r+1,c];   b=[r+1,c+1]; }
+  else if(dc===-1) { a=[r,c];     b=[r+1,c]; }
+  else             { a=[r,c+1];   b=[r+1,c+1]; }
+  return pointBlocked(cells,pts,a[0],a[1]) && pointBlocked(cells,pts,b[0],b[1]);
 }
 function surroundedGroup(cells, pts, isPt, r0, c0){
-  const L=isPt?pts:cells, O=isPt?cells:pts;
+  const L=isPt?pts:cells;
   const q0=L[r0]&&L[r0][c0]; if(!q0) return null;
   const side=q0.p;
   const RR=isPt?NR+1:NR, CC=isPt?NC+1:NC;
-  const OR=isPt?NR:NR+1,  OC=isPt?NC:NC+1;
   const seen=new Set([r0+','+c0]), stones=[[r0,c0]], st=[[r0,c0]];
   while(st.length){
     const [r,c]=st.pop();
@@ -4146,8 +4159,13 @@ function surroundedGroup(cells, pts, isPt, r0, c0){
         }
         continue;
       }
-      // 空いていても、その辺が別の層の2つで塞がれていれば呼吸できない
-      if(edgeBlocked(O,isPt,r,c,dr,dc,OR,OC)) continue;
+      // 空いていても、そこへ抜ける辺が塞がっていれば呼吸できない
+      if(isPt){
+        if(ptEdgeBlocked(cells,r,c,dr,dc)) continue;        // 辺を挟む2マスが埋まっている
+        if(pointBlocked(cells,pts,rr,cc)) continue;         // 行き先の交点自体が塞がっている
+      } else {
+        if(cellEdgeBlocked(cells,pts,r,c,dr,dc)) continue;  // 辺の両端の2交点が塞がっている
+      }
       return {free:true, side, isPt};              // 呼吸点あり。ここで打ち切る
     }
   }
