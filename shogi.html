@@ -3388,7 +3388,7 @@ function dropTargets(b,t,p){
     if(palaceOnly && !(isPt? isPalacePoint(r,c) : isPalaceCell(r,c))) continue;
     if(diagOnlyPalace && !diagStandOK(isPt,r,c)) continue;     // 線が無い所に打つと二度と動けない
     // 碁石の自殺手は打てない（相手の群を取って呼吸点が生まれるなら合法）
-    if(isGo(t) && goIsSuicide(b,r,c,t)) continue;
+    if(isSuicidePlacement(b.L?b.L.cells:board, b.L?b.L.pts:ptsBoard, isPt, r, c, t, p)) continue;
     if(riverOnly && !(p===1 ? r>=rows-PZ : r<PZ)) continue;   // 象は河を渡れない
     // 行き所のない駒の禁止
     const last = p===1?0:rows-1, last2 = p===1?[0,1]:[rows-2,rows-1];
@@ -3417,9 +3417,9 @@ function isLegalMove(m, p, b){
   }
   if(m.pass) return !!RULES.allowPass;         // パスはルールONのときだけ指せる
   // 碁石の自殺手は人もCPUも指せない（判定は打ち先の候補と同じもの）
-  if(m.drop && isGo(m.drop)){
-    const L = m.pt ? ptsBoard : bd;
-    if(goIsSuicide(L, m.tr, m.tc, m.drop)) return false;
+  if(m.drop){
+    ensurePts();
+    if(isSuicidePlacement(bd, ptsBoard, !!m.pt, m.tr, m.tc, m.drop, p)) return false;
   }
   const lbd = (m.pt && bd.L && bd.L.pts) ? bd.L.pts : bd;   // この手が動くレイヤー
   if(m.drop){
@@ -4089,81 +4089,125 @@ function fireBurn(r,c,p){
 }
 // 囲碁の囲み取り：縦横4方を敵(または盤端)で囲まれた碁石を、囲んだ側の持ち駒へ。
 // 碁石はコード(GOB/GOW)のまま持ち駒に入り色を保持する。各着手後に呼ぶ。
-// 呼吸点が0になった碁石の群を全て同時に取る（連結群単位）。
-function goCaptureScan(moverColor){
+// 呼吸点が0になった群を全て同時に取る（駒の種類は問わない）。
+function captureSurroundedScan(moverSide, touched){
   ensurePts();
-  const push=(side,t)=>{ if(RULES.drops) (side===1?capYou:capEnemy).push(t); }; // コード保持＝色そのまま
-  let n=0;
-  for(const layer of [board,ptsBoard]) n+=goCaptureGroupsOn(layer, moverColor, push);
-  return n;
+  const push=(side,q)=>{ if(RULES.drops) (side===1?capYou:capEnemy).push(capturedCode(q)); };
+  return captureSurroundedNear(board, ptsBoard, touched||[], moverSide===undefined?null:moverSide, push);
 }
-/* ===== 碁石の連結群と呼吸点 =====
-   上下左右でつながった同じ色の石を1つの群として扱い、群全体の呼吸点を数える。
-   呼吸点＝群に隣り合う空き点。盤の外と、何か置かれている点は呼吸点にならない。
-   呼吸点が0になった群は丸ごと取られる。
-   人の操作・CPUの読み・実盤のどれもこの1つを使う（機構を分けない）。 */
-const GO_ORTHO=[[-1,0],[1,0],[0,-1],[0,1]];
-function goGroup(L, r0, c0){
-  const q0=L[r0]&&L[r0][c0];
-  if(!q0||!isGo(q0.t)) return null;
-  const RR=L.length, CC=(L[0]||[]).length;
-  const col=q0.t, seen=new Set([r0+','+c0]), stones=[[r0,c0]], libs=new Set(), st=[[r0,c0]];
+/* ===== 囲みで取られる判定（駒の種類を問わない） =====
+   上下左右でつながった「同じ側の駒」を1つの群として扱う。碁石でも将棋の駒でも同じ。
+   群に隣り合う空きが呼吸点で、見るのは同じ層の上下左右だけ。
+   呼吸点が0になった群は丸ごと同時に取られる。盤の外は呼吸点にならない。
+   人の操作・打ち先の候補・CPUの読みがすべてこの1組を使う。 */
+const ORTHO_4=[[-1,0],[1,0],[0,-1],[0,1]];
+function surroundedGroup(cells, pts, isPt, r0, c0){
+  const L=isPt?pts:cells;
+  const q0=L[r0]&&L[r0][c0]; if(!q0) return null;
+  const side=q0.p;
+  const RR=isPt?NR+1:NR, CC=isPt?NC+1:NC;
+  const seen=new Set([r0+','+c0]), stones=[[r0,c0]], st=[[r0,c0]];
   while(st.length){
     const [r,c]=st.pop();
-    for(const [dr,dc] of GO_ORTHO){
+    for(const [dr,dc] of ORTHO_4){                 // 上下左右（同じ層）
       const rr=r+dr, cc=c+dc;
-      if(rr<0||rr>=RR||cc<0||cc>=CC) continue;         // 盤の外は呼吸点にならない
+      if(rr<0||rr>=RR||cc<0||cc>=CC) continue;     // 盤の外は呼吸点にならない
       const q=L[rr]&&L[rr][cc];
-      if(!q){ libs.add(rr+','+cc); continue; }         // 空き＝呼吸点
-      if(q.t===col){                                    // 同じ色ならつながっている
+      if(!q) return {free:true, side, isPt};       // 空き＝呼吸点。ここで打ち切る
+      if(q.p===side){                              // 同じ側ならつながっている
         const k=rr+','+cc;
         if(!seen.has(k)){ seen.add(k); stones.push([rr,cc]); st.push([rr,cc]); }
       }
     }
   }
-  return {stones, libs:libs.size, t:col};
+  return {stones, free:false, side, isPt};
 }
-/* 呼吸点が0の群を全て同時に取る。相手の群から先に見る（囲碁の順序）。
-   moverColor を渡すと、その色の群は後回しになる。pushCap(取った側, 石のコード)。 */
-function goCaptureGroupsOn(L, moverColor, pushCap){
+/* 呼吸点が0の群を取る。ただし盤全体は見ない。
+   群が死ぬのは「呼吸点が埋まったとき」だけなので、
+   その手で新しく埋まった場所・持ち主が変わった場所と、その隣だけを見れば足りる
+   （空きになった場所は呼吸点が増えるだけで、群が死ぬことはない）。
+   touched = [[交点か, 行, 列], ...] */
+function captureSurroundedNear(cells, pts, touched, moverSide, pushCap, rec, enemyOnlyAgainst){
   let n=0;
-  const RR=L.length, CC=(L[0]||[]).length;
-  for(const mineTurn of [false,true]){                  // 1周目＝相手の群、2周目＝自分の群
+  const cand=[];
+  const add=(isPt,r,c)=>{
+    const L=isPt?pts:cells; if(!L) return;
+    const RR=isPt?NR+1:NR, CC=isPt?NC+1:NC;
+    if(r<0||r>=RR||c<0||c>=CC) return;
+    if(L[r]&&L[r][c]) cand.push([isPt,r,c]);
+  };
+  for(const [isPt,r,c] of touched){
+    add(isPt,r,c);
+    for(const [dr,dc] of ORTHO_4) add(isPt,r+dr,c+dc);
+  }
+  if(!cand.length) return 0;
+  for(const mineTurn of (enemyOnlyAgainst!==undefined ? [false] : [false,true])){
     const done=new Set();
-    for(let r=0;r<RR;r++)for(let c=0;c<CC;c++){
-      const q=L[r]&&L[r][c]; if(!q||!isGo(q.t)) continue;
-      if(done.has(r+','+c)) continue;
-      const g=goGroup(L,r,c);
-      g.stones.forEach(([a,b])=>done.add(a+','+b));
-      const isMine = !!moverColor && g.t===moverColor;
-      if(isMine!==mineTurn) continue;
-      if(g.libs===0){
-        for(const [a,b] of g.stones){ L[a][b]=null; n++; if(pushCap) pushCap(-goOwner(g.t), g.t); }
+    for(const [isPt,r,c] of cand){
+      const L=isPt?pts:cells;
+      const key=(isPt?'p':'c')+r+','+c;
+      if(done.has(key)) continue;
+      const q=L[r]&&L[r][c]; if(!q) continue;
+      const g=surroundedGroup(cells,pts,isPt,r,c); if(!g) continue;
+      if(g.free){ done.add(key); continue; }
+      g.stones.forEach(([a,b])=>done.add((isPt?'p':'c')+a+','+b));
+      const mine=(enemyOnlyAgainst!==undefined)?(g.side===enemyOnlyAgainst)
+                                               :(moverSide!==null && g.side===moverSide);
+      if(mine!==mineTurn) continue;
+      for(const [a,b] of g.stones){
+        const z=L[a][b]; L[a][b]=null; n++;
+        if(rec) rec.push([L,a,b,z]);
+        if(pushCap) pushCap(-g.side, z);
       }
     }
   }
   return n;
 }
-/* その点に碁石 t を打つと自分の群の呼吸点が0になるか（＝自殺手）。
-   先に相手の群を取り、それで呼吸点が生まれるなら自殺ではない（合法）。
-   判定のあいだだけ盤を触り、必ず元に戻す。 */
-function goIsSuicide(L, r, c, t){
-  if(!L[r] || L[r][c]) return false;
-  const removed=[];
-  L[r][c]={t, p:goOwner(t)};
-  try{
-    const RR=L.length, CC=(L[0]||[]).length, done=new Set();
-    for(let a=0;a<RR;a++)for(let b=0;b<CC;b++){
-      const q=L[a]&&L[a][b]; if(!q||!isGo(q.t)||q.t===t) continue;
-      if(done.has(a+','+b)) continue;
-      const g=goGroup(L,a,b);
-      g.stones.forEach(([x,y])=>done.add(x+','+y));
-      if(g.libs===0) for(const [x,y] of g.stones){ removed.push([x,y,L[x][y]]); L[x][y]=null; }
+/* 盤全体を見る版（編集で作った盤の後始末など、着手経路の外で使う）。相手の群から先に見る。
+   pushCap(取った側, 駒) を渡すと取った駒を持ち駒へ入れる。
+   rec を渡すと取り除いた駒を記録する（自殺手の判定で元に戻すため）。
+   enemyOf を渡すと、その側の群は取らない（相手の群だけ先に消したいとき）。 */
+function captureSurroundedGroups(cells, pts, moverSide, pushCap, rec, enemyOnlyAgainst){
+  let n=0;
+  for(const mineTurn of (enemyOnlyAgainst!==undefined ? [false] : [false,true])){
+    for(const isPt of [false,true]){
+      const L=isPt?pts:cells; if(!L) continue;
+      const RR=isPt?NR+1:NR, CC=isPt?NC+1:NC;
+      const done=new Set();
+      for(let r=0;r<RR;r++)for(let c=0;c<CC;c++){
+        if(done.has(r+','+c)) continue;
+        const q=L[r]&&L[r][c]; if(!q) continue;
+        const g=surroundedGroup(cells,pts,isPt,r,c); if(!g) continue;
+        if(g.free){ done.add(r+','+c); continue; }
+        g.stones.forEach(([a,b])=>done.add(a+','+b));
+        const mine = (enemyOnlyAgainst!==undefined) ? (g.side===enemyOnlyAgainst)
+                                                    : (moverSide!==null && g.side===moverSide);
+        if(mine!==mineTurn) continue;
+        for(const [a,b] of g.stones){
+          const z=L[a][b]; L[a][b]=null; n++;
+          if(rec) rec.push([L,a,b,z]);
+          if(pushCap) pushCap(-g.side, z);
+        }
+      }
     }
-    const me=goGroup(L,r,c);
-    return !!me && me.libs===0;
+  }
+  return n;
+}
+/* その場所へ駒を置くと自分の群の呼吸点が0になるか（＝自殺手）。
+   先に相手の群のうち呼吸点0のものを取り除き、それで呼吸点が生まれるなら合法。
+   判定のあいだだけ盤を触り、必ず元に戻す。 */
+function isSuicidePlacement(cells, pts, isPt, r, c, t, side){
+  const L=isPt?pts:cells;
+  if(!L || !L[r] || L[r][c]) return false;
+  const owner=ownerOf(t,side);
+  const rec=[];
+  L[r][c]={t, p:owner};
+  try{
+    captureSurroundedNear(cells, pts, [[isPt,r,c]], owner, null, rec, owner);  // 相手の群だけ先に取る
+    const g=surroundedGroup(cells,pts,isPt,r,c);
+    return !!g && !g.free;
   } finally {
-    for(const [x,y,q] of removed) L[x][y]=q;
+    for(const [LL,a,b,z] of rec) LL[a][b]=z;
     L[r][c]=null;
   }
 }
@@ -4199,27 +4243,6 @@ function isSurrounded(isPt, r, c, cells, pts, ok){
   return check(N.same,L,lr,lc) || check(N.other,O,or,oc);
 }
 // 碁石を打った直後：その石が囲んだ領域の駒を、マス・交点に関係なく取る。
-function goSurroundCapture(r,c,side){
-  ensurePts();
-  const cap = side===1? capYou : capEnemy;
-  let n=0;
-  const N=surroundNeighbors(true,r,c);          // 打った石は交点レイヤー
-  const targets=[];
-  N.same.forEach(([rr,cc])=>targets.push([rr,cc,true]));    // 同じ層（交点）の上下左右
-  N.other.forEach(([rr,cc])=>targets.push([rr,cc,false]));  // 別の層（マス）の斜め半歩
-  for(const [nr,nc,isPt] of targets){
-    const rows=isPt?NR+1:NR, cols=isPt?NC+1:NC;
-    if(nr<0||nr>=rows||nc<0||nc>=cols) continue;
-    const layer=isPt?ptsBoard:board;
-    const q=layer[nr]&&layer[nr][nc];
-    if(!q||q.p===side||isGo(q.t)) continue;      // 碁石どうしは goCaptureScan が担当
-    if(isSurrounded(isPt,nr,nc,board,ptsBoard, t=>t.p===side)){
-      if(RULES.drops) cap.push(capturedCode(q));
-      layer[nr][nc]=null; n++;
-    }
-  }
-  return n;
-}
 // 手動の打ちも唯一の着手実体 applyMoveSilent を通す（CPUと共通化）。
 function doDrop(t,r,c,p){
   applyMoveSilent(p, {drop:t,tr:r,tc:c, pt:goesOnPoint(t)||undefined}, false);
@@ -4261,7 +4284,7 @@ function othelloFlipCount(r,c,p,bd){
   }
   return total;
 }
-function othelloFlip(r,c,p){
+function othelloFlip(r,c,p,touch){
   const dirs=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
   let flipped=0;
   for(const [dr,dc] of dirs){
@@ -4278,6 +4301,7 @@ function othelloFlip(r,c,p){
     if(closed && line.length>0){
       for(const [er,ec] of line){
         board[er][ec]=flipPiece(board[er][ec], p); // 裏返して自軍に
+        if(touch) touch.push([false,er,ec]);       // 持ち主が変わった＝群が割れることがある
         flipped++;
       }
     }
@@ -4523,6 +4547,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
   const db = (m&&m.toPt!==undefined) ? (m.toPt? npts : nb) : lb;   // 着地するレイヤー
 
   const myCap = p===-1? nce : ncy;
+  const touch=[];                 // 新しく埋まった／持ち主が変わった場所（囲みの判定に使う）
   let king=false;
   // コピー盤nb上でオセロ裏返しを行う（8方向・全種類を自軍に裏返す。royalを裏返したらking扱い）
   function simOthelloFlip(r,c,side){
@@ -4539,6 +4564,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
         for(const [er,ec] of line){
           if(isRoyal(nb[er][ec].t)) king=true; // 相手royalを裏返し＝勝ち筋
           nb[er][ec]=flipPiece(nb[er][ec], side);
+          touch.push([false,er,ec]);           // 持ち主が変わった＝群が割れることがある
         }
       }
     }
@@ -4572,46 +4598,19 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
       if(q && q.p!==side){ if(isRoyal(q.t)) king=true; if(RULES.drops) myCap.push(capturedCode(q)); nb[rr][cc]=null; }
     }
   }
-  // 盤に碁石が1つも無ければ囲み取りは絶対に起きない。毎節点の全面走査をやめるため、
-  // 「碁石がいるか」を局面から導いて親から引き継ぐ（呼び出し元が人かCPUかでは変えない）。
-  // 碁石は打つ以外で増えないので、親に居なければ子にも居ない。取られて減る分は安全側に無視。
-  function boardHasGo(cells, pts){
-    for(let li=0; li<(pts?2:1); li++){
-      const L=li?pts:cells, RR=LR(L), CC=LC(L);
-      for(let r=0;r<RR;r++){ const row=L[r]; if(!row) continue;
-        for(let c=0;c<CC;c++){ const q=row[c]; if(q&&isGo(q.t)) return true; } }
-    }
-    return false;
-  }
   // 囲碁の囲み取り。碁石は「囲んだ領域の駒はマス・交点に関係なく取れる」ので2層を通して数える
-  // 実盤と同じ「連結群の呼吸点が0なら丸ごと取る」を使う
-  function simGoCapture(moverColor){
-    const push=(side,t)=>{ if(RULES.drops) (side===1?ncy:nce).push(t); };
-    for(const layer of [nb,npts]) goCaptureGroupsOn(layer, moverColor, push);
+  // 実盤とまったく同じ「群の呼吸点が0なら丸ごと取る」を使う
+  function simCaptureSurrounded(moverSide){
+    const push=(side,q)=>{ if(RULES.drops) (side===1?ncy:nce).push(capturedCode(q)); };
+    captureSurroundedNear(nb, npts, touch, moverSide, push);
   }
   // 碁石が囲んだ領域の駒を取る（層に関係なく）。囲碁石を打った直後に判定する。
-  function simGoSurround(r,c,side){
-    const N=surroundNeighbors(true,r,c);
-    const targets=[];
-    N.same.forEach(([rr,cc])=>targets.push([rr,cc,true]));
-    N.other.forEach(([rr,cc])=>targets.push([rr,cc,false]));
-    for(const [nr,nc,isPt] of targets){
-      const rows=isPt?NR+1:NR, cols=isPt?NC+1:NC;
-      if(nr<0||nr>=rows||nc<0||nc>=cols) continue;
-      const layer=isPt?npts:nb;
-      const q=layer[nr]&&layer[nr][nc];
-      if(!q||q.p===side||isGo(q.t)) continue;
-      if(isSurrounded(isPt,nr,nc,nb,npts, t=>t.p===side)){
-        if(isRoyal(q.t)) king=true; if(RULES.drops) myCap.push(capturedCode(q));
-        layer[nr][nc]=null;
-      }
-    }
-  }
+
   if(m.drop){
     lb[m.tr][m.tc]={t:m.drop,p:isGo(m.drop)?goOwner(m.drop):p};
+    touch.push([!!m.pt, m.tr, m.tc]);
     const i=myCap.indexOf(m.drop); if(i>=0)myCap.splice(i,1);
     if(m.drop==='OTH') simOthelloFlip(m.tr,m.tc,p); // 打ったオセロの裏返しを読みに反映
-    if(isGo(m.drop)) simGoSurround(m.tr,m.tc,lb[m.tr][m.tc].p);
   } else {
     const pc=lb[m.fr][m.fc]; const tg=db[m.tr]&&db[m.tr][m.tc];
     if(!pc) return {nb,ncy,nce,king:false};
@@ -4639,16 +4638,17 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     const promo = m.promo!==undefined ? m.promo
       : (!igui && canPromoteMove(pc.t,m.fr,m.tr,p, !!(tg&&tg.p!==p)||!!(m.caps&&m.caps.length)));
     db[m.tr][m.tc]={t:promo?(promoteCode(pc.t)||pc.t):pc.t,p};
+    touch.push([db===npts, m.tr, m.tc]);
     if(!igui||db!==lb) lb[m.fr][m.fc]=null;
     if(pc.t==='HASA') simHasamiCapture(m.tr,m.tc,p); // はさみ取りを読みに反映
     if(hasFire(pc.t)) simFireBurn(m.tr,m.tc,p);      // 火鬼の焼き取りを読みに反映
   }
-  const hadGo = (b && b._go!==undefined) ? b._go : boardHasGo(b, srcPts);
-  nb._go = hadGo || !!(m.drop && isGo(m.drop)) || (cy.some(isGo)||ce.some(isGo));
-  if(nb._go) simGoCapture(m&&m.drop&&isGo(m.drop)? m.drop : null); // 囲碁の囲み取りを読みに反映
+  simCaptureSurrounded(p);   // 囲みで取られる群を読みにも反映（駒の種類は問わない）
   // 実ゲームと同じ判定にする：royal を1枚取っただけでは勝ちにしない。
   // 相手の royal が盤上から全て消えたときだけ「勝ち」。取り切るルールでは royal では決着しない。
-  if(king) king = !RULES.captureAll && !anyRoyalIn(nb, npts, -p);
+  // 取ったときだけでなく、囲みで消えた場合も同じ扱いにするため無条件に見る
+  // （実ゲームも着手の最後に hasRoyalOnBoard を無条件で見ている）。
+  king = !RULES.captureAll && !anyRoyalIn(nb, npts, -p);
   return {nb,ncy,nce,king};
 }
 
@@ -5256,6 +5256,7 @@ function applyMoveSilent(side,m,_legacySilent){
   const _fxPrev = fxEnabled() ? board.map(row=>row.map(x=>x?{...x}:null)) : null; // 演出用に着手前を控える
   let _fxPromo=false;
   const cap = side===-1? capEnemy : capYou;
+  const touch=[];                 // 新しく埋まった／持ち主が変わった場所（囲みの判定に使う）
   if(m.pass){
     // パス：盤面は変えない。棋譜には残し、手番だけ進める（人間・CPU共通の経路）
     recordKifu({side,pass:true});
@@ -5275,10 +5276,10 @@ function applyMoveSilent(side,m,_legacySilent){
     recordKifu({side,drop:m.drop,to:[m.tr,m.tc],pt:m.pt||undefined});
     // 囲碁の駒は固有の色（所有者）で盤に出る＝相手の碁石を打つと相手の駒になる
     LB[m.tr][m.tc]={t:m.drop,p:isGo(m.drop)?goOwner(m.drop):side};
+    touch.push([!!m.pt, m.tr, m.tc]);
     cap.splice(cap.indexOf(m.drop),1);
-    if(isGo(m.drop)) goSurroundCapture(m.tr,m.tc,LB[m.tr][m.tc].p);  // 囲んだ領域の駒を層に関係なく取る
     if(m.drop==='OTH'){
-      const fc=othelloFlip(m.tr,m.tc,side); // 打ったオセロで挟んだ相手駒を裏返す
+      const fc=othelloFlip(m.tr,m.tc,side,touch); // 打ったオセロで挟んだ相手駒を裏返す
       if(fc===0){ // 実機診断：1枚も裏返らない＝本来打てないはずの不正配置。着手は弾かず（パス防止）、現場保全のため停止して座標表示
         console.error('[ILLEGAL OTH DROP]',{side,tr:m.tr,tc:m.tc,move:kifu.length});
         (window.__illegalOth=window.__illegalOth||[]).push({side,tr:m.tr,tc:m.tc,move:kifu.length});
@@ -5354,6 +5355,7 @@ function applyMoveSilent(side,m,_legacySilent){
       }
     }
     DB[m.tr][m.tc]=np;
+    touch.push([DB===ptsBoard, m.tr, m.tc]);
     if(!igui) LB[m.fr][m.fc]=null;
     if(pc.t==='HASA'){ hasamiCapture(m.tr,m.tc,side); }
     if(hasFire(pc.t)){ fireBurn(m.tr,m.tc,side); }   // 火鬼：移動後に隣接敵を焼く
@@ -5370,7 +5372,7 @@ function applyMoveSilent(side,m,_legacySilent){
     }
     if(!RULES.captureAll && !hasRoyalOnBoard(-side)){ history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side); return; }
   }
-  goCaptureScan(m&&m.drop&&isGo(m.drop)? m.drop : null); // 呼吸点0の群を丸ごと取る（色は保持して持ち駒へ）
+  captureSurroundedScan(side, touch);   // 呼吸点0の群を丸ごと取る（駒の種類は問わない）
   history[history.length-1].to=[m.tr,m.tc];
   if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo);
   // 勝敗の一般則：盤上から味方の royal が居なくなった側の負け。
@@ -5401,17 +5403,15 @@ function squareAttackedBy(tr,tc,by){
 function endGame(winner,reason,detail){
   gameOver=true; render(); updateReplayUI();
   const isTry = reason==='try', isCap = reason==='capture', isPts = reason==='points';
-  const isPer = reason==='perpetual', isStuck = reason==='stuck', isPass = reason==='pass';
+  const isPer = reason==='perpetual', isStuck = reason==='stuck';
   const winMsg = isTry?'▲ あなたの勝ち！トライ成功（ライオンが敵陣の最奥へ到達）'
                : isCap?'▲ あなたの勝ち！相手の駒を全て取り切りました'
-               : isPass?'▲ あなたの勝ち！双方パスで終局（盤上の駒数で上回りました）'
                : isPts?'▲ あなたの勝ち！持将棋の点数計算（24点法）で勝利'
                : isPer?'▲ あなたの勝ち！相手の連続王手の千日手は禁じ手（長将）'
                : isStuck?'▲ あなたの勝ち！相手は指せる手がありません（困斃）'
                : '▲ あなたの勝ち！相手の王を攻め取りました';
   const loseMsg= isTry?'△ あなたの負け…相手のライオンがトライ成功'
                : isCap?'△ あなたの負け…自分の駒を全て取られました'
-               : isPass?'△ あなたの負け…双方パスで終局（盤上の駒数で下回りました）'
                : isPts?'△ あなたの負け…持将棋の点数計算（24点法）で敗北'
                : isPer?'△ あなたの負け…連続王手の千日手は禁じ手（長将）'
                : isStuck?'△ あなたの負け…指せる手がありません（困斃）'
@@ -5982,16 +5982,10 @@ function boardPieces(side){
   for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===side) n++; }
   return n;
 }
-/* 双方が続けてパスした＝もう打つ気が無い、として終局する。
-   取り切るルール（囲碁・オセロ・はさみ）は盤上の石数の多い方の勝ち。
-   それ以外は引き分け（チャンギのパスなど）。 */
+/* 双方が続けてパスした＝もう指す気が無い、として終局する。
+   決着のつけ方は「手が無くなったとき」と同じ扱いにする（囲碁だけ別扱いにはしない）。 */
 function endByDoublePass(){
-  if(RULES.captureAll){
-    const a=boardPieces(1), b=boardPieces(-1);
-    if(a>b){ endGame(1,'pass'); return; }
-    if(b>a){ endGame(-1,'pass'); return; }
-  }
-  endDraw('双方が続けてパスしました');
+  resolveJishogi('双方が続けてパス');
 }
 function sidePieces(side){
   ensurePts();
@@ -6071,11 +6065,13 @@ function applyKifuStep(rec){
   ensurePts();
   const LBk = rec.pt ? ptsBoard : board;   // 交点の手は交点レイヤーへ再現する
   const DBk = (rec.toPt!==undefined) ? (rec.toPt? ptsBoard : board) : LBk;
+  const ktouch=[];                 // 新しく埋まった／持ち主が変わった場所（囲みの判定に使う）
   if(rec.drop){
     LBk[rec.to[0]][rec.to[1]]={t:rec.drop,p:isGo(rec.drop)?goOwner(rec.drop):rec.side};
+    ktouch.push([!!rec.pt, rec.to[0], rec.to[1]]);
     const cap=rec.side===1?capYou:capEnemy;
     const idx=cap.indexOf(rec.drop); if(idx>=0)cap.splice(idx,1);
-    if(rec.drop==='OTH') othelloFlip(rec.to[0],rec.to[1],rec.side); // 打ったオセロの裏返しを再現
+    if(rec.drop==='OTH') othelloFlip(rec.to[0],rec.to[1],rec.side,ktouch); // 打ったオセロの裏返しを再現
   } else if(rec.castle){
     // キャスリング
     const [fr,fc]=rec.from, [tr,tc]=rec.to;
@@ -6116,11 +6112,12 @@ function applyKifuStep(rec){
     const igui = fr===tr && fc===tc; // 居喰いは動かない
     const newCode = rec.promoTo ? rec.promoTo : (rec.promo?(promoteCode(rec.code)||rec.code):rec.code);
     DBk[tr][tc]={t:newCode, p:ownerOf(newCode, rec.side)};
+    ktouch.push([DBk===ptsBoard, tr, tc]);
     if(!igui||DBk!==LBk) LBk[fr][fc]=null;
     if(rec.code==='HASA') hasamiCapture(tr,tc,rec.side); // はさみ取りを再現
     if(hasFire(rec.code)) fireBurn(tr,tc,rec.side);      // 火鬼の焼き取りを再現
   }
-  goCaptureScan(rec&&rec.drop&&isGo(rec.drop)? rec.drop : null); // 囲碁の囲み取りを再現
+  captureSurroundedScan(rec.side, ktouch);   // 囲みで取られた駒を再現
 }
 // 起点から n 手目まで適用して描画
 function gotoStep(n){

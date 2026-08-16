@@ -5,10 +5,6 @@ const p=await b.newPage({viewport:{width:390,height:844}});
 const errs=[]; p.on('pageerror',e=>errs.push(String(e)));
 await p.goto('file://'+FILE); await p.waitForTimeout(900);
 const out=await p.evaluate(()=>{
-  // 碁石は「黒＝先手／白＝後手」と色そのもので持ち主が決まる。
-  // 誰が打っても黒石は先手の石・白石は後手の石になり、
-  // 先手は盤上の黒石を、後手は白石を取れない（自分の石だから）。
-  // 色と持ち主が食い違うとこの前提が崩れるので、それを検査する。
   const R={};
   const RU=(pm)=>({drops:true,keepPromoted:false,nifu:true,sennichiteMode:'none',captureAll:true,
       banSennichite:false,pointMode:pm,palaceEscape:false,allowPass:false,randomIncludeSpecial:true});
@@ -69,7 +65,7 @@ const out=await p.evaluate(()=>{
     const pts=Array.from({length:10},()=>Array(10).fill(null));
     pts[4][4]={t:'GOB',p:1};
     for(const [r,c] of [[3,4],[5,4],[4,3],[4,5]]) pts[r][c]={t:'GOB',p:1};
-    loadState(mk({pts})); SFX.on=false; goCaptureScan();
+    loadState(mk({pts})); SFX.on=false; captureSurroundedScan(null,[[true,4,4],[true,3,4],[true,5,4],[true,4,3],[true,4,5]]);
     R['E_黒石を黒で囲む']= ptsBoard[4][4]?'残る（正しい）':'★消えた';
   }
   return R;
