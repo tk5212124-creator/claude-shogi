@@ -166,6 +166,8 @@
     width:38px;height:38px;min-height:0;padding:0;border-radius:50%;font-size:1.15rem;font-weight:900;
     background:linear-gradient(160deg,#4a3a6e,#2e2447);border:1px solid rgba(245,207,107,.55);color:var(--gold);
     box-shadow:0 2px 10px rgba(0,0,0,.5);}
+  /* 保険：どのセレクト・入力欄も、中身がどれだけ長くても親より広がらない */
+  select,input,textarea{max-width:100%;box-sizing:border-box;}
   .help-body{max-height:64vh;overflow-y:auto;text-align:left;font-size:.8rem;line-height:1.7;color:#e6dcff;}
   .help-body h3{color:var(--gold);font-size:.86rem;margin:12px 0 4px;letter-spacing:.06em;}
   .help-body h3:first-child{margin-top:0;}
@@ -179,13 +181,19 @@
   .etb-title{font-size:.72rem;color:#dff5ec;letter-spacing:.1em;margin:2px 0 5px;font-weight:700;}
   .etb-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
   .etb-grid button{flex:1 1 46%;font-size:.74rem;padding:7px 6px;min-height:36px;}
-  .etb-grid .bs-row{flex:1 1 100%;display:flex;align-items:center;gap:6px;margin:0;}
+  .etb-grid .bs-row{flex:1 1 100%;display:flex;align-items:center;gap:6px;margin:0;min-width:0;}
   .etb-grid .bs-row label{font-size:.74rem;color:var(--gold);flex:0 0 auto;}
-  .etb-grid select{flex:1 1 auto;min-height:34px;font-size:.78rem;}
+  /* flexの子は既定の min-width:auto だと中身の幅より縮まない。
+     「駒の置き方」のように長い選択肢があるとセレクトが画面より広がり、
+     ページ全体が横に伸びて崩れる（position:fixed の基準まで広がる）ので明示的に0にする。 */
+  .etb-grid select{flex:1 1 auto;min-width:0;max-width:100%;min-height:34px;font-size:.78rem;}
+  /* 行・列・敵陣は本来 4.5em の小さな選択欄。編集モードでは .board-setup の外に出るため
+     幅指定が効かなくなり、目一杯まで伸びて注記が折り返していた。ここで戻す。 */
+  .etb-grid .bs-num{flex:0 0 auto;width:4.5em;min-width:0;}
   .edit-layer-bar{background:linear-gradient(160deg,#4a3a6e,#2e2447);border-color:rgba(245,207,107,.5);
     box-shadow:0 4px 16px rgba(139,107,255,.3);}
   .edit-layer-bar span{color:var(--gold);flex:0 0 auto;}
-  .edit-layer-bar select{flex:1 1 auto;min-height:36px;font-size:.86rem;}
+  .edit-layer-bar select{flex:1 1 auto;min-width:0;max-width:100%;min-height:36px;font-size:.86rem;}
   .cell.movable::after{
     content:"";position:absolute;width:30%;height:30%;
     background:radial-gradient(circle,var(--move),#3aa977);
@@ -429,7 +437,7 @@
   .board-setup .bs-lbl{font-size:.74rem;color:var(--gold);letter-spacing:.12em;display:block;margin-bottom:8px;}
   .board-setup .bs-row{display:flex;gap:8px;align-items:center;margin-bottom:7px;flex-wrap:wrap;}
   .board-setup .bs-row label{font-size:.78rem;color:#b3a8d8;min-width:2em;}
-  .board-setup select{flex:1;min-width:8em;font-size:.82rem;padding:6px 8px;border-radius:8px;
+  .board-setup select{flex:1 1 8em;min-width:0;max-width:100%;font-size:.82rem;padding:6px 8px;border-radius:8px;
     background:#2a2142;color:#ece3ff;border:1px solid rgba(139,107,255,.4);}
   .board-setup .bs-num{flex:none;width:4.5em;min-width:0;font-size:.9rem;padding:6px;border-radius:8px;text-align:center;
     background:#2a2142;color:#ece3ff;border:1px solid rgba(139,107,255,.4);}
