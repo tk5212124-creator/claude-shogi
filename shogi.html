@@ -1266,6 +1266,8 @@
       <label class="rule-row"><input type="checkbox" id="rRepromote"> 成り条件をもう一度満たすと、もう一度成れる（成駒の成駒。例：敵駒を取ると成るルールなら、再度敵駒を取ると更に成る）</label>
       <label class="rule-row"><input type="checkbox" id="rRandomPromote"> 成り先のない駒は、成るとき全駒からランダムな駒に変化する（王将・玉将はroyalな駒へ）</label>
       <label class="rule-row"><input type="checkbox" id="rCaptureAll"> 相手の駒を全て取る（取り切る）まで戦う（王の有無に関係なく勝敗判定。囲碁・オセロ・はさみ将棋向け）</label>
+      <label class="rule-row"><input type="checkbox" id="rSurroundCapture"> 囲まれた駒を取る（縦横でつながった駒をひとまとまりとし、隣り合う空きが無くなったら取る）</label>
+      <p class="rule-note" style="margin:2px 0 6px;">碁石だけでなく将棋の駒も同じ扱いです。外すと、囲んでも取れなくなります（碁石も取れません）。</p>
       <p class="rule-note" style="margin:6px 0 2px;">シャンチー（中国象棋）</p>
       <label class="rule-row"><input type="checkbox" id="rFlyingGeneral"> 王不見王（帥と将を同じ筋で相対させる手は指せない。全ての手が相対になる場合は負け）</label>
       <label class="rule-row"><input type="checkbox" id="rPalaceEscape"> 九宮の駒（帥・將／仕・士）が宮マスの外にも出られるようにする（九宮ONのときだけ効きます）</label>
@@ -2627,6 +2629,7 @@ const RULES={
   jishogiMode:'points', // 持将棋の決め方：'points'=点数計算 / 'draw'=無条件で引き分け
   checkPoints:false,  // 王手をかけたら点数を足す（4人チェス式）
   capturedPoints:true,// 取った駒の駒価を点数に足す（王を取った分もここに入る）
+  surroundCapture:true,// 囲まれた駒を取る（縦横でつながった群の呼吸点が0になったら取る）
   captureAll:false,  // 相手の駒を全て取り切るまで戦う（王の有無に関係なく勝敗判定）。囲碁/オセロ/はさみ向け
   banSennichite:true,  // 千日手回避：同一局面が4回目になる手を禁じる（＝千日手が成立しない）
   flyingGeneral:false, // 王不見王：帥と将を同じ筋で相対させる手は指せない（シャンチー）
@@ -4221,6 +4224,7 @@ function fireBurn(r,c,p){
 // 碁石はコード(GOB/GOW)のまま持ち駒に入り色を保持する。各着手後に呼ぶ。
 // 呼吸点が0になった群を全て同時に取る（駒の種類は問わない）。
 function captureSurroundedScan(moverSide, touched, onCap){
+  if(!RULES.surroundCapture) return 0;
   ensurePts();
   const push=(side,q)=>{
     if(RULES.drops) (side===1?capYou:capEnemy).push(capturedCode(q));
@@ -4360,6 +4364,7 @@ function captureSurroundedNear(cells, pts, touched, moverSide, pushCap, rec, ene
    先に相手の群のうち呼吸点0のものを取り除き、それで呼吸点が生まれるなら合法。
    判定のあいだだけ盤を触り、必ず元に戻す。 */
 function isSuicidePlacement(cells, pts, isPt, r, c, t, side){
+  if(!RULES.surroundCapture) return false;   // 囲みで取らないなら自殺手も無い
   const L=isPt?pts:cells;
   if(!L || !L[r] || L[r][c]) return false;
   const owner=ownerOf(t,side);
@@ -4769,6 +4774,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
   // 囲碁の囲み取り。碁石は「囲んだ領域の駒はマス・交点に関係なく取れる」ので2層を通して数える
   // 実盤とまったく同じ「群の呼吸点が0なら丸ごと取る」を使う
   function simCaptureSurrounded(moverSide){
+    if(!RULES.surroundCapture) return;
     const push=(side,q)=>{ if(RULES.drops) (side===1?ncy:nce).push(capturedCode(q)); };
     captureSurroundedNear(nb, npts, touch, moverSide, push);
   }
@@ -7357,6 +7363,7 @@ function openRuleModal(){
   document.getElementById('rPromoLast').checked=RULES.promoOnLast;
   document.getElementById('rPromoCap').checked=RULES.promoOnCapture;
   document.getElementById('rCaptureAll').checked=RULES.captureAll;
+  document.getElementById('rSurroundCapture').checked=!!RULES.surroundCapture;
   document.getElementById('rDrawNoMove').checked=RULES.drawNoMove;
   document.getElementById('rDrawBothEnter').checked=RULES.drawBothEnter;
   document.getElementById('rJishogiMode').value=RULES.jishogiMode||'points';
@@ -7414,6 +7421,7 @@ document.getElementById('rPromoZone').onchange=e=>{ RULES.promoOnZone=e.target.c
 document.getElementById('rPromoLast').onchange=e=>{ RULES.promoOnLast=e.target.checked; };
 document.getElementById('rPromoCap').onchange=e=>{ RULES.promoOnCapture=e.target.checked; };
 document.getElementById('rCaptureAll').onchange=e=>{ RULES.captureAll=e.target.checked; };
+document.getElementById('rSurroundCapture').onchange=e=>{ RULES.surroundCapture=e.target.checked; };
 document.getElementById('rDrawNoMove').onchange=e=>{ RULES.drawNoMove=e.target.checked; };
 document.getElementById('rDrawBothEnter').onchange=e=>{ RULES.drawBothEnter=e.target.checked; };
 document.getElementById('rJishogiMode').onchange=e=>{ RULES.jishogiMode=e.target.value; };

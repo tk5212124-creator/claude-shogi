@@ -11,6 +11,7 @@ node tests/go-stone-ownership.mjs [new|old]
 node tests/go-rules.mjs
 node tests/cross-layer-capture.mjs
 node tests/mixed-go-capture.mjs
+node tests/surround-capture-rule.mjs
 node tests/check-points.mjs
 node tests/piece-value.mjs
 node tests/score-and-territory.mjs
@@ -187,6 +188,23 @@ CPU同士・超高速で起きた **273手・捕獲0・成り0** の実局。
 | 王手で加点（ルールON） | 王手1回で1点 |
 | 双方入玉でないとき | 点数の多い方の勝ち |
 | 持将棋＝引き分け設定 | 点数を見ずに引き分け |
+
+## surround-capture-rule.mjs / case12-surround-drop.json が見るもの
+
+碁石を持ち駒に入れた本将棋で、**打った歩が次の手で消えた**と報告された12手の実局。
+先手が (3行2列) に歩を打ち、後手が (4行2列) に歩を打った時点で、
+先手の歩は上下左右すべてが敵駒になり、囲みで取られている（不具合ではない）。
+
+ルール設定「囲まれた駒を取る」（`surroundCapture`・既定ON）で切れる。
+
+| 見るもの | ON（既定） | OFF |
+|---|---|---|
+| 報告の盤・持ち駒と一致するか | 一致 | — |
+| 12手目の棋譜 | `△歩兵 打 (4行2列) 取:歩兵` | `△歩兵 打 (4行2列)` |
+| 囲みで取った駒に演出（ダメージ数字）が付くか | 8手目・12手目とも付く | — |
+| 先手の歩 (3行2列) ／ 後手の金将 (9行4列) | 取られる | **残る** |
+| 囲碁の3子囲み | 取れる | **残る** |
+| 自殺手の制限 | あり | 無くなる |
 
 ## check-points.mjs が見るもの
 
