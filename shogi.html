@@ -4023,7 +4023,7 @@ function hasamiCapture(r,c,p){
     if(closed && line.length>0){
       for(const [er,ec] of line){
         const cap=board[er][ec];
-        if(RULES.drops && !isRoyal(cap.t)) (p===1?capYou:capEnemy).push(capturedCode(cap));
+        if(RULES.drops) (p===1?capYou:capEnemy).push(capturedCode(cap));
         board[er][ec]=null;
       }
     }
@@ -4037,7 +4037,7 @@ function fireBurn(r,c,p){
     if(rr<0||rr>=NR||cc<0||cc>=NC) continue;
     const q=board[rr][cc];
     if(q && q.p!==p){
-      if(RULES.drops && !isRoyal(q.t)) (p===1?capYou:capEnemy).push(capturedCode(q));
+      if(RULES.drops) (p===1?capYou:capEnemy).push(capturedCode(q));
       board[rr][cc]=null;
     }
   }
@@ -4109,7 +4109,7 @@ function goSurroundCapture(r,c,side){
     const q=layer[nr]&&layer[nr][nc];
     if(!q||q.p===side||isGo(q.t)) continue;      // 碁石どうしは goCaptureScan が担当
     if(isSurrounded(isPt,nr,nc,board,ptsBoard, t=>t.p===side)){
-      if(RULES.drops && !isRoyal(q.t)) cap.push(capturedCode(q));
+      if(RULES.drops) cap.push(capturedCode(q));
       layer[nr][nc]=null; n++;
     }
   }
@@ -4450,7 +4450,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
         for(const [er,ec] of line){
           const cap=nb[er][ec];
           if(isRoyal(cap.t)) king=true;
-          else if(RULES.drops) myCap.push(capturedCode(cap));
+          if(RULES.drops) myCap.push(capturedCode(cap));
           nb[er][ec]=null;
         }
       }
@@ -4461,7 +4461,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     for(const [dr,dc] of ALL8){
       const rr=r+dr, cc=c+dc; if(rr<0||rr>=NR||cc<0||cc>=NC)continue;
       const q=nb[rr][cc];
-      if(q && q.p!==side){ if(isRoyal(q.t)) king=true; else if(RULES.drops) myCap.push(capturedCode(q)); nb[rr][cc]=null; }
+      if(q && q.p!==side){ if(isRoyal(q.t)) king=true; if(RULES.drops) myCap.push(capturedCode(q)); nb[rr][cc]=null; }
     }
   }
   // 盤に碁石が1つも無ければ囲み取りは絶対に起きない。毎節点の全面走査をやめるため、
@@ -4501,7 +4501,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
       const q=layer[nr]&&layer[nr][nc];
       if(!q||q.p===side||isGo(q.t)) continue;
       if(isSurrounded(isPt,nr,nc,nb,npts, t=>t.p===side)){
-        if(isRoyal(q.t)) king=true; else if(RULES.drops) myCap.push(demoteOf(q.t));
+        if(isRoyal(q.t)) king=true; if(RULES.drops) myCap.push(capturedCode(q));
         layer[nr][nc]=null;
       }
     }
@@ -4517,23 +4517,23 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     const igui = m.fr===m.tr && m.fc===m.tc; // 居喰い：動かない
     if(tg && tg.p!==p){ // 移動先の敵を取る（居喰いでは自駒なので除外）
       if(isRoyal(tg.t)) king=true;
-      else { myCap.push(demoteOf(tg.t)); }
+      if(RULES.drops) myCap.push(capturedCode(tg));
     }
     // 九宮の交差マス（2層の共有点）では、もう一方のレイヤーの敵も取れる
     const sh=ob[m.tr]&&ob[m.tr][m.tc];
     if(isSharedPoint(m.tr,m.tc) && sh && sh.p!==p){
-      if(isRoyal(sh.t)) king=true; else myCap.push(demoteOf(sh.t));
+      if(isRoyal(sh.t)) king=true; if(RULES.drops) myCap.push(capturedCode(sh));
       ob[m.tr][m.tc]=null;
     }
     // 斜めに飛び越えて動く駒は、跳び越えた先の相手レイヤーの駒も取れる
     for(const [cr,cc] of crossJumpPoints(lb, pc.t, m.fr, m.fc, m.tr, m.tc, p)){
       const v=ob[cr]&&ob[cr][cc];
-      if(v && v.p!==p){ if(isRoyal(v.t)) king=true; else myCap.push(demoteOf(v.t)); ob[cr][cc]=null; }
+      if(v && v.p!==p){ if(isRoyal(v.t)) king=true; if(RULES.drops) myCap.push(capturedCode(v)); ob[cr][cc]=null; }
     }
     // 獅子の途中取り（caps）
     if(m.caps) for(const [cr,cc] of m.caps){
       const v=lb[cr][cc];
-      if(v){ if(isRoyal(v.t)) king=true; else myCap.push(demoteOf(v.t)); lb[cr][cc]=null; }
+      if(v){ if(isRoyal(v.t)) king=true; if(RULES.drops) myCap.push(capturedCode(v)); lb[cr][cc]=null; }
     }
     const promo = m.promo!==undefined ? m.promo
       : (!igui && canPromoteMove(pc.t,m.fr,m.tr,p, !!(tg&&tg.p!==p)||!!(m.caps&&m.caps.length)));
@@ -5193,16 +5193,16 @@ function applyMoveSilent(side,m,_legacySilent){
       xcapCodes: xcaps.length? xcaps.map(x=>x[2]) : undefined,
       caps:m.caps||undefined,pt:m.pt||undefined,toPt:(m.toPt!==undefined?m.toPt:undefined)});
     let tookRoyal = tg && isRoyal(tg.t);
-    // royal（玉・帥など）は持ち駒にしない。取られた側にまだ別のroyalが居ても打ち直せてはいけない
-    if(tg && RULES.drops && !isRoyal(tg.t)){ cap.push(capturedCode(tg)); }
+    // 取った駒は royal（玉・帥など）も含めて他の駒と同じように持ち駒へ入る
+    if(tg && RULES.drops){ cap.push(capturedCode(tg)); }
     // 獅子の途中取り（caps：2枚取り・居喰いの対象）
     if(m.caps) for(const [cr,cc] of m.caps){
       const v=LB[cr][cc];
-      if(v){ if(isRoyal(v.t)) tookRoyal=true; else if(RULES.drops) cap.push(capturedCode(v)); LB[cr][cc]=null; }
+      if(v){ if(isRoyal(v.t)) tookRoyal=true; if(RULES.drops) cap.push(capturedCode(v)); LB[cr][cc]=null; }
     }
     for(const [cr,cc] of xcaps){
       const v=OB[cr] && OB[cr][cc];
-      if(v){ if(isRoyal(v.t)) tookRoyal=true; else if(RULES.drops) cap.push(capturedCode(v)); OB[cr][cc]=null; }
+      if(v){ if(isRoyal(v.t)) tookRoyal=true; if(RULES.drops) cap.push(capturedCode(v)); OB[cr][cc]=null; }
     }
     const newCode = cpawnPromo ? 'cQ' : (promoNew || pc.t);
     _fxPromo = !!(promoNew || cpawnPromo);
@@ -5217,7 +5217,7 @@ function applyMoveSilent(side,m,_legacySilent){
       while(rr!==m.tr||cc!==m.tc){
         const mid=LB[rr][cc];
         if(mid && !isRankless(mid.t) && pieceRank(mid.t)>pieceRank(pc.t)){
-          if(RULES.drops && mid.p!==side && !isRoyal(mid.t)) cap.push(capturedCode(mid));
+          if(RULES.drops && mid.p!==side) cap.push(capturedCode(mid));
           LB[rr][cc]=null;
         }
         rr+=sr; cc+=sc;
@@ -5696,7 +5696,7 @@ function applyFx(d){
         fx.appendChild(gh); setTimeout(()=>gh.remove(),700);
       },130);
       // 3.5) 取った駒が自分の持ち駒トレイへ飛んでいく（持ち駒ルールON時）
-      if(RULES.drops && !isRoyal(cap.code)){
+      if(RULES.drops){
         setTimeout(()=>{
           const tray=document.getElementById(d.side===1?'capYou':'capEnemy');
           if(!tray) return;
@@ -5948,7 +5948,7 @@ function applyKifuStep(rec){
       while(rr!==tr||cc!==tc){
         const mid=LBk[rr][cc];
         if(mid && !isRankless(mid.t) && pieceRank(mid.t)>pieceRank(rec.code)){
-          if(RULES.drops && mid.p!==rec.side && !isRoyal(mid.t)) (rec.side===1?capYou:capEnemy).push(capturedCode(mid));
+          if(RULES.drops && mid.p!==rec.side) (rec.side===1?capYou:capEnemy).push(capturedCode(mid));
           LBk[rr][cc]=null;
         }
         rr+=sr; cc+=sc;
@@ -5957,7 +5957,7 @@ function applyKifuStep(rec){
     // 獅子の途中取り（caps：2枚取り・居喰い）を再現
     if(rec.caps) for(const [cr,cc] of rec.caps){
       const v=LBk[cr][cc];
-      if(v){ if(RULES.drops && !isRoyal(v.t)) (rec.side===1?capYou:capEnemy).push(capturedCode(v)); LBk[cr][cc]=null; }
+      if(v){ if(RULES.drops) (rec.side===1?capYou:capEnemy).push(capturedCode(v)); LBk[cr][cc]=null; }
     }
     // 相手レイヤーの取り（共有点・飛び越え）を再現する
     if(rec.xcaps){ const OBk = (rec.pt? board : ptsBoard);
