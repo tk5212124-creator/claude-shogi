@@ -451,7 +451,11 @@
     flex:0 0 20px;margin:2px 0 0;} /* 潰れない・1行目に揃える */
   .board-setup .bs-check span{flex:1 1 auto;font-size:.72rem;color:#cfc4ee;line-height:1.45;}
   /* 大盤：マスと駒名を縮小して収める */
-  .board.bigboard .koma{font-size:min(2.2vw,10px);border-radius:0;}
+  /* 大盤では駒名を縮めて角も落とすが、シャンチーの丸駒だけは丸のまま残す。
+     五角形・八角形は clip-path で形を作るので border-radius の影響を受けないが、
+     丸駒だけは border-radius:50% が形そのものなので、ここで潰すと四角くなってしまう。 */
+  .board.bigboard .koma:not(.round-koma){font-size:min(2.2vw,10px);border-radius:0;}
+  .board.bigboard .koma.round-koma{font-size:min(2.2vw,10px);}
   .board.bigboard .koma-name{font-size:min(2vw,9px);}
   .board.bigboard .koma.small .koma-name{font-size:min(1.6vw,7px);}
   .board.bigboard .koma.tiny .koma-name{font-size:min(1.2vw,5.5px);}
