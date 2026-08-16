@@ -41,7 +41,12 @@
     display:flex;flex-direction:column;align-items:center;
     padding:18px 10px 40px;
     -webkit-tap-highlight-color:transparent;
+    /* 演出で盤が少し大きく揺れても、横スクロールが出てページが縮まないように */
+    overflow-x:clip;
   }
+  html{overflow-x:clip;}
+  /* 画面の揺れ演出はこの中だけに掛ける（body を動かすと背景ごと崩れる） */
+  #page{display:flex;flex-direction:column;align-items:center;width:100%;}
   h1{
     font-family:'Shippori Mincho',serif;
     font-weight:800;letter-spacing:.42em;
@@ -89,15 +94,15 @@
     border:1px dashed var(--sel);transform:none;cursor:pointer;font-family:sans-serif;}
 
   /* 盤の右下の図鑑ボタン。対局中でも駒の説明をすぐ開ける */
-  /* 盤の駒に被らないよう、盤枠の下へ少しはみ出させる */
-  #zukanBtn{position:absolute;right:4px;bottom:-20px;z-index:30;
-    min-height:0;padding:5px 9px;border-radius:11px;font-size:.7rem;font-weight:700;
+  /* 盤の下の行。盤と同じ並びに置くので、盤にも他の画面にも重ならない */
+  .zukan-row{display:flex;justify-content:flex-end;width:100%;margin:4px 0 0;}
+  #zukanBtn{min-height:0;padding:5px 9px;border-radius:11px;font-size:.7rem;font-weight:700;
     background:linear-gradient(160deg,#4a3a6e,#2e2447);border:1px solid rgba(245,207,107,.55);
     color:var(--gold);box-shadow:0 2px 8px rgba(0,0,0,.5);max-width:46%;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   #zukanBtn.has-piece{border-color:var(--glow);color:#ece3ff;
     background:linear-gradient(160deg,#5a4a9e,#3d3168);}
-  #zukanBtn.hidden{display:none;}
+  #zukanBtn.hidden{visibility:hidden;}   /* 隠しても行の高さは動かさない */
   .board-wrap{position:relative;padding:10px;
     background:linear-gradient(135deg,#4a3a6e,#2e2447);
     border-radius:18px;
@@ -709,7 +714,7 @@
     20%{transform:translate(10px,-6px) rotate(1.2deg) scale(1.02);} 34%{transform:translate(-8px,4px) rotate(-.9deg);}
     50%{transform:translate(7px,-3px) rotate(.7deg);} 66%{transform:translate(-4px,2px) rotate(-.4deg);}
     82%{transform:translate(3px,-1px);}}
-  body.quake{animation:quake .5s cubic-bezier(.3,.1,.3,1);}
+  #page.quake{animation:quake .5s cubic-bezier(.3,.1,.3,1);}
   @keyframes quake{0%,100%{transform:translate(0,0);} 10%{transform:translate(-9px,7px) rotate(-.6deg);}
     24%{transform:translate(9px,-7px) rotate(.6deg);} 40%{transform:translate(-7px,5px);}
     58%{transform:translate(6px,-4px);} 76%{transform:translate(-4px,2px);} 90%{transform:translate(2px,-1px);}}
@@ -875,13 +880,14 @@
 </head>
 <body>
   <button type="button" id="helpBtn" title="使い方">？</button>
+  <div id="page">
   <h1>将棋</h1>
   <div class="sub" id="senteLabel">対 局 ・ 先 手 が あ な た</div>
   <div class="sub" style="font-size:.62rem;color:#7d6e57;margin-top:-8px;">「編集ツール」で大局将棋 全209種＋成92種を配置できます</div>
 
   <div class="captured" id="capEnemy"><span class="lbl">相手</span></div>
-  <div class="board-wrap"><div class="board" id="board"></div><div id="fxLayer"></div>
-    <button type="button" id="zukanBtn" title="選んだ駒の説明を見る">図鑑</button></div>
+  <div class="board-wrap"><div class="board" id="board"></div><div id="fxLayer"></div></div>
+  <div class="zukan-row"><button type="button" id="zukanBtn" title="選んだ駒の説明を見る">図鑑</button></div>
   <div class="captured" id="capYou"><span class="lbl">あなた</span></div>
 
   <div class="multi-bar edit-layer-bar" id="editLayerBar" style="display:none;">
@@ -1052,6 +1058,8 @@
     </div>
    </div>
   </div>
+
+  </div><!-- /#page -->
 
   <div id="resultBanner">
     <div class="rb-card" id="rbCard">
@@ -1266,8 +1274,6 @@
       <label class="rule-row"><input type="checkbox" id="rRepromote"> 成り条件をもう一度満たすと、もう一度成れる（成駒の成駒。例：敵駒を取ると成るルールなら、再度敵駒を取ると更に成る）</label>
       <label class="rule-row"><input type="checkbox" id="rRandomPromote"> 成り先のない駒は、成るとき全駒からランダムな駒に変化する（王将・玉将はroyalな駒へ）</label>
       <label class="rule-row"><input type="checkbox" id="rCaptureAll"> 相手の駒を全て取る（取り切る）まで戦う（王の有無に関係なく勝敗判定。囲碁・オセロ・はさみ将棋向け）</label>
-      <label class="rule-row"><input type="checkbox" id="rSurroundCapture"> 囲まれた駒を取る（縦横でつながった駒をひとまとまりとし、隣り合う空きが無くなったら取る）</label>
-      <p class="rule-note" style="margin:2px 0 6px;">碁石だけでなく将棋の駒も同じ扱いです。外すと、囲んでも取れなくなります（碁石も取れません）。</p>
       <p class="rule-note" style="margin:6px 0 2px;">シャンチー（中国象棋）</p>
       <label class="rule-row"><input type="checkbox" id="rFlyingGeneral"> 王不見王（帥と将を同じ筋で相対させる手は指せない。全ての手が相対になる場合は負け）</label>
       <label class="rule-row"><input type="checkbox" id="rPalaceEscape"> 九宮の駒（帥・將／仕・士）が宮マスの外にも出られるようにする（九宮ONのときだけ効きます）</label>
@@ -2629,7 +2635,6 @@ const RULES={
   jishogiMode:'points', // 持将棋の決め方：'points'=点数計算 / 'draw'=無条件で引き分け
   checkPoints:false,  // 王手をかけたら点数を足す（4人チェス式）
   capturedPoints:true,// 取った駒の駒価を点数に足す（王を取った分もここに入る）
-  surroundCapture:true,// 囲まれた駒を取る（縦横でつながった群の呼吸点が0になったら取る）
   captureAll:false,  // 相手の駒を全て取り切るまで戦う（王の有無に関係なく勝敗判定）。囲碁/オセロ/はさみ向け
   banSennichite:true,  // 千日手回避：同一局面が4回目になる手を禁じる（＝千日手が成立しない）
   flyingGeneral:false, // 王不見王：帥と将を同じ筋で相対させる手は指せない（シャンチー）
@@ -4224,7 +4229,6 @@ function fireBurn(r,c,p){
 // 碁石はコード(GOB/GOW)のまま持ち駒に入り色を保持する。各着手後に呼ぶ。
 // 呼吸点が0になった群を全て同時に取る（駒の種類は問わない）。
 function captureSurroundedScan(moverSide, touched, onCap){
-  if(!RULES.surroundCapture) return 0;
   ensurePts();
   const push=(side,q)=>{
     if(RULES.drops) (side===1?capYou:capEnemy).push(capturedCode(q));
@@ -4232,84 +4236,113 @@ function captureSurroundedScan(moverSide, touched, onCap){
   };
   return captureSurroundedNear(board, ptsBoard, touched||[], moverSide===undefined?null:moverSide, push);
 }
-/* ===== 囲みで取られる判定（駒の種類を問わない） =====
-   上下左右でつながった「同じ側の駒」を1つの群として扱う。碁石でも将棋の駒でも同じ。
-   群に隣り合う空きが呼吸点。呼吸点が0になった群は丸ごと同時に取られる。
+/* ===== 囲みで取られる判定 =====
+   囲んで取れるのは碁石だけ。取られる方は碁石に限らず、将棋駒でもチェス駒でも
+   オセロ駒でも、碁石が条件を満たせば取られる。
 
-   2層の盤なので、隣へ抜ける「辺」が別の層の相手の駒2つで塞がれることがある。
-     マス (r,c) の辺  … 塞ぐのは辺の両端の交点2つ
-     交点 (R,C) の辺  … 塞ぐのは辺の両側のマス2つ
-   これで、マスの駒は4頂点の交点で囲めば取れ、交点の駒はその点を囲む4マスで取れる。
+   上下左右でつながった「同じ側の駒」を1つの群として扱う。
+   群から外へ出られる向きが1つでも残っていれば生きている（＝呼吸点あり）。
+   その向きを塞げるのは次のどれかだけ。
+
+     ① 隣に相手の碁石がある（同じ層）
+     ② 隣へ抜ける辺を、別の層の相手の碁石2つが挟んでいる
+          マス (r,c) の辺  … 塞ぐのは辺の両端の交点2つ
+          交点 (R,C) の辺  … 塞ぐのは辺の両側のマス2つ
+     ③ 碁石をマスの中に置けるルールのときだけ、隣の空き交点も
+        「そこに集まる4本の辺のうち2本以上が碁石で塞がれている」なら塞がり扱い
+     ④ 盤の外（壁）
+
+   相手の歩や銀のような普通の駒は、隣にあっても呼吸点を塞がない。
+   将棋の駒だけで囲んでも取れない。
 
    辺を見る順番が大事。各方向について
      ① 辺が塞がっているか  → 塞がっていればその方向は接続も呼吸もしない
      ② 隣が同じ側          → 同じ群としてつながる
-     ③ 隣が相手            → 呼吸点にならない
-     ④ 隣が空き            → 呼吸点
+     ③ 隣が相手の碁石      → 呼吸点にならない
+     ④ それ以外            → 呼吸点
    の順に見る。①を後回しにすると、塞がれた辺の向こうの味方まで同じ群になってしまい、
-   4辺を囲まれた玉将が「隣の金将には呼吸点があるから」と生き残ってしまう。
+   4辺を碁石で囲まれた玉将が「隣の金将には呼吸点があるから」と生き残ってしまう。
 
-   塞ぐのは「相手の駒」だけ。味方の駒や盤の外は辺を塞がない。
-   味方まで数えると、盤の縁に石を置いた瞬間に取られてしまう。
-
-   辺の塞がりは実際に置かれている駒だけで決める。空いている交点を
-   「塞がっている交点」と見なして別の辺の判定に使い回すことはしない
-   （以前それをやって、盤が駒で埋まっていると囲みが際限なく伝播した）。
+   辺の塞がりは実際に置かれている碁石だけで決める（③を除く）。
 
    人の操作・打ち先の候補・CPUの読み・棋譜再生がすべてこの1組を使う。 */
 const ORTHO_4=[[-1,0],[1,0],[0,-1],[0,1]];
-// (r,c) に side から見た相手の駒があるか。盤の外は「無い」（＝辺を塞がない）
-function foeAt(L, rows, cols, r, c, side){
+// (r,c) に side から見た「相手の碁石」があるか。盤の外は「無い」（＝辺を塞がない）
+function foeStoneAt(L, rows, cols, r, c, side){
   if(r<0||r>=rows||c<0||c>=cols) return false;
   const q=L[r]&&L[r][c];
-  return !!q && ownerOf(q.t,q.p)!==side;
+  return !!q && isGo(q.t) && ownerOf(q.t,q.p)!==side;
 }
-/* 交点(R,C)から (dr,dc) へ伸びる辺が、その辺を挟む「2マスの相手の駒」で塞がれているか。
+// 碁石をマスの中に置けるルールか（③の判定を使うのはこのときだけ）
+function goStoneInCell(){ return layerAllows('GOB', false); }
+/* 交点(R,C)から (dr,dc) へ伸びる辺を挟む「2マス」。
      上へ … マス (R-1,C-1) と (R-1,C)      下へ … マス (R,C-1) と (R,C)
      左へ … マス (R-1,C-1) と (R,C-1)      右へ … マス (R-1,C) と (R,C)   */
-function ptEdgeBlocked(cells,R,C,dr,dc,side){
-  let a,b;
-  if(dr===-1)      { a=[R-1,C-1]; b=[R-1,C]; }
-  else if(dr===1)  { a=[R,C-1];   b=[R,C]; }
-  else if(dc===-1) { a=[R-1,C-1]; b=[R,C-1]; }
-  else             { a=[R-1,C];   b=[R,C]; }
-  return foeAt(cells,NR,NC,a[0],a[1],side) && foeAt(cells,NR,NC,b[0],b[1],side);
+function ptEdgeCells(R,C,dr,dc){
+  if(dr===-1) return [[R-1,C-1],[R-1,C]];
+  if(dr===1)  return [[R,C-1],  [R,C]];
+  if(dc===-1) return [[R-1,C-1],[R,C-1]];
+  return             [[R-1,C],  [R,C]];
 }
-/* マス(r,c)の (dr,dc) 側の辺が、その辺の両端の「2交点の相手の駒」で塞がれているか。
+/* マス(r,c)の (dr,dc) 側の辺の両端の「2交点」。
      上辺 … 交点 (r,c)   と (r,c+1)        下辺 … 交点 (r+1,c) と (r+1,c+1)
      左辺 … 交点 (r,c)   と (r+1,c)        右辺 … 交点 (r,c+1) と (r+1,c+1)  */
+function cellEdgePts(r,c,dr,dc){
+  if(dr===-1) return [[r,c],  [r,c+1]];
+  if(dr===1)  return [[r+1,c],[r+1,c+1]];
+  if(dc===-1) return [[r,c],  [r+1,c]];
+  return             [[r,c+1],[r+1,c+1]];
+}
+// 交点(R,C)から (dr,dc) へ伸びる辺が、挟む2マスの相手の碁石で塞がれているか
+function ptEdgeBlocked(cells,R,C,dr,dc,side){
+  const [a,b]=ptEdgeCells(R,C,dr,dc);
+  return foeStoneAt(cells,NR,NC,a[0],a[1],side) && foeStoneAt(cells,NR,NC,b[0],b[1],side);
+}
+// マス(r,c)の (dr,dc) 側の辺が、両端2交点の相手の碁石で塞がれているか
 function cellEdgeBlocked(pts,r,c,dr,dc,side){
-  let a,b;
-  if(dr===-1)      { a=[r,c];     b=[r,c+1]; }
-  else if(dr===1)  { a=[r+1,c];   b=[r+1,c+1]; }
-  else if(dc===-1) { a=[r,c];     b=[r+1,c]; }
-  else             { a=[r,c+1];   b=[r+1,c+1]; }
-  return foeAt(pts,NR+1,NC+1,a[0],a[1],side) && foeAt(pts,NR+1,NC+1,b[0],b[1],side);
+  const [a,b]=cellEdgePts(r,c,dr,dc);
+  return foeStoneAt(pts,NR+1,NC+1,a[0],a[1],side) && foeStoneAt(pts,NR+1,NC+1,b[0],b[1],side);
 }
 // (r,c) の駒（層 isPt）から (dr,dc) へ抜ける辺が塞がっているか
 function edgeBlocked(cells,pts,isPt,r,c,dr,dc,side){
   return isPt ? ptEdgeBlocked(cells,r,c,dr,dc,side) : cellEdgeBlocked(pts,r,c,dr,dc,side);
+}
+/* ③ 空いている交点が塞がり扱いになるか。
+   碁石をマスの中に置けるルールのときだけ、そこに集まる4本の辺のうち
+   2本以上が相手の碁石で塞がれていれば塞がり。 */
+function ptSealedByEdges(cells,R,C,side){
+  if(R<0||R>NR||C<0||C>NC) return false;
+  let n=0;
+  for(const [dr,dc] of ORTHO_4){ if(ptEdgeBlocked(cells,R,C,dr,dc,side) && ++n>=2) return true; }
+  return false;
 }
 function surroundedGroup(cells, pts, isPt, r0, c0){
   const L=isPt?pts:cells;
   const q0=L[r0]&&L[r0][c0]; if(!q0) return null;
   const side=ownerOf(q0.t,q0.p);
   const RR=isPt?NR+1:NR, CC=isPt?NC+1:NC;
+  const useEdgeSeal = isPt && goStoneInCell();
   const seen=new Set([r0+','+c0]), stones=[[r0,c0]], st=[[r0,c0]];
   while(st.length){
     const [r,c]=st.pop();
     for(const [dr,dc] of ORTHO_4){
       const rr=r+dr, cc=c+dc;
-      if(rr<0||rr>=RR||cc<0||cc>=CC) continue;     // 盤の外は呼吸点にならない
-      // ① まず辺。相手の駒2つで塞がれていれば、その方向には接続も呼吸もない
+      if(rr<0||rr>=RR||cc<0||cc>=CC) continue;     // ④ 盤の外は呼吸点にならない
+      // ① まず辺。相手の碁石2つで塞がれていれば、その方向には接続も呼吸もない
       if(edgeBlocked(cells,pts,isPt,r,c,dr,dc,side)) continue;
       const q=L[rr]&&L[rr][cc];
-      if(!q) return {free:true, side, isPt};       // ④ 空き＝呼吸点。ここで打ち切る
+      if(!q){
+        // ③ 空き交点が碁石の辺2本で塞がれている場合だけ、呼吸点にならない
+        if(useEdgeSeal && ptSealedByEdges(cells,rr,cc,side)) continue;
+        return {free:true, side, isPt};            // 呼吸点あり。ここで打ち切る
+      }
       if(ownerOf(q.t,q.p)===side){                 // ② 同じ側＝つながっている
         const k=rr+','+cc;
         if(!seen.has(k)){ seen.add(k); stones.push([rr,cc]); st.push([rr,cc]); }
+        continue;
       }
-      // ③ 相手の駒＝呼吸点にならない
+      if(isGo(q.t)) continue;                      // ③ 相手の碁石＝呼吸点にならない
+      return {free:true, side, isPt};              // 相手の普通の駒は呼吸点を塞がない
     }
   }
   return {stones, free:false, side, isPt};
@@ -4364,7 +4397,6 @@ function captureSurroundedNear(cells, pts, touched, moverSide, pushCap, rec, ene
    先に相手の群のうち呼吸点0のものを取り除き、それで呼吸点が生まれるなら合法。
    判定のあいだだけ盤を触り、必ず元に戻す。 */
 function isSuicidePlacement(cells, pts, isPt, r, c, t, side){
-  if(!RULES.surroundCapture) return false;   // 囲みで取らないなら自殺手も無い
   const L=isPt?pts:cells;
   if(!L || !L[r] || L[r][c]) return false;
   const owner=ownerOf(t,side);
@@ -4774,7 +4806,6 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
   // 囲碁の囲み取り。碁石は「囲んだ領域の駒はマス・交点に関係なく取れる」ので2層を通して数える
   // 実盤とまったく同じ「群の呼吸点が0なら丸ごと取る」を使う
   function simCaptureSurrounded(moverSide){
-    if(!RULES.surroundCapture) return;
     const push=(side,q)=>{ if(RULES.drops) (side===1?ncy:nce).push(capturedCode(q)); };
     captureSurroundedNear(nb, npts, touch, moverSide, push);
   }
@@ -5894,6 +5925,14 @@ function computeFx(prev, side, m, promo){
     moveFrom:(m&&!m.drop&&m.fr!==undefined?[m.fr,m.fc]:null),
     drop:!!(m&&m.drop), promo:!!promo, side, crit};
 }
+// 画面をぐらっと揺らす。body ではなく #page に掛ける
+// （body を transform すると body::before/after の背景が body 基準になり、
+//   ページ全体がはみ出して画面が縮んで見える）。
+function quakeScreen(ms){
+  const el=document.getElementById('page'); if(!el) return;
+  el.classList.remove('quake'); void el.offsetWidth;
+  el.classList.add('quake'); setTimeout(()=>el.classList.remove('quake'), ms||540);
+}
 // 画面全体に一瞬だけ重ねる演出（集中線・赤フチ・金フラッシュなど）。ms後に自動で消える。
 function screenFx(cls, ms){
   const el=document.createElement('div'); el.className=cls;
@@ -5943,8 +5982,7 @@ function applyFx(d){
       screenFx('fx-lines',560);
       shockAt(cr2.left+cr2.width/2, cr2.top+cr2.height/2, Math.max(w,h)*3);
       if(navigator.vibrate){ try{navigator.vibrate([40,40,70]);}catch(_){} }
-      document.body.classList.remove('quake'); void document.body.offsetWidth;
-      document.body.classList.add('quake'); setTimeout(()=>document.body.classList.remove('quake'),520);
+      quakeScreen();
       // 背後で回る放射光
       const bu=document.createElement('div'); bu.className='fx-burst';
       bu.style.cssText='left:'+cx+'px;top:'+cy+'px;width:'+(w*3.2)+'px;height:'+(w*3.2)+'px;';
@@ -6045,8 +6083,7 @@ function applyFx(d){
         if(d.side!==1) screenFx('fx-vignette',780);   // 取られた側なら画面が赤く縁取られる
         setTimeout(()=>SFX.play('crit'),120);          // 轟音の二段撃ち
         // 画面ごと揺らす
-        document.body.classList.remove('quake'); void document.body.offsetWidth;
-        document.body.classList.add('quake'); setTimeout(()=>document.body.classList.remove('quake'),540);
+        quakeScreen();
         // 自分が大駒を取れば「会心の一撃！」、取られた側なら「痛恨の一撃！」
         cutIn(d.side===1?'会心の一撃！':'痛恨の一撃！','danger');
       },100);
@@ -6153,8 +6190,7 @@ function showResult(kind, title, sub){
   if(SFX.on){
     screenFx(kind==='win'?'fx-goldflash':'fx-vignette', 800);
     screenFx('fx-lines'+(kind==='win'?'':' danger'), 580);
-    document.body.classList.remove('quake'); void document.body.offsetWidth;
-    document.body.classList.add('quake'); setTimeout(()=>document.body.classList.remove('quake'),540);
+    quakeScreen();
     if(navigator.vibrate){ try{navigator.vibrate(kind==='win'?[60,60,60,60,140]:[140,80,140]);}catch(_){} }
   }
   if(kind==='win' && SFX.on){
@@ -7363,7 +7399,6 @@ function openRuleModal(){
   document.getElementById('rPromoLast').checked=RULES.promoOnLast;
   document.getElementById('rPromoCap').checked=RULES.promoOnCapture;
   document.getElementById('rCaptureAll').checked=RULES.captureAll;
-  document.getElementById('rSurroundCapture').checked=!!RULES.surroundCapture;
   document.getElementById('rDrawNoMove').checked=RULES.drawNoMove;
   document.getElementById('rDrawBothEnter').checked=RULES.drawBothEnter;
   document.getElementById('rJishogiMode').value=RULES.jishogiMode||'points';
@@ -7421,7 +7456,6 @@ document.getElementById('rPromoZone').onchange=e=>{ RULES.promoOnZone=e.target.c
 document.getElementById('rPromoLast').onchange=e=>{ RULES.promoOnLast=e.target.checked; };
 document.getElementById('rPromoCap').onchange=e=>{ RULES.promoOnCapture=e.target.checked; };
 document.getElementById('rCaptureAll').onchange=e=>{ RULES.captureAll=e.target.checked; };
-document.getElementById('rSurroundCapture').onchange=e=>{ RULES.surroundCapture=e.target.checked; };
 document.getElementById('rDrawNoMove').onchange=e=>{ RULES.drawNoMove=e.target.checked; };
 document.getElementById('rDrawBothEnter').onchange=e=>{ RULES.drawBothEnter=e.target.checked; };
 document.getElementById('rJishogiMode').onchange=e=>{ RULES.jishogiMode=e.target.value; };
