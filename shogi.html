@@ -3520,6 +3520,84 @@ function checkInfo(p){
 /* ===== 交点に乗る駒（囲碁・シャンチー・チャンギ）=====
    これらの駒だけが「格子線の交点」に乗る。他の駒は今までどおりマスの中。
    交点(r,c) は マス(r,c) の左上の角なので、交点とマスの中心は必ず別の点になる。 */
+/* ===== 駒価（共通式） =====
+   駒ごとの固定値ではなく、駒の動きと置かれる層から共通の式で出す。
+
+     王駒       V = 20
+     それ以外   V = 1 + I + S + Q×(2R + C) + 2N + L      Q = (I===1) ? 2 : 1
+
+     I … 交点に置かれ、かつ自力で動ける駒なら 1（碁石・オセロ駒は動けないので 0）
+     S … I=1 で、駒本来の動きが左右対称かつ上下対称なら 1
+     R … 追加条件なしで正反対の2方向へ無限に走れる軸の本数（上下・左右・斜め2本で最大4）
+     C … 走るのに進路妨害以外の追加条件が要る軸の本数（砲・包＝2）
+     N … 空盤で (±2,±1)(±1,±2) の8方向すべてへ届くなら 1（八方桂）
+     L … 九宮の斜線など、盤に引かれた特殊な線で増える無条件の走行軸（チャンギの車＝2）
+
+   Q は走る力（2R+C）にだけ掛ける。交点に居るだけで駒価全体が2倍になるわけではない。 */
+const PV_AXES=[[[-1,0],[1,0]], [[0,-1],[0,1]], [[-1,-1],[1,1]], [[-1,1],[1,-1]]];
+const PV_KNIGHT=[[-2,-1],[-2,1],[2,-1],[2,1],[-1,-2],[-1,2],[1,-2],[1,2]];
+function pvMoveSet(t){
+  const m=(TP[t]&&TP[t].m)||[];
+  const map=new Map();
+  for(const d of m) map.set(d[0]+','+d[1], d[2]);
+  return map;
+}
+function calcPieceValue(t, isPt){
+  if(!TP[t]) return 1;
+  if(isRoyal(t)) return 20;                       // 王駒は一律
+  const fl=TP[t].fl||[], mv=pvMoveSet(t);
+  const canMove = mv.size>0;                      // 碁石・オセロ駒は自力で動けない
+  const onPt = (isPt===undefined) ? isPointPiece(t) : !!isPt;
+  const I = (onPt && canMove) ? 1 : 0;
+  // S：駒本来の動きが左右対称かつ上下対称か（今の位置や他の駒は見ない）
+  let S=0;
+  if(I===1){
+    let sym=true;
+    for(const k of mv.keys()){
+      const [dr,dc]=k.split(',').map(Number);
+      if(!mv.has(dr+','+(-dc)) || !mv.has((-dr)+','+dc)){ sym=false; break; }
+    }
+    S = sym?1:0;
+  }
+  // R / C：正反対の2方向へ無限に走れる軸を数える。走るのに追加条件が要るものは C。
+  const conditional = fl.includes('cannon')||fl.includes('jcannon');   // 砲・包は台が要る
+  let R=0, C=0;
+  for(const [a,b] of PV_AXES){
+    if(mv.get(a[0]+','+a[1])==='F' && mv.get(b[0]+','+b[1])==='F'){ if(conditional) C++; else R++; }
+  }
+  // N：八方桂型（経路を塞がれる型でも到達形が同じなら 1）
+  const N = PV_KNIGHT.every(([dr,dc])=>{ const v=mv.get(dr+','+dc); return v==='J'||v==='jump'; }) ? 1 : 0;
+  // L：盤に引かれた特殊な線で増える無条件の走行軸。チャンギの車は九宮の斜線を走れる。
+  const L = (t==='JR'||t==='JRb') ? 2 : 0;
+  const Q = (I===1) ? 2 : 1;
+  return 1 + I + S + Q*(2*R + C) + 2*N + L;
+}
+// 駒価は起動時に1度だけ計算して持っておく（図鑑・持将棋点・演出が参照する）
+const PVAL={};
+function pieceValue(t, isPt){
+  if(isPt!==undefined) return calcPieceValue(t,isPt);
+  if(PVAL[t]===undefined) PVAL[t]=calcPieceValue(t);
+  return PVAL[t];
+}
+// 内訳（図鑑やテストで使う）
+function pieceValueParts(t, isPt){
+  if(!TP[t]) return null;
+  const fl=TP[t].fl||[], mv=pvMoveSet(t);
+  const canMove=mv.size>0;
+  const onPt=(isPt===undefined)? isPointPiece(t) : !!isPt;
+  const I=(onPt&&canMove)?1:0;
+  let S=0;
+  if(I===1){ let sym=true;
+    for(const k of mv.keys()){ const [dr,dc]=k.split(',').map(Number);
+      if(!mv.has(dr+','+(-dc))||!mv.has((-dr)+','+dc)){ sym=false; break; } }
+    S=sym?1:0; }
+  const cond=fl.includes('cannon')||fl.includes('jcannon');
+  let R=0,C=0;
+  for(const [a,b] of PV_AXES) if(mv.get(a[0]+','+a[1])==='F'&&mv.get(b[0]+','+b[1])==='F'){ cond?C++:R++; }
+  const N=PV_KNIGHT.every(([dr,dc])=>{const v=mv.get(dr+','+dc);return v==='J'||v==='jump';})?1:0;
+  const L=(t==='JR'||t==='JRb')?2:0;
+  return {royal:isRoyal(t), I,S,R,C,N,L, Q:(I===1)?2:1, V:calcPieceValue(t,isPt)};
+}
 function isPointPiece(t){
   const fl=(TP[t]&&TP[t].fl)||[];
   return fl.includes('go')||fl.includes('xiangqi')||fl.includes('janggi');
