@@ -4097,15 +4097,41 @@ function captureSurroundedScan(moverSide, touched){
 }
 /* ===== 囲みで取られる判定（駒の種類を問わない） =====
    上下左右でつながった「同じ側の駒」を1つの群として扱う。碁石でも将棋の駒でも同じ。
-   群に隣り合う空きが呼吸点で、見るのは同じ層の上下左右だけ。
-   呼吸点が0になった群は丸ごと同時に取られる。盤の外は呼吸点にならない。
-   人の操作・打ち先の候補・CPUの読みがすべてこの1組を使う。 */
+   群に隣り合う空きが呼吸点。呼吸点が0になった群は丸ごと同時に取られる。
+
+   2層の盤なので、辺は「その辺を挟む別の層の2つ」でも塞がる。
+     マス (r,c) の辺  … 挟むのは辺の両端の交点2つ
+     交点 (R,C) の辺  … 挟むのは辺の両側のマス2つ
+   これで、マスの駒は4頂点の交点で囲めば取れ、交点の駒はその点を囲む4マスで取れる。
+   盤の外は壁として塞がっている側に数える。
+
+   人の操作・打ち先の候補・CPUの読み・棋譜再生がすべてこの1組を使う。 */
 const ORTHO_4=[[-1,0],[1,0],[0,-1],[0,1]];
+// その辺が「別の層の2つ」で塞がれているか
+function edgeBlocked(O, isPt, r, c, dr, dc, OR, OC){
+  if(!O) return false;
+  let a, b;
+  if(!isPt){                                            // マスの辺を挟む交点2つ
+    if(dr===-1)      { a=[r,c];     b=[r,c+1]; }        // 上辺
+    else if(dr===1)  { a=[r+1,c];   b=[r+1,c+1]; }      // 下辺
+    else if(dc===-1) { a=[r,c];     b=[r+1,c]; }        // 左辺
+    else             { a=[r,c+1];   b=[r+1,c+1]; }      // 右辺
+  } else {                                              // 交点の辺を挟むマス2つ
+    if(dr===-1)      { a=[r-1,c-1]; b=[r-1,c]; }        // 上へ
+    else if(dr===1)  { a=[r,c-1];   b=[r,c]; }          // 下へ
+    else if(dc===-1) { a=[r-1,c-1]; b=[r,c-1]; }        // 左へ
+    else             { a=[r-1,c];   b=[r,c]; }          // 右へ
+  }
+  const occ=(q)=> (q[0]<0||q[0]>=OR||q[1]<0||q[1]>=OC) ? true            // 盤の外は壁
+                                                       : !!(O[q[0]]&&O[q[0]][q[1]]);
+  return occ(a) && occ(b);
+}
 function surroundedGroup(cells, pts, isPt, r0, c0){
-  const L=isPt?pts:cells;
+  const L=isPt?pts:cells, O=isPt?cells:pts;
   const q0=L[r0]&&L[r0][c0]; if(!q0) return null;
   const side=q0.p;
   const RR=isPt?NR+1:NR, CC=isPt?NC+1:NC;
+  const OR=isPt?NR:NR+1,  OC=isPt?NC:NC+1;
   const seen=new Set([r0+','+c0]), stones=[[r0,c0]], st=[[r0,c0]];
   while(st.length){
     const [r,c]=st.pop();
@@ -4113,11 +4139,16 @@ function surroundedGroup(cells, pts, isPt, r0, c0){
       const rr=r+dr, cc=c+dc;
       if(rr<0||rr>=RR||cc<0||cc>=CC) continue;     // 盤の外は呼吸点にならない
       const q=L[rr]&&L[rr][cc];
-      if(!q) return {free:true, side, isPt};       // 空き＝呼吸点。ここで打ち切る
-      if(q.p===side){                              // 同じ側ならつながっている
-        const k=rr+','+cc;
-        if(!seen.has(k)){ seen.add(k); stones.push([rr,cc]); st.push([rr,cc]); }
+      if(q){                                       // 埋まっている＝呼吸点ではない
+        if(q.p===side){                            // 同じ側ならつながっている
+          const k=rr+','+cc;
+          if(!seen.has(k)){ seen.add(k); stones.push([rr,cc]); st.push([rr,cc]); }
+        }
+        continue;
       }
+      // 空いていても、その辺が別の層の2つで塞がれていれば呼吸できない
+      if(edgeBlocked(O,isPt,r,c,dr,dc,OR,OC)) continue;
+      return {free:true, side, isPt};              // 呼吸点あり。ここで打ち切る
     }
   }
   return {stones, free:false, side, isPt};
@@ -4139,6 +4170,11 @@ function captureSurroundedNear(cells, pts, touched, moverSide, pushCap, rec, ene
   for(const [isPt,r,c] of touched){
     add(isPt,r,c);
     for(const [dr,dc] of ORTHO_4) add(isPt,r+dr,c+dc);
+    // 別の層が埋まると辺が塞がるので、その辺に面する反対側の層も見る
+    for(const [rr,cc] of surroundNeighbors(isPt,r,c).other){
+      add(!isPt,rr,cc);
+      for(const [dr,dc] of ORTHO_4) add(!isPt,rr+dr,cc+dc);
+    }
   }
   if(!cand.length) return 0;
   for(const mineTurn of (enemyOnlyAgainst!==undefined ? [false] : [false,true])){

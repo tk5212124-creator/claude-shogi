@@ -5,8 +5,8 @@ const errs=[]; p.on('pageerror',e=>errs.push(String(e)));
 await p.goto('file://'+new URL('../shogi.html',import.meta.url).pathname); await p.waitForTimeout(900);
 const out=await p.evaluate(()=>{
   // 囲みで取られる判定は駒の種類を問わない。上下左右でつながった同じ側の駒を1つの群とし、
-  // 群の呼吸点（隣り合う空き）が0になったら丸ごと取られる。
-  // 自殺手は打てないが、相手の群を取って呼吸点が生まれるなら合法。
+  // 群の呼吸点が0になったら丸ごと取られる。自殺手は打てないが、
+  // 相手の群を取って呼吸点が生まれるなら合法。
   const R={};
   const RU=()=>({drops:true,keepPromoted:false,nifu:true,sennichiteMode:'none',captureAll:true,
       banSennichite:false,pointMode:'point',palaceEscape:false,allowPass:true,randomIncludeSpecial:true});
