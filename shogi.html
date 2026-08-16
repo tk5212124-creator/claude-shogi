@@ -78,7 +78,7 @@
   .cap-koma.tiny  .koma-name{font-size:.5rem;}
   .cap-koma .koma-suffix{writing-mode:vertical-rl;text-orientation:upright;
     font-size:.34rem;line-height:1;opacity:.8;margin-right:.5px;align-self:center;}
-  .cap-koma.enemy{background:linear-gradient(160deg,#6a5a8a,#473a63);color:#ece3ff;transform:rotate(180deg);cursor:default;}
+  .cap-koma.enemy{background:linear-gradient(160deg,#6a5a8a,#473a63);color:#ece3ff;transform:rotate(180deg);}
   .cap-koma .ct{position:absolute;bottom:-3px;right:-3px;font-size:.6rem;
     background:var(--accent);color:#fff;border-radius:9px;
     min-width:14px;width:auto;height:14px;padding:0 4px;box-sizing:border-box;
@@ -88,6 +88,14 @@
   .cap-koma.cap-add{background:linear-gradient(160deg,#3a7d5e,#2a5d44);color:#dff5ec;
     border:1px dashed var(--sel);transform:none;cursor:pointer;font-family:sans-serif;}
 
+  /* 盤の右下の図鑑ボタン。対局中でも駒の説明をすぐ開ける */
+  #zukanBtn{position:absolute;right:4px;bottom:4px;z-index:30;
+    min-height:0;padding:5px 9px;border-radius:11px;font-size:.7rem;font-weight:700;
+    background:linear-gradient(160deg,#4a3a6e,#2e2447);border:1px solid rgba(245,207,107,.55);
+    color:var(--gold);box-shadow:0 2px 8px rgba(0,0,0,.5);max-width:46%;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #zukanBtn.has-piece{border-color:var(--glow);color:#ece3ff;
+    background:linear-gradient(160deg,#5a4a9e,#3d3168);}
   .board-wrap{position:relative;padding:10px;
     background:linear-gradient(135deg,#4a3a6e,#2e2447);
     border-radius:18px;
@@ -870,7 +878,8 @@
   <div class="sub" style="font-size:.62rem;color:#7d6e57;margin-top:-8px;">「編集ツール」で大局将棋 全209種＋成92種を配置できます</div>
 
   <div class="captured" id="capEnemy"><span class="lbl">相手</span></div>
-  <div class="board-wrap"><div class="board" id="board"></div><div id="fxLayer"></div></div>
+  <div class="board-wrap"><div class="board" id="board"></div><div id="fxLayer"></div>
+    <button type="button" id="zukanBtn" title="選んだ駒の説明を見る">図鑑</button></div>
   <div class="captured" id="capYou"><span class="lbl">あなた</span></div>
 
   <div class="multi-bar edit-layer-bar" id="editLayerBar" style="display:none;">
@@ -1086,6 +1095,12 @@
       </div>
       <div id="pickList">
         <div class="sort-bar">
+          <label class="sort-lbl" style="cursor:pointer;display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="pickAllMix" style="width:18px;height:18px;accent-color:var(--glow);">
+            全部まとめて一覧（将棋の種類で分けない）
+          </label>
+        </div>
+        <div class="sort-bar">
           <span class="sort-lbl">並び替え</span>
           <select id="sortSel">
             <option value="default">標準</option>
@@ -1093,6 +1108,8 @@
             <option value="kana_desc">字順（下から）</option>
             <option value="power_desc">強さ順（強い→弱い）</option>
             <option value="power_asc">弱さ順（弱い→強い）</option>
+            <option value="pv_desc">駒価順（高い→低い）</option>
+            <option value="pv_asc">駒価順（低い→高い）</option>
             <option value="hist_pick">履歴（選択した順）</option>
             <option value="hist_view">履歴（見た順）</option>
           </select>
@@ -1264,6 +1281,17 @@
       <p class="rule-note" style="margin:6px 0 2px;">引き分け（持将棋）</p>
       <label class="rule-row"><input type="checkbox" id="rDrawNoMove"> どこにも動けない・打てなくなったら持将棋（引き分け）にする</label>
       <label class="rule-row"><input type="checkbox" id="rDrawBothEnter"> 双方の王が敵陣に入ったら持将棋（引き分け）にする</label>
+      <div class="rule-row" style="display:block;">
+        <span class="rule-note">持将棋になったときの決め方</span>
+        <select id="rJishogiMode" style="width:100%;margin-top:4px;">
+          <option value="points">点数計算で勝敗を決める</option>
+          <option value="draw">点数を見ずに引き分けにする</option>
+        </select>
+      </div>
+      <label class="rule-row"><input type="checkbox" id="rCheckPoints"> 王手をかけたら点数を足す（4人チェス式）</label>
+      <p class="rule-note" style="margin:6px 0 2px;">点数は盤上の駒価＋取った駒の駒価＋囲碁の領域点。王を取った分もここに入ります。
+      24点・31点・500手のルールは「双方の王が敵陣に入ったら持将棋」がONで、実際にその形になったときだけ使います。
+      それ以外は単純に点数の多い方の勝ちです。</p>
       <p class="rule-note" style="margin:6px 0 2px;">成る条件（3つとも外すと「成り」が無くなります）</p>
       <label class="rule-row"><input type="checkbox" id="rPromoZone"> 敵陣に入ったら成れる</label>
       <label class="rule-row"><input type="checkbox" id="rPromoLast"> 敵陣の一番奥に着いたら成れる</label>
@@ -2150,6 +2178,8 @@ function sortList(list, mode){
     case 'kana_desc': list.sort((a,b)=>kana(b).localeCompare(kana(a),'ja')); break;
     case 'power_desc': list.sort((a,b)=>piecePower(b)-piecePower(a)); break;
     case 'power_asc': list.sort((a,b)=>piecePower(a)-piecePower(b)); break;
+    case 'pv_desc': list.sort((a,b)=>pieceValue(b)-pieceValue(a)||piecePower(b)-piecePower(a)); break;
+    case 'pv_asc':  list.sort((a,b)=>pieceValue(a)-pieceValue(b)||piecePower(a)-piecePower(b)); break;
     case 'hist_pick': {
       const set=new Set(pickHistory);
       list=list.filter(t=>set.has(t)).sort((a,b)=>pickHistory.indexOf(a)-pickHistory.indexOf(b));
@@ -2564,7 +2594,7 @@ function initState(keepBoard){
   sel=null; history=[]; gameOver=false; pendingPromo=null;
   turn = youAreSente ? 1 : -1; // 先手から開始（1=あなた, -1=相手）
   kifu=[]; gameStartSnap=null; // 棋譜とリプレイ起点
-  posCount={}; repLog=[]; passStreak=0;
+  posCount={}; repLog=[]; passStreak=0; checkCount={1:0,'-1':0};
   updateSenteLabel();
 }
 // 棋譜・リプレイ・自動モード状態
@@ -2591,6 +2621,8 @@ const RULES={
   promoOnCapture:false, // 敵駒を取ったら成れる（3つとも外すと成り自体が無くなる）
   drawNoMove:true,   // どこにも動けない・打てなくなったら持将棋（引き分け）。初期ON
   drawBothEnter:false,// 双方の王が敵陣に入ったら持将棋（引き分け）。初期OFF
+  jishogiMode:'points', // 持将棋の決め方：'points'=点数計算 / 'draw'=無条件で引き分け
+  checkPoints:false,  // 王手をかけたら点数を足す（4人チェス式）
   captureAll:false,  // 相手の駒を全て取り切るまで戦う（王の有無に関係なく勝敗判定）。囲碁/オセロ/はさみ向け
   banSennichite:true,  // 千日手回避：同一局面が4回目になる手を禁じる（＝千日手が成立しない）
   flyingGeneral:false, // 王不見王：帥と将を同じ筋で相対させる手は指せない（シャンチー）
@@ -2706,7 +2738,7 @@ function loadState(text){
   youAreSente = d.youAreSente!==undefined? !!d.youAreSente : true;
   turn = d.turn===-1? -1 : 1;
   gameOver = false;             // 続きから指せるように必ず再開可能にする
-  history=[]; redoStack.length=0; posCount={}; repLog=[]; passStreak=0;
+  history=[]; redoStack.length=0; posCount={}; repLog=[]; passStreak=0; checkCount={1:0,'-1':0};
   kifu = Array.isArray(d.kifu)? d.kifu.map(k=>({...k})) : [];
   // 棋譜つきなら起点も復元してリプレイできるようにする
   if(d.start && Array.isArray(d.start.board)){
@@ -3824,7 +3856,10 @@ function renderCap(id,arr,p){
       minus.onclick=(e)=>{ e.stopPropagation(); const i=arr.indexOf(t); if(i>=0)arr.splice(i,1); render(); setStatus('持ち駒を1枚減らしました'); };
       d.appendChild(minus);
     } else {
-      d.onclick=()=>{ if(gameOver||replaying||isAuto(p)||turn!==p)return;
+      // 対局中：自分の手番なら打つ駒として選ぶ。どちらの持ち駒でも図鑑用には必ず覚える。
+      d.title='タップで図鑑に記録（自分の手番なら打つ駒として選択）';
+      d.onclick=()=>{ setInspect(t);
+        if(gameOver||replaying||isAuto(p)||turn!==p){ render(); return; }
         sel=(sel&&sel.drop&&sel.t===t)?null:{drop:true,t,p}; render(); };
     }
     el.appendChild(d);
@@ -3974,6 +4009,12 @@ function moveEditPiece(fr,fc,tr,tc,fromPt,toPt){
 /* ===== クリック処理 ===== */
 function onCell(r,c,isPt){
   if(gameOver||pendingPromo)return;
+  // 図鑑用に、タップした駒を覚えておく（自分の駒でも相手の駒でも）
+  {
+    const L = isPt ? ptsBoard : board;
+    const q = L && L[r] && L[r][c];
+    if(q) setInspect(q.t);
+  }
   if(editing){
     if(multiSel.length>0){ toggleMultiSel(r,c); return; } // 複数選択中はトグル
     openEditMenu(r,c,isPt); return;
@@ -4489,7 +4530,11 @@ function nextTurn(){
     if(sidePieces(-1)===0){ endGame(1,'capture'); return; }
   }
   // 双方入玉で持将棋（ルールON時）
-  if(RULES.drawBothEnter && royalInEnemyCamp(1) && royalInEnemyCamp(-1)){ resolveJishogi('双方入玉'); return; }
+  if(bothRoyalsEntered()){
+    // 双方入玉。500手を超えたらそこで点数計算（24点・31点）で決める
+    if(kifu.length>=500){ resolveJishogi('双方入玉・500手'); return; }
+    resolveJishogi('双方入玉'); return;
+  }
   // ビッチャングン：相対を解消できないなら引き分け（チャンギ）
   if(bikjangNow() && !hasAnyLegalMove(turn)){ endDraw('ビッチャングン（漢・楚の相対を解消できません）'); return; }
   // 手番側が動けない・打てない → 持将棋 or 詰み
@@ -5505,6 +5550,8 @@ function applyMoveSilent(side,m,_legacySilent){
     if(!RULES.captureAll && !hasRoyalOnBoard(-side)){ history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side); return; }
   }
   captureSurroundedScan(side, touch);   // 呼吸点0の群を丸ごと取る（駒の種類は問わない）
+  // 王手をかけた回数を数える（「王手で加点」ルール用。人もCPUも同じ経路で数える）
+  if(!gameOver && checkInfo(-side).check) checkCount[side]=(checkCount[side]||0)+1;
   history[history.length-1].to=[m.tr,m.tc];
   if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo);
   // 勝敗の一般則：盤上から味方の royal が居なくなった側の負け。
@@ -5538,13 +5585,13 @@ function endGame(winner,reason,detail){
   const isPer = reason==='perpetual', isStuck = reason==='stuck';
   const winMsg = isTry?'▲ あなたの勝ち！トライ成功（ライオンが敵陣の最奥へ到達）'
                : isCap?'▲ あなたの勝ち！相手の駒を全て取り切りました'
-               : isPts?'▲ あなたの勝ち！持将棋の点数計算（24点法）で勝利'
+               : isPts?'▲ あなたの勝ち！点数計算で勝利'
                : isPer?'▲ あなたの勝ち！相手の連続王手の千日手は禁じ手（長将）'
                : isStuck?'▲ あなたの勝ち！相手は指せる手がありません（困斃）'
                : '▲ あなたの勝ち！相手の王を攻め取りました';
   const loseMsg= isTry?'△ あなたの負け…相手のライオンがトライ成功'
                : isCap?'△ あなたの負け…自分の駒を全て取られました'
-               : isPts?'△ あなたの負け…持将棋の点数計算（24点法）で敗北'
+               : isPts?'△ あなたの負け…点数計算で敗北'
                : isPer?'△ あなたの負け…連続王手の千日手は禁じ手（長将）'
                : isStuck?'△ あなたの負け…指せる手がありません（困斃）'
                : '△ あなたの負け…王を取られました';
@@ -5555,21 +5602,82 @@ function endGame(winner,reason,detail){
 }
 // ===== 持将棋の点数計算（24点法） =====
 // 玉将=0点、大駒（飛車・角行の系統）=5点、その他=1点。盤上＋持ち駒、成駒は成る前の駒で数える。
+/* 囲碁の領域点。空いている交点をつながりごとにまとめ、
+   その囲みに接している石が片方の色だけなら、その側の領域とする。空き交点1つにつき1点。
+   盤に碁石が1つも無いときは0。 */
+function goTerritory(side){
+  ensurePts();
+  let hasStone=false;
+  for(let r=0;r<=NR&&!hasStone;r++)for(let c=0;c<=NC;c++){
+    const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&isGo(q.t)){ hasStone=true; break; } }
+  if(!hasStone) return 0;
+  const seen=new Set(); let pts=0;
+  for(let r0=0;r0<=NR;r0++)for(let c0=0;c0<=NC;c0++){
+    if(seen.has(r0+','+c0)) continue;
+    if(ptsBoard[r0]&&ptsBoard[r0][c0]) continue;          // 空きだけを数える
+    const st=[[r0,c0]], area=[]; seen.add(r0+','+c0);
+    const owners=new Set();
+    while(st.length){
+      const [r,c]=st.pop(); area.push([r,c]);
+      for(const [dr,dc] of ORTHO_4){
+        const rr=r+dr, cc=c+dc;
+        if(rr<0||rr>NR||cc<0||cc>NC) continue;
+        const q=ptsBoard[rr]&&ptsBoard[rr][cc];
+        if(q){ owners.add(q.p); continue; }               // 接している駒の側を控える
+        const k=rr+','+cc;
+        if(!seen.has(k)){ seen.add(k); st.push([rr,cc]); }
+      }
+    }
+    if(owners.size===1 && owners.has(side)) pts+=area.length;   // 片方だけに囲まれていれば領域
+  }
+  return pts;
+}
+/* 盤面の点数。盤上の駒価の合計＋囲碁の領域点。
+   王駒は盤上の集計から外す（将棋の点数計算と同じ考え方）。 */
+function calcPositionScore(side){
+  ensurePts();
+  let v=0;
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const q=board[r][c];
+    if(q&&q.p===side&&!isRoyal(q.t)) v+=pieceValue(q.o||q.t, false); }
+  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=ptsBoard[r]&&ptsBoard[r][c];
+    if(q&&q.p===side&&!isRoyal(q.t)) v+=pieceValue(q.o||q.t, true); }
+  return v + goTerritory(side);
+}
+/* 持将棋・終局時の点数。
+   盤上の駒価＋取った駒（持ち駒）の駒価＋囲碁の領域点。
+   取った駒には王も含める（王を取る＝チェックメイト分の点はここで入る）。
+   「王手で加点」がONなら、これまでに掛けた王手の回数も足す。 */
+let checkCount={1:0,'-1':0};
 function jishogiPoints(side){
-  const val=t=>{ const b0=demoteOf(t); if(isRoyal(b0)) return 0;
-    return (b0==='hR'||b0==='hB'||b0==='R'||b0==='B') ? 5 : 1; };
-  let pts=0;
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===side) pts+=val(pc.o||pc.t); }
-  (side===1?capYou:capEnemy).forEach(t=>pts+=val(t));
+  let pts=calcPositionScore(side);
+  (side===1?capYou:capEnemy).forEach(t=>pts+=pieceValue(t));
+  if(RULES.checkPoints) pts += (checkCount[side]||0);
   return pts;
 }
 // 持将棋成立時の判定：24点未満=負け／31点以上=勝ち／両者24〜30=引き分け（無勝負）
+/* 双方の王が敵陣に入っているか。24点・31点・500手のルールはこのときだけ使う。 */
+function bothRoyalsEntered(){
+  return !!(RULES.drawBothEnter && royalInEnemyCamp(1) && royalInEnemyCamp(-1));
+}
 function resolveJishogi(msg){
+  if(RULES.jishogiMode==='draw'){        // 点数を見ずに引き分けにする設定
+    gameOver=true; stopAutoLoop(); render(); updateReplayUI();
+    setStatus('持将棋（引き分け）'+(msg?'：'+msg:''),'think');
+    const rec=addRecord('d');
+    showResult('draw','引き分け', (msg||'持将棋')+'\n通算 '+rec.w+'勝'+rec.l+'敗'+rec.d+'分');
+    return;
+  }
   const pY=jishogiPoints(1), pE=jishogiPoints(-1);
   const detail=(msg?msg+'。':'')+'点数計算：あなた '+pY+'点・相手 '+pE+'点';
   let winner=0;
-  if(pY>=31 || pE<24) winner=1;
-  else if(pE>=31 || pY<24) winner=-1;
+  if(bothRoyalsEntered()){
+    // 双方入玉のときだけ 24点未満=負け／31点以上=勝ち／両者24〜30=引き分け
+    if(pY>=31 || pE<24) winner=1;
+    else if(pE>=31 || pY<24) winner=-1;
+  } else {
+    // それ以外は単純に点数の多い方の勝ち
+    if(pY>pE) winner=1; else if(pE>pY) winner=-1;
+  }
   if(winner===0){
     gameOver=true; stopAutoLoop(); render(); updateReplayUI();
     setStatus('持将棋（引き分け）：'+detail,'think');
@@ -5946,8 +6054,8 @@ function applyFx(d){
         fl.style.cssText='left:'+(x-w*0.3)+'px;top:'+(y-h*0.3)+'px;width:'+(w*1.6)+'px;height:'+(h*1.6)+'px;';
         fx.appendChild(fl); setTimeout(()=>fl.remove(),340);
         shockAt(cr.left+cr.width/2, cr.top+cr.height/2, Math.max(w,h)*2.6);
-        const dmg=VALUE[cap.code]||100;
-        dmgAt(cr.left+cr.width/2, cr.top+cr.height*0.4, isRoyal(cap.code)?'∞':dmg, d.crit);
+        const dmg=pieceValue(cap.code);   // 倒された駒の駒価をそのまま出す
+        dmgAt(cr.left+cr.width/2, cr.top+cr.height*0.4, dmg, d.crit);
       },90+ci*70);
       // 3) 倒れる駒（斬られてから倒れる）
       setTimeout(()=>{
@@ -6462,7 +6570,7 @@ function restoreSetup(){
     if(gameStartSnap.diag) cellDiag=gameStartSnap.diag.map(row=>row.slice());
     // PZ・youAreSente は対局開始から不変なので現状維持
   }
-  sel=null; history=[]; gameOver=false; pendingPromo=null; kifu=[]; gameStartSnap=null; posCount={}; repLog=[]; passStreak=0;
+  sel=null; history=[]; gameOver=false; pendingPromo=null; kifu=[]; gameStartSnap=null; posCount={}; repLog=[]; passStreak=0; checkCount={1:0,'-1':0};
   turn = youAreSente ? 1 : -1;
   if(typeof redoStack!=='undefined') redoStack.length=0;
   updateSenteLabel(); syncSizeUI();
@@ -6478,7 +6586,7 @@ function newGameWithBoard(builder){
   syncLayers();             // 囲碁・シャンチー・チャンギの駒を交点レイヤーへ振り分ける
   sel=null; history=[]; gameOver=false; pendingPromo=null;
   turn = youAreSente ? 1 : -1;
-  kifu=[]; gameStartSnap=null; posCount={}; repLog=[]; passStreak=0;
+  kifu=[]; gameStartSnap=null; posCount={}; repLog=[]; passStreak=0; checkCount={1:0,'-1':0};
   if(typeof redoStack!=='undefined') redoStack.length=0;
   rememberSetup();          // このプリセット/配置を「初期配置」として記憶
   updateSenteLabel(); syncSizeUI();
@@ -6704,16 +6812,21 @@ function buildPickGrid(){
     const lbl=document.getElementById(lblId); if(lbl&&lblText) lbl.textContent=lblText;
   };
 
-  if(mode==='hist_pick'||mode==='hist_view'){
+  const mixEl=document.getElementById('pickAllMix');
+  const mixAll = !!(mixEl && mixEl.checked);
+  if(mixAll || mode==='hist_pick'||mode==='hist_view'){
     const all=basic.concat(daikyoku).concat(chess).concat(xiangqi).concat(janggi).concat(hasami).concat(othello).concat(goList).concat(maka).concat(doubutsu).concat(otherList);
     ['pickDaikyoku','pickChess','pickXiangqi','pickJanggi','pickHasami','pickOthello','pickGo','pickMaka','pickDoubutsu','pickOther'].forEach(id=>{const g=document.getElementById(id);if(g)g.innerHTML='';});
     ['lblDaikyoku','lblChess','lblXiangqi','lblJanggi','lblHasami','lblOthello','lblGo','lblMaka','lblDoubutsu','lblOther'].forEach(id=>setDisp(id,false));
     const gb=document.getElementById('pickBasic'); gb.innerHTML='';
-    const sorted=sortList(all, mode).filter(pieceMatches);
-    document.getElementById('lblBasic').textContent=(mode==='hist_pick'?'選択した順':'見た順');
+    const uniq=[...new Set(all)];
+    const sorted=sortList(uniq, mode).filter(pieceMatches).filter(layerMatches);
+    document.getElementById('lblBasic').textContent =
+      (mode==='hist_pick')?'選択した順' : (mode==='hist_view')?'見た順' : ('すべての駒（'+sorted.length+'種）');
     if(sorted.length===0){
       const p=document.createElement('div'); p.style.cssText='color:#b3a8d8;font-size:.8rem;padding:6px;';
-      p.textContent = pieceQuery? '一致する駒がありません' : (mode==='hist_pick'?'まだ駒を選んでいません':'まだ駒を見ていません');
+      p.textContent = pieceQuery? '一致する駒がありません'
+        : (mode==='hist_pick')?'まだ駒を選んでいません' : (mode==='hist_view')?'まだ駒を見ていません' : '置ける駒がありません';
       gb.appendChild(p);
     } else sorted.forEach(t=>mkPickBtn(t,gb));
   } else {
@@ -6738,7 +6851,10 @@ function buildPickGrid(){
   if(clr) clr.onclick=()=>{ pieceQuery=''; if(inp)inp.value=''; buildPickGrid(); };
 })();
 // ソート選択で再構築（スクロールは先頭へ）
-(function(){ const s=document.getElementById('sortSel'); if(s) s.onchange=()=>{ buildPickGrid(); const sc=document.getElementById('pickScroll'); if(sc)sc.scrollTop=0; }; })();
+document.getElementById('zukanBtn').onclick=()=>openZukan();
+(function(){ const s=document.getElementById('sortSel'); if(s) s.onchange=()=>{ buildPickGrid(); const sc=document.getElementById('pickScroll'); if(sc)sc.scrollTop=0; };
+  const mx=document.getElementById('pickAllMix');
+  if(mx) mx.onchange=()=>{ buildPickGrid(); const sc=document.getElementById('pickScroll'); if(sc)sc.scrollTop=0; }; })();
 
 // 編集メニュー（説明 / 変更 / 複数選択追加）
 let menuCell=null;
@@ -6850,6 +6966,20 @@ function clearMultiSel(){ multiSel=[]; updateMultiBar(); render(); }
 
 // 駒選択リストを開く（editCell or multiSel 対象）
 let infoOnly=false, previewType=null;
+/* 対局中に「今どの駒を見ているか」。自分の駒でも相手の駒でも、盤でも持ち駒でも覚える。
+   盤の右下の図鑑ボタンから、その駒の説明をすぐ開ける。 */
+let lastInspect=null;
+function setInspect(t){
+  if(!t) return;
+  lastInspect=t;
+  const b=document.getElementById('zukanBtn');
+  if(b){ b.classList.add('has-piece'); b.textContent='図鑑：'+(isGo(t)?(t==='GOB'?'黒石':'白石'):dispName(t)); }
+}
+function openZukan(){
+  infoOnly=true; editCell=null; capPickSide=0; multiSel=[];
+  openPickList();
+  if(lastInspect) showPreview(lastInspect);
+}
 let capPickSide=0; // 持ち駒追加モード（0=オフ, 1/-1=対象陣営）
 function openCapPick(p){
   capPickSide=p; editCell=null; multiSel=[]; infoOnly=false;
@@ -6891,7 +7021,10 @@ function showPreview(t){
   const rankNames={1:'第1位（玉将・太子格）',2:'第2位（大将）',3:'第3位（副将）',4:'第4位（角将・飛将級）',5:'一般',Infinity:'格なし（範囲攻撃で取れない）'};
   const rk=pieceRank(t);
   const pm=document.getElementById('pvMove');
-  pm.innerHTML='強さ '+piecePower(t)+'｜格 <span class="rank-tag" style="background:'+rankColor(t)+'">'+(rankNames[rk]||'一般')+'</span>｜'+moveSummary(t).replace(/</g,'&lt;');
+  const pv=pieceValueParts(t);
+  const pvTxt = pv ? ('｜駒価 <b>'+pv.V+'</b>' + (pv.royal? '（王駒）'
+      : '（1+I'+pv.I+'+S'+pv.S+'+'+pv.Q+'×(2×'+pv.R+'+'+pv.C+')+2×'+pv.N+'+L'+pv.L+'）')) : '';
+  pm.innerHTML='強さ '+piecePower(t)+'｜格 <span class="rank-tag" style="background:'+rankColor(t)+'">'+(rankNames[rk]||'一般')+'</span>'+pvTxt+'｜'+moveSummary(t).replace(/</g,'&lt;');
   let extra = (typeof DESC!=='undefined' && DESC[t]) ? DESC[t] : '';
   const fl = (TP[t] && TP[t].fl) || [];
   const notes=[];
@@ -7198,6 +7331,8 @@ function openRuleModal(){
   document.getElementById('rCaptureAll').checked=RULES.captureAll;
   document.getElementById('rDrawNoMove').checked=RULES.drawNoMove;
   document.getElementById('rDrawBothEnter').checked=RULES.drawBothEnter;
+  document.getElementById('rJishogiMode').value=RULES.jishogiMode||'points';
+  document.getElementById('rCheckPoints').checked=!!RULES.checkPoints;
   document.getElementById('ruleModal').classList.add('show');
 }
 (function(){
@@ -7252,6 +7387,8 @@ document.getElementById('rPromoCap').onchange=e=>{ RULES.promoOnCapture=e.target
 document.getElementById('rCaptureAll').onchange=e=>{ RULES.captureAll=e.target.checked; };
 document.getElementById('rDrawNoMove').onchange=e=>{ RULES.drawNoMove=e.target.checked; };
 document.getElementById('rDrawBothEnter').onchange=e=>{ RULES.drawBothEnter=e.target.checked; };
+document.getElementById('rJishogiMode').onchange=e=>{ RULES.jishogiMode=e.target.value; };
+document.getElementById('rCheckPoints').onchange=e=>{ RULES.checkPoints=e.target.checked; };
 // 置く側トグル
 (function(){ const b=document.getElementById('sideToggle'); if(b) b.onclick=()=>{
   editSide=-editSide;
