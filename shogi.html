@@ -4691,6 +4691,7 @@ function searchTick(){
   if((searchNodes & 255)===0 && ((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())>searchDeadline) throw SEARCH_ABORT;
 }
 let lastSearchNodes=0;   // 直前の1手で読んだ節点数（計測用。探索の中身には影響しない）
+let lastSearchDepth=0;   // 直前の1手で読み切れた深さ（計測用。端末が遅いと自然に浅くなる）
 function search(b,cy,ce,depth,side,alpha,beta,ply,prevKey){
   if(depth===0) return evaluate(b,cy,ce);
   searchTick();
@@ -4876,6 +4877,32 @@ function eventDelta(side, m){
   }
   return sc;
 }
+/* ===== 位置価値の差分 =====
+   Top24 から落ちる最善手を数えたところ、取りでも成りでもない「静かな手」と
+   「持ち駒を打つ手」ばかりだった。EventDelta は何も起きない手を全部0点にするので、
+   原理的にこれらを拾えない（旧採点とRecallが1%も変わらなかった）。
+
+   そこで評価関数とまったく同じ式で「その手で自分の駒の位置価値がどれだけ増えるか」を
+   O(1) で求めて足す。探索が使っている評価そのものなので、静かな手の優劣を安く測れる。
+   使うのは並べ替えだけで、評価値にも合法手にも影響しない。 */
+function posTermOf(t, side, r, c, kr, kc, haveK){
+  let v=(VALUE[t]||0);
+  if(t==='K') return v;                       // evaluate も 'K' だけ位置ボーナスを付けない
+  v += (side===-1? r : (NR-1-r))*7;           // 前進ボーナス
+  if(haveK){ const d=Math.abs(r-kr)+Math.abs(c-kc); if(d<16) v += (16-d)*4; }  // 敵玉への接近
+  return v;
+}
+function positionalDelta(side, m, kr, kc, haveK){
+  if(m.pass) return 0;
+  if(m.drop) return posTermOf(m.drop, side, m.tr, m.tc, kr, kc, haveK) - (VALUE[m.drop]||0)*1.05;
+  const LB = m.pt? ptsBoard : board;
+  const pc = LB[m.fr] && LB[m.fr][m.fc];
+  if(!pc) return 0;
+  const nt = m.promo ? (promoteCode(pc.t)||pc.t) : pc.t;
+  return posTermOf(nt, side, m.tr, m.tc, kr, kc, haveK)
+       - posTermOf(pc.t, side, m.fr, m.fc, kr, kc, haveK);
+}
+
 /* 候補選別の中身を外から見るための記録。既定では何もしない（速度に影響させない）。 */
 const CPU_DIAG={enabled:false, last:null};
 
@@ -4889,8 +4916,8 @@ const CPU_DIAG={enabled:false, last:null};
    ・最近ずっと何も起きていないとき（取り・成り・打ち・持ち駒の増減が無い）だけ働かせる。
    ・減点には上限がある。だから「往復しか安全な手がない」ときは往復を選べるままにする。
      （最後の royal を守る手や、他が全部大損の局面では上限を超える差がつくため） */
-const REP_PEN_STEP=24;    // 往復1回ごとの減点
-const REP_PEN_MAX =90;    // 減点の上限（歩1枚=60より少し上。これ以上の差があれば往復を許す）
+let REP_PEN_STEP=24;    // 往復1回ごとの減点
+let REP_PEN_MAX =90;    // 減点の上限（歩1枚=60より少し上。これ以上の差があれば往復を許す）
 const REP_QUIET_MIN=4;    // 何手「何も起きていない」ら働かせるか
 // 直近で何も起きていない手数（取り・成り・打ち・持ち駒の増減のどれかで途切れる）
 function noProgressCount(){
@@ -4984,52 +5011,48 @@ function cpuPickMove(side, depth){
      読む候補の顔ぶれが変わり、枝刈りの効き方まで変わってしまう（実測で2.7倍遅くなった）。
      EventDelta で並べ替えるのは、それが実際に効く「盤は普通だが手数が多い」場合だけにする。 */
   const useEventDelta = BMAX<16;
+  // 敵royalの位置は1手につき1回だけ探す（位置価値の差分に使う）
+  let _kr=0,_kc=0,_haveK=false;
+  if(useEventDelta){
+    const k=findKing(board,-side);
+    if(k){ _kr=k[0]; _kc=k[1]; _haveK=true; }
+  }
   const ordScore=(m)=>{
     if(!useEventDelta) return cheapScore(m);
-    let sc=eventDelta(side,m);
+    let sc=eventDelta(side,m) + positionalDelta(side,m,_kr,_kc,_haveK);
     if(m.drop) sc -= 1;   // 同点なら盤上の手を先に見る（打ちは手数が多く時間を食うため）
     return sc;
   };
-  // 超高速(depth<=1)では、トップ候補だけ評価して即答する。
-  // 大盤の絞り込みは以前ほど厳しくしなくてよい（探索自体が桁違いに速くなったため）。
-  /* 候補の上限。探索が桁違いに速くなったぶんを、ここを広げる方に使う。
-     ただし広げてよいのは「盤は普通の大きさなのに手数が多い」場合だけ。
-     大局将棋のように盤そのものが巨大な場合は、1手読むだけでも高いので従来どおり絞る。 */
-  const CAP = (DEPTH<=1) ? (BMAX>=16?18:96) : (BMAX>=16? (deep?64:18) : 0);
-  /* 二段構えにする。EventDelta は行き先のマス以外も見るぶん安くはないので、
-     4400手ある大局将棋で全合法手に掛けると採点だけで時間を使ってしまう。
-     まず「行き先の駒と成り」だけの安い採点で粗く絞り、残った手だけ丁寧に採点し直す。
-     絞る幅は最終的に使う候補数の4倍取ってあるので、丁寧な採点の出番は失われない。
-     採点は Map ではなく配列に持つ。キーがオブジェクトの Map は比較のたびに
-     ハッシュを引くので、数千手を並べ替えるとそれだけで無視できない時間になる。 */
+  /* 候補は二段構えにする。**本探索する数は増やさない**のが要点。
+
+       全合法手
+         → 安い採点（行き先の駒と成りだけ）で pre-ranking プール POOL 手へ
+         → プール内を Cheap EventDelta で採点し直す
+         → 上位 SEARCHED 手だけを本探索する
+
+     プールを広げても本探索の節点数は増えない。広げるのは「本当の有力手が
+     採点の網に入る確率」を上げるためだけ。 */
+  const SEARCHED = (DEPTH<=1) ? (BMAX>=16?18:24) : (BMAX>=16? (deep?64:18) : 0);
+  const POOL     = SEARCHED ? SEARCHED*4 : 0;
   let pool=list;
-  if(CAP && list.length>CAP*4){
+  if(POOL && list.length>POOL){
+    // 採点は Map ではなく配列に持つ。キーがオブジェクトの Map は比較のたびに
+    // ハッシュを引くので、数千手を並べ替えるとそれだけで無視できない時間になる。
     const arr=list.map(m=>({m,s:cheapScore(m)}));
     arr.sort((a,b2)=>b2.s-a.s);
-    pool=new Array(CAP*4);
-    for(let i=0;i<CAP*4;i++) pool[i]=arr[i].m;
+    pool=new Array(POOL);
+    for(let i=0;i<POOL;i++) pool[i]=arr[i].m;
   }
   const scored=pool.map(m=>({m,s:ordScore(m)}));
   scored.sort((a,b2)=>b2.s-a.s);
   pool=scored.map(x=>x.m);
   const ordOf=(m)=>{ const e=scored.find(x=>x.m===m); return e? e.s : ordScore(m); };
-  /* 足切りは「何も起きない手」にだけ掛ける。
-     取り・成り・裏返し・囲み取りなど何かが起きる手（EventDelta>0）を切ってしまうと、
-     その後どれだけ深く読んでも取り返しがつかない。list は既に降順なので前から数えるだけ。
-     ただし際限なく増やすと超高速が超高速でなくなるので、上限も置く。 */
-  let cand=pool;
-  if(CAP){
-    // 大盤では取りの手だけで何百手にもなるので、ここは広げない（1手が高すぎる）
-    const room = (BMAX>=16) ? CAP : (()=>{
-      let nHot=0; while(nHot<scored.length && scored[nHot].s>0) nHot++;
-      return Math.max(CAP, Math.min(nHot, CAP*2));
-    })();
-    cand = pool.slice(0, Math.min(pool.length, room));
-  }
+  const cand = SEARCHED ? pool.slice(0, Math.min(pool.length, SEARCHED)) : pool;
   if(CPU_DIAG.enabled){
     const desc=(m)=>m.pass?'パス':(m.drop? ('打'+m.drop+'→'+(m.tr+1)+','+(m.tc+1)+(m.pt?'◇':''))
       : ((m.pt?'◇':'')+(m.fr+1)+','+(m.fc+1)+'→'+(m.toPt?'◇':'')+(m.tr+1)+','+(m.tc+1)+(m.promo?'成':'')));
-    CPU_DIAG.last={ 手番:side, 全合法手数:list.length, 候補数:cand.length, 上限:CAP||null, 深さ:DEPTH,
+    CPU_DIAG.last={ 手番:side, 全合法手数:list.length, 本探索した候補数:cand.length,
+      本探索の上限:SEARCHED||null, プール:pool.length, 深さ:DEPTH,
       候補:cand.map(m=>({手:desc(m), moveOrderScore:ordOf(m), eventDelta:eventDelta(side,m), m})),
       切り捨て:list.slice(cand.length).map(m=>({手:desc(m), moveOrderScore:ordOf(m)})),
       best:null };
@@ -5087,16 +5110,17 @@ function cpuPickMove(side, depth){
     // 深さ1から始めるのは、広い盤で深さ2が時間内に1手も読み終わらなくても
     // 「読み切った結論」を必ず1つ持っておくため。
     const deadline = now() + budget;
-    searchDeadline = deadline; searchNodes = 0;   // 深い枝の途中でも時間で打ち切れるようにする
+    searchDeadline = deadline; searchNodes = 0; lastSearchDepth = 0;
     try{
       let best=null;
       for(let d=1; d<=DEPTH; d++){
         // 前の深さの最善手を先頭に持ってくると枝刈りがよく効き、同じ時間でより深く読める
         if(best){ const i=cand.indexOf(best); if(i>0){ cand.splice(i,1); cand.unshift(best); } }
         const r=pickAt(d, deadline);
-        if(r.mate) return r.m;
+        if(r.mate){ lastSearchDepth=d; return r.m; }
         if(r.m) best=r.m;               // 途中までの結果も使う（先頭は前の深さの最善手）
         if(r.partial || now()>=deadline) break;
+        lastSearchDepth=d;              // ここまで来た＝深さdを読み切った
       }
       const pick = best||cand[0]||list[0];
       if(CPU_DIAG.enabled && CPU_DIAG.last) CPU_DIAG.last.best=pick;
@@ -5104,6 +5128,7 @@ function cpuPickMove(side, depth){
     } finally { searchDeadline = 0; lastSearchNodes = searchNodes; }
   }
   searchDeadline = 0;   // 深さ指定のときは時間で打ち切らない
+  lastSearchDepth = DEPTH;
   const r=pickAt(DEPTH);
   lastSearchNodes = searchNodes;
   const pick = r.m||cand[0]||list[0];
