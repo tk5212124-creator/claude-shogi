@@ -978,9 +978,13 @@
       </select>
     </div>
     <div class="bs-note">※ 交点の駒とマスの駒は別の点にいるので、互いに取り合えません（斜めに動くときの障壁にはなります）。碁石が囲んだ駒は交点・マスに関係なく取れ、九宮の交差マス（×）だけは両方が置ける共有点として取り合えます。斜めに飛び越えて動く駒は交点の駒も取れます。</div>
-    <label class="bs-row bs-check" id="bsPalaceLabel"><input type="checkbox" id="bsPalace">
-      <span>九宮をつくる（シャンチー用。帥・将／仕・士は宮殿から出られない。列数が奇数なら3×3、偶数なら2×2）</span></label>
-    <div class="bs-note bs-pending" id="bsPalaceNote" style="display:none;">※ 九宮・敵陣の変更は「適用」または「作成」を押すと反映されます</div>
+    <div class="bs-row" id="bsPalaceRow">
+      <button type="button" id="bsMakePalace">九宮をつくる</button>
+      <button type="button" id="bsClearPalace">宮マスを消す</button>
+      <span class="bs-note" id="bsPalaceSize"></span>
+    </div>
+    <div class="bs-note" id="bsPalaceHelp">※ 九宮は「宮マス（斜め線）」として盤に描かれます。押すとその場で反映され、盤の大きさを変えても消えません。1マスずつ変えるには編集メニューの「宮マス変更」から。</div>
+    <div class="bs-note bs-pending" id="bsPalaceNote" style="display:none;">※ 敵陣の変更は「適用」または「作成」を押すと反映されます</div>
     <div class="bs-note">「適用」「作成」で盤を作り直します（駒は編集ツールで配置）。初期配置は出典に基づく正確な配置です。</div>
    </div>
   </div>
@@ -1184,7 +1188,7 @@
           <li><b>行 × 列</b>…盤の大きさ（3〜40）。「作成」で変更（駒は消えません）。</li>
           <li><b>敵陣</b>…何段目までを敵陣（成りゾーン）にするか。</li>
           <li><b>駒の置き方</b>…マスの中／線の交点。囲碁・シャンチー・チャンギの駒は交点に置きます。</li>
-          <li><b>九宮をつくる</b>…シャンチー用の宮を作ります。</li>
+          <li><b>九宮をつくる</b>…シャンチー用の宮を、標準の位置に「宮マス」として描きます。押すとその場で反映され、盤の大きさを変えても消えません。1マスずつ変えたいときは盤を長押し→「宮マス変更」から。</li>
         </ul>
 
         <h3>駒を並べ替える（編集ツール）</h3>
@@ -2246,10 +2250,11 @@ function setDiag(r,c,v){
   cellDiag[r][c]=v||null;
 }
 function clearDiag(){ initDiag(); }
-// 九宮（3×3 or 2×2）の斜め線を属性として書き込む。既存の属性は一度消す。
-function applyPalaceDiag(){
-  initDiag();
-  if(!RULES.palace) return;
+/* 標準の九宮の位置に「宮マス（斜め線）」を描く。
+   九宮は宮マスだけで表現する。盤の位置から宮を判定する仕組みは持たない
+   （二重管理になり、手で描いた宮マスと食い違うため）。
+   既にある宮マスは消さず、＼と／が重なるマスは×（交差）にする。 */
+function stampStandardPalace(){
   const sz=Math.min(palaceSize(), NR, NC);
   const c0=Math.floor((NC-sz)/2);
   [NR-sz, 0].forEach(r0=>{
@@ -2421,6 +2426,7 @@ function setupXiangqi(){
   put(2,1,'XCb',-1); put(2,7,'XCb',-1);  // 砲
   put(7,1,'XC',1);   put(7,7,'XC',1);    // 炮
   for(const c of [0,2,4,6,8]){ put(3,c,'XPb',-1); put(6,c,'XP',1); } // 卒・兵
+  stampStandardPalace();   // 九宮は宮マスとして盤に描く
 }
 
 // チャンギ（韓国将棋 9×10）。楚＝相手（上）、漢＝あなた（下）。標準初期配置（象・馬は内側配置）。
@@ -2442,6 +2448,7 @@ function setupJanggi(){
   put(2,1,'JCb',-1);  put(2,7,'JCb',-1);    // 包
   put(7,1,'JC',1);    put(7,7,'JC',1);
   for(const c of [0,2,4,6,8]){ put(3,c,'JPb',-1); put(6,c,'JP',1); } // 卒・兵
+  stampStandardPalace();   // 九宮は宮マスとして盤に描く
 }
 
 // 盤の大きさだけ変え、駒（マス・交点の両方）と斜め線・持ち駒は残す。
@@ -2584,7 +2591,6 @@ const RULES={
   flyingGeneral:false, // 王不見王：帥と将を同じ筋で相対させる手は指せない（シャンチー）
   pointMode:'auto',    // 駒の置き方：'auto'（囲碁・シャンチー・チャンギ駒があれば交点）|'point'|'cell'
   allowPass:false,     // パス（着手放棄）を認める。チャンギは既定でON
-  palace:false,        // 九宮：帥/將・仕/士は宮殿から出られない（シャンチー）
   palaceEscape:false,  // 九宮があっても、帥/將・仕/士が宮の外へ出られるようにする
   bikjang:false,       // ビッチャングン（チャンギ）：漢・楚が相対したまま解消できなければ引き分け
   janggiSetup:'std',   // チャンギの馬・象の並び：'std'|'in'|'left'|'right'
@@ -3089,12 +3095,6 @@ function moves(b,r,c){
 // 列数が奇数なら3×3、偶数なら2×2。各陣の最終段側に作る。
 function palaceSize(){ return (NC%2===1)?3:2; }
 function isPalaceBound(t){ return t==='XK'||t==='XKb'||t==='XA'||t==='XAb'||isJPalaceBound(t); }
-function inPalace(r,c,side){
-  const s=Math.min(palaceSize(), NR, NC);
-  const c0=Math.floor((NC-s)/2), c1=c0+s-1;
-  const r0 = side===1 ? NR-s : 0, r1 = side===1 ? NR-1 : s-1;
-  return r>=r0 && r<=r1 && c>=c0 && c<=c1;
-}
 // 宮のマス＝「斜め線・交差が描かれたマス」または「交差マスの縦横1マス隣」。
 // 編集で斜め線を足せば宮も広がる（描かれた線がそのまま宮の形になる）。
 function isPalaceCell(r,c){
@@ -6212,13 +6212,9 @@ function syncSizeUI(){
   // 敵陣の深さ（成りゾーン）も盤の設定として同期する
   syncPZOptions(Math.min(PZ, NR));
   const pt=document.getElementById('ptSel'); if(pt) pt.value=RULES.pointMode;
-  // 九宮は盤の形に関わる設定なので、盤の設定側に置いてここで同期する
-  const pl=document.getElementById('bsPalace');
-  if(pl){ pl.checked=RULES.palace;
-    const s=(NC%2===1)?'3×3':'2×2';
-    const lb=pl.parentElement&&pl.parentElement.querySelector('span');
-    if(lb) lb.textContent='九宮をつくる（シャンチー用。帥・将／仕・士は宮殿から出られない。現在の盤では '+s+'）';
-  }
+  // 九宮は宮マスとして描くだけなので、ここでは「今の盤ならどの大きさになるか」を出す
+  const psz=document.getElementById('bsPalaceSize');
+  if(psz) psz.textContent='（今の盤では '+((NC%2===1)?'3×3':'2×2')+'）';
   if(typeof updatePalacePending==='function') updatePalacePending();
 }
 // 現在の盤・持ち駒・サイズを「初期配置」として記憶（初期配置に戻す で使用）
@@ -6268,22 +6264,16 @@ function newGameWithBoard(builder){
 }
 // プリセットを選ぶと、そのゲームの推奨値に九宮チェックを切り替える（適用前なので変更可能）
 document.getElementById('presetSel').onchange=()=>{
-  const key=document.getElementById('presetSel').value;
-  const cb=document.getElementById('bsPalace');
-  if(cb){ cb.checked=(key==='xiangqi'||key==='janggi'); updatePalacePending(); }
   const pz=document.getElementById('pzSel'); if(pz) pz.dataset.touched='';   // プリセットの既定を使う
 };
 document.getElementById('applyPresetBtn').onclick=()=>{
   const key=document.getElementById('presetSel').value;
-  const wantPalace=document.getElementById('bsPalace').checked; // 押した時点の指定を先に読む
   const pzEl=document.getElementById('pzSel');
   const pzBefore=pzEl?+pzEl.value:null;
   const pzChanged=pzEl && document.getElementById('pzSel').dataset.touched==='1';
   newGameWithBoard(()=>applyPreset(key));
   if(pzChanged && pzBefore!==null) PZ=Math.min(pzBefore, NR);   // 手動指定があれば優先
   if(pzEl) pzEl.dataset.touched='';
-  RULES.palace = wantPalace;   // 常にチェックどおり（プリセットでも上書きしない）
-  applyPalaceDiag();           // 九宮の斜め線をマス属性として書き込む
   // 囲碁・オセロ・はさみ将棋は王を置かない代わりに「取り切るまで戦う」を自動ON
   if(key==='go'||key==='othello'||key==='hasami') RULES.captureAll=true;
   // はさみ将棋は取った駒を打てない（打ち込みの無いゲーム）
@@ -6327,13 +6317,12 @@ document.getElementById('applyPresetBtn').onclick=()=>{
   const rebuild=()=>{
     const rows=clampN(rR.value), cols=clampN(cR.value);
     rR.value=rows; cR.value=cols;
-    const wantPalace=document.getElementById('bsPalace').checked; // 押した時点の指定
     const pzEl=document.getElementById('pzSel'); const wantPZ=pzEl?+pzEl.value:null;
     const keepY=[...capYou], keepE=[...capEnemy];         // 持ち駒も残す
     newGameWithBoard(()=>{ resizeKeepPieces(rows, cols); capYou=keepY; capEnemy=keepE; });
     if(wantPZ!==null) PZ=Math.min(wantPZ, NR);
     if(pzEl) pzEl.dataset.touched='';
-    RULES.palace=wantPalace; applyPalaceDiag(); syncSizeUI(); render();
+    syncSizeUI(); render();
     setStatus('盤を '+NR+' 行 × '+NC+' 列 にしました（駒はそのまま。空にするなら編集ツールの「盤を空にする」）');
   };
   if(btn) btn.onclick=rebuild;
@@ -6805,7 +6794,7 @@ function moveBoardSetupRows(toBar){
   const slot=document.getElementById('etbBoardSlot');
   const home=document.querySelector('#accBoard .acc-body.board-setup');
   if(!slot||!home) return;
-  const ids=['bsRowPreset','bsRowSize','bsRowPZ','bsRowPt','bsPalaceLabel'];
+  const ids=['bsRowPreset','bsRowSize','bsRowPZ','bsRowPt','bsPalaceRow'];
   ids.forEach(id=>{
     const el=document.getElementById(id); if(!el) return;
     const target = toBar? slot : home;
@@ -7006,7 +6995,15 @@ document.getElementById('rAllowPass').onchange=e=>{ RULES.allowPass=e.target.che
 document.getElementById('rBikjang').onchange=e=>{ RULES.bikjang=e.target.checked; render(); };
 document.getElementById('rJanggiSetup').onchange=e=>{ RULES.janggiSetup=e.target.value; };
 // 九宮は盤の設定なので、チェックしただけでは反映しない（「適用」または「作成」で確定）
-document.getElementById('bsPalace').onchange=()=>updatePalacePending();
+// 九宮は押した時点で宮マスを描くだけ。設定として持ち続けない（盤に描かれた線がすべて）
+document.getElementById('bsMakePalace').onclick=()=>{
+  stampStandardPalace(); render();
+  setStatus('標準の位置に九宮（宮マス）を描きました（'+((NC%2===1)?'3×3':'2×2')+'）','win');
+};
+document.getElementById('bsClearPalace').onclick=()=>{
+  clearDiag(); render();
+  setStatus('宮マスを全部消しました');
+};
 document.getElementById('pzSel').onchange=e=>{ e.target.dataset.touched='1'; updatePalacePending(); };
 // 駒の置き方（交点／マス）は見た目だけなので、選んだらすぐ反映する
 document.getElementById('ptSel').onchange=e=>{
@@ -7015,11 +7012,11 @@ document.getElementById('ptSel').onchange=e=>{
                       :'すべての駒をマスの中に置きます');
 };
 function updatePalacePending(){
-  const cb=document.getElementById('bsPalace'), note=document.getElementById('bsPalaceNote');
-  if(!cb||!note) return;
+  const note=document.getElementById('bsPalaceNote');
+  if(!note) return;
   const pz=document.getElementById('pzSel');
   const pzPending = pz && pz.dataset.touched==='1' && +pz.value!==PZ;
-  note.style.display = ((cb.checked!==RULES.palace) || pzPending) ? '' : 'none';
+  note.style.display = pzPending ? '' : 'none';
 }
 document.getElementById('rRankless').onchange=e=>{ RULES.ranklessAsGeneral=e.target.checked; POWER_CACHE_clear(); render(); };
 document.getElementById('rRandSpecial').onchange=e=>{ RULES.randomIncludeSpecial=e.target.checked; };
