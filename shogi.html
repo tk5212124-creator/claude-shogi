@@ -1288,6 +1288,7 @@
           <option value="draw">点数を見ずに引き分けにする</option>
         </select>
       </div>
+      <label class="rule-row"><input type="checkbox" id="rCapturedPoints"> 取った駒の駒価を点数に足す</label>
       <label class="rule-row"><input type="checkbox" id="rCheckPoints"> 王手をかけたら点数を足す（4人チェス式）</label>
       <p class="rule-note" style="margin:6px 0 2px;">点数は盤上の駒価＋取った駒の駒価＋囲碁の領域点。王を取った分もここに入ります。
       24点・31点・500手のルールは「双方の王が敵陣に入ったら持将棋」がONで、実際にその形になったときだけ使います。
@@ -2623,6 +2624,7 @@ const RULES={
   drawBothEnter:false,// 双方の王が敵陣に入ったら持将棋（引き分け）。初期OFF
   jishogiMode:'points', // 持将棋の決め方：'points'=点数計算 / 'draw'=無条件で引き分け
   checkPoints:false,  // 王手をかけたら点数を足す（4人チェス式）
+  capturedPoints:true,// 取った駒の駒価を点数に足す（王を取った分もここに入る）
   captureAll:false,  // 相手の駒を全て取り切るまで戦う（王の有無に関係なく勝敗判定）。囲碁/オセロ/はさみ向け
   banSennichite:true,  // 千日手回避：同一局面が4回目になる手を禁じる（＝千日手が成立しない）
   flyingGeneral:false, // 王不見王：帥と将を同じ筋で相対させる手は指せない（シャンチー）
@@ -4224,6 +4226,14 @@ function captureSurroundedScan(moverSide, touched){
    これで、マスの駒は4頂点の交点で囲めば取れ、交点の駒はその点を囲む4マスで取れる。
    盤の外は壁として塞がっている側に数える。
 
+   交点そのものが塞がるのは「駒が乗っているとき」だけ。
+   以前は「4辺のうち2辺が塞がっていれば交点も塞がり」としていたが、
+   将棋の初期配置のように駒が詰まっているとほとんどの交点が塞がり扱いになり、
+   目に見えて空いている隣に呼吸できず碁石が取られてしまった。
+
+   さらに層をまたぐ囲みとして、別の層の隣（マスなら4頂点の交点、交点なら4隅のマス）が
+   すべて相手の駒なら、その駒1つだけが取られる。群の呼吸点とは別の判定。
+
    人の操作・打ち先の候補・CPUの読み・棋譜再生がすべてこの1組を使う。 */
 const ORTHO_4=[[-1,0],[1,0],[0,-1],[0,1]];
 // マスに駒があるか（盤の外は壁として「ある」扱い）
@@ -4239,14 +4249,10 @@ function ptEdgeBlocked(cells,R,C,dr,dc){
   else             { a=[R-1,C];   b=[R,C]; }
   return cellOcc(cells,a[0],a[1]) && cellOcc(cells,b[0],b[1]);
 }
-/* 交点が塞がっているか。駒があるか、または「4辺のうち2辺以上」が塞がっているとき。
-   辺の端点は必ず2つなので辺は「両方」、交点の辺は4本あるので「2本以上」で塞がり扱い。 */
+/* 交点が塞がっているか。駒が乗っているとき（と盤の外）だけ。 */
 function pointBlocked(cells,pts,R,C){
   if(R<0||R>NR||C<0||C>NC) return true;               // 盤の外は壁
-  if(pts && pts[R] && pts[R][C]) return true;
-  let n=0;
-  for(const [dr,dc] of ORTHO_4){ if(ptEdgeBlocked(cells,R,C,dr,dc) && ++n>=2) return true; }
-  return false;
+  return !!(pts && pts[R] && pts[R][C]);
 }
 /* マス(r,c)の (dr,dc) 側の辺が、その辺の両端の「2交点」で塞がれているか。
      上辺 … 交点 (r,c)   と (r,c+1)        下辺 … 交点 (r+1,c) と (r+1,c+1)
@@ -4281,7 +4287,6 @@ function surroundedGroup(cells, pts, isPt, r0, c0){
       // 空いていても、そこへ抜ける辺が塞がっていれば呼吸できない
       if(isPt){
         if(ptEdgeBlocked(cells,r,c,dr,dc)) continue;        // 辺を挟む2マスが埋まっている
-        if(pointBlocked(cells,pts,rr,cc)) continue;         // 行き先の交点自体が塞がっている
       } else {
         if(cellEdgeBlocked(cells,pts,r,c,dr,dc)) continue;  // 辺の両端の2交点が塞がっている
       }
@@ -4289,6 +4294,26 @@ function surroundedGroup(cells, pts, isPt, r0, c0){
     }
   }
   return {stones, free:false, side, isPt};
+}
+/* 層をまたぐ囲み。別の層の隣「4つすべて」が相手の駒なら、その駒だけが取られる。
+     マスの駒   … その正方形の4頂点の交点 (r,c)(r,c+1)(r+1,c)(r+1,c+1)
+     交点の駒   … その点を頂点とする4マス (R-1,C-1)(R-1,C)(R,C-1)(R,C)
+   ここでは盤の外を壁に数えない。数えると、盤の縁の交点は隣のマス2つだけで
+   囲まれたことになり、縁に石を置いた瞬間に取られてしまう。
+   縁の駒は同じ層の呼吸点（盤の外は呼吸点にならない）の側で面倒を見る。
+   同じ層でつながった味方がいても、この囲みからは守れない（群ではなく駒ごとの判定）。 */
+function crossSurrounded(cells, pts, isPt, r, c){
+  const L=isPt?pts:cells, O=isPt?cells:pts;
+  if(!L||!O) return false;
+  const q0=L[r]&&L[r][c]; if(!q0) return false;
+  const side=ownerOf(q0.t,q0.p);
+  const or=isPt?NR:NR+1, oc=isPt?NC:NC+1;
+  for(const [rr,cc] of surroundNeighbors(isPt,r,c).other){
+    if(rr<0||rr>=or||cc<0||cc>=oc) return false;      // 盤の外は囲みに数えない
+    const q=O[rr]&&O[rr][cc];
+    if(!q || ownerOf(q.t,q.p)===side) return false;
+  }
+  return true;
 }
 /* 呼吸点が0の群を取る。ただし盤全体は見ない。
    群が死ぬのは「呼吸点が埋まったとき」だけなので、
@@ -4314,6 +4339,8 @@ function captureSurroundedNear(cells, pts, touched, moverSide, pushCap, rec, ene
     }
   }
   if(!cand.length) return 0;
+  const isMine=(s)=> (enemyOnlyAgainst!==undefined) ? (s===enemyOnlyAgainst)
+                                                    : (moverSide!==null && s===moverSide);
   for(const mineTurn of (enemyOnlyAgainst!==undefined ? [false] : [false,true])){
     const done=new Set();
     for(const [isPt,r,c] of cand){
@@ -4321,46 +4348,22 @@ function captureSurroundedNear(cells, pts, touched, moverSide, pushCap, rec, ene
       const key=(isPt?'p':'c')+r+','+c;
       if(done.has(key)) continue;
       const q=L[r]&&L[r][c]; if(!q) continue;
+      if(crossSurrounded(cells,pts,isPt,r,c)){        // 層をまたぐ囲み（駒ごと）
+        const s=ownerOf(q.t,q.p);
+        if(isMine(s)!==mineTurn) continue;
+        done.add(key); L[r][c]=null; n++;
+        if(rec) rec.push([L,r,c,q]);
+        if(pushCap) pushCap(-s, q);
+        continue;
+      }
       const g=surroundedGroup(cells,pts,isPt,r,c); if(!g) continue;
       if(g.free){ done.add(key); continue; }
       g.stones.forEach(([a,b])=>done.add((isPt?'p':'c')+a+','+b));
-      const mine=(enemyOnlyAgainst!==undefined)?(g.side===enemyOnlyAgainst)
-                                               :(moverSide!==null && g.side===moverSide);
-      if(mine!==mineTurn) continue;
+      if(isMine(g.side)!==mineTurn) continue;
       for(const [a,b] of g.stones){
         const z=L[a][b]; L[a][b]=null; n++;
         if(rec) rec.push([L,a,b,z]);
         if(pushCap) pushCap(-g.side, z);
-      }
-    }
-  }
-  return n;
-}
-/* 盤全体を見る版（編集で作った盤の後始末など、着手経路の外で使う）。相手の群から先に見る。
-   pushCap(取った側, 駒) を渡すと取った駒を持ち駒へ入れる。
-   rec を渡すと取り除いた駒を記録する（自殺手の判定で元に戻すため）。
-   enemyOf を渡すと、その側の群は取らない（相手の群だけ先に消したいとき）。 */
-function captureSurroundedGroups(cells, pts, moverSide, pushCap, rec, enemyOnlyAgainst){
-  let n=0;
-  for(const mineTurn of (enemyOnlyAgainst!==undefined ? [false] : [false,true])){
-    for(const isPt of [false,true]){
-      const L=isPt?pts:cells; if(!L) continue;
-      const RR=isPt?NR+1:NR, CC=isPt?NC+1:NC;
-      const done=new Set();
-      for(let r=0;r<RR;r++)for(let c=0;c<CC;c++){
-        if(done.has(r+','+c)) continue;
-        const q=L[r]&&L[r][c]; if(!q) continue;
-        const g=surroundedGroup(cells,pts,isPt,r,c); if(!g) continue;
-        if(g.free){ done.add(r+','+c); continue; }
-        g.stones.forEach(([a,b])=>done.add(a+','+b));
-        const mine = (enemyOnlyAgainst!==undefined) ? (g.side===enemyOnlyAgainst)
-                                                    : (moverSide!==null && g.side===moverSide);
-        if(mine!==mineTurn) continue;
-        for(const [a,b] of g.stones){
-          const z=L[a][b]; L[a][b]=null; n++;
-          if(rec) rec.push([L,a,b,z]);
-          if(pushCap) pushCap(-g.side, z);
-        }
       }
     }
   }
@@ -4377,6 +4380,8 @@ function isSuicidePlacement(cells, pts, isPt, r, c, t, side){
   L[r][c]={t, p:owner};
   try{
     captureSurroundedNear(cells, pts, [[isPt,r,c]], owner, null, rec, owner);  // 相手の群だけ先に取る
+    if(!L[r]||!L[r][c]) return false;                 // 相手を取った拍子に自分も消えることは無いが念のため
+    if(crossSurrounded(cells,pts,isPt,r,c)) return true;   // 層をまたいで囲まれる場所
     const g=surroundedGroup(cells,pts,isPt,r,c);
     return !!g && !g.free;
   } finally {
@@ -5645,12 +5650,13 @@ function calcPositionScore(side){
 }
 /* 持将棋・終局時の点数。
    盤上の駒価＋取った駒（持ち駒）の駒価＋囲碁の領域点。
-   取った駒には王も含める（王を取る＝チェックメイト分の点はここで入る）。
+   「取った駒を点数に足す」がONなら取った駒の駒価も足す。取った駒には王も含める
+   （王を取る＝チェックメイト分の点はここで入る）。
    「王手で加点」がONなら、これまでに掛けた王手の回数も足す。 */
 let checkCount={1:0,'-1':0};
 function jishogiPoints(side){
   let pts=calcPositionScore(side);
-  (side===1?capYou:capEnemy).forEach(t=>pts+=pieceValue(t));
+  if(RULES.capturedPoints) (side===1?capYou:capEnemy).forEach(t=>pts+=pieceValue(t));
   if(RULES.checkPoints) pts += (checkCount[side]||0);
   return pts;
 }
@@ -7332,6 +7338,7 @@ function openRuleModal(){
   document.getElementById('rDrawNoMove').checked=RULES.drawNoMove;
   document.getElementById('rDrawBothEnter').checked=RULES.drawBothEnter;
   document.getElementById('rJishogiMode').value=RULES.jishogiMode||'points';
+  document.getElementById('rCapturedPoints').checked=!!RULES.capturedPoints;
   document.getElementById('rCheckPoints').checked=!!RULES.checkPoints;
   document.getElementById('ruleModal').classList.add('show');
 }
@@ -7388,6 +7395,7 @@ document.getElementById('rCaptureAll').onchange=e=>{ RULES.captureAll=e.target.c
 document.getElementById('rDrawNoMove').onchange=e=>{ RULES.drawNoMove=e.target.checked; };
 document.getElementById('rDrawBothEnter').onchange=e=>{ RULES.drawBothEnter=e.target.checked; };
 document.getElementById('rJishogiMode').onchange=e=>{ RULES.jishogiMode=e.target.value; };
+document.getElementById('rCapturedPoints').onchange=e=>{ RULES.capturedPoints=e.target.checked; };
 document.getElementById('rCheckPoints').onchange=e=>{ RULES.checkPoints=e.target.checked; };
 // 置く側トグル
 (function(){ const b=document.getElementById('sideToggle'); if(b) b.onclick=()=>{

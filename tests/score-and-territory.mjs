@@ -27,6 +27,8 @@ const out=await p.evaluate(()=>{
     const bd=B(); bd[8][4]={t:'hK',p:1};
     loadState(mk(bd,null,['hR','hK'],[])); SFX.on=false;
     R['②持ち駒に飛車と王']={点:jishogiPoints(1), 内訳:'盤上0 + 飛5 + 王20 = 25'};
+    loadState(mk(bd,null,['hR','hK'],[],{capturedPoints:false})); SFX.on=false;
+    R['②取った駒を足さない設定']={点:jishogiPoints(1), 内訳:'盤上0 のみ = 0'};
   }
   // ③ 囲碁の領域点
   {
