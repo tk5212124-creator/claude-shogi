@@ -2406,8 +2406,8 @@ function setupHasami(){
 // 囲碁（19×19）。碁石を持ち駒として最大限保持し、空点に打つ。
 function setupGo(){
   NR=NC=19; PZ=0; emptyBoard();
-  // 実物と同じ：碁石は黒181個・白180個（19×19=361点）
-  capYou.push(...fill('GOB',181)); capEnemy.push(...fill('GOW',180));
+  // 打ち切って足りなくならないよう、黒白とも400個ずつ持つ
+  capYou.push(...fill('GOB',400)); capEnemy.push(...fill('GOW',400));
 }
 // どうぶつしょうぎ（3列×4段）。ライオン・ぞう・きりん・ひよこ。ひよこは最奥でにわとりに成る。
 function setupDoubutsu(){
@@ -2564,7 +2564,7 @@ function initState(keepBoard){
   sel=null; history=[]; gameOver=false; pendingPromo=null;
   turn = youAreSente ? 1 : -1; // 先手から開始（1=あなた, -1=相手）
   kifu=[]; gameStartSnap=null; // 棋譜とリプレイ起点
-  posCount={}; repLog=[];
+  posCount={}; repLog=[]; passStreak=0;
   updateSenteLabel();
 }
 // 棋譜・リプレイ・自動モード状態
@@ -2706,7 +2706,7 @@ function loadState(text){
   youAreSente = d.youAreSente!==undefined? !!d.youAreSente : true;
   turn = d.turn===-1? -1 : 1;
   gameOver = false;             // 続きから指せるように必ず再開可能にする
-  history=[]; redoStack.length=0; posCount={}; repLog=[];
+  history=[]; redoStack.length=0; posCount={}; repLog=[]; passStreak=0;
   kifu = Array.isArray(d.kifu)? d.kifu.map(k=>({...k})) : [];
   // 棋譜つきなら起点も復元してリプレイできるようにする
   if(d.start && Array.isArray(d.start.board)){
@@ -2761,6 +2761,7 @@ function setSennichiteMode(mode){
   RULES.banSennichite    = (mode==='avoid');
   RULES.xiangqiSennichite= (mode==='xiangqi');
 }
+let passStreak=0;    // 続けてパスされた回数（双方が続けてパスしたら終局）
 let posCount={};     // 局面出現回数（千日手判定用）
 let repLog=[];       // 各手の {局面キー, 指した側, 王手か}（シャンチー式千日手の判定用）
 /* 速度は「深さ」ではなく「1手にかける時間」で決める。
@@ -3386,6 +3387,8 @@ function dropTargets(b,t,p){
     if(b[r]&&b[r][c])continue;
     if(palaceOnly && !(isPt? isPalacePoint(r,c) : isPalaceCell(r,c))) continue;
     if(diagOnlyPalace && !diagStandOK(isPt,r,c)) continue;     // 線が無い所に打つと二度と動けない
+    // 碁石の自殺手は打てない（相手の群を取って呼吸点が生まれるなら合法）
+    if(isGo(t) && goIsSuicide(b,r,c,t)) continue;
     if(riverOnly && !(p===1 ? r>=rows-PZ : r<PZ)) continue;   // 象は河を渡れない
     // 行き所のない駒の禁止
     const last = p===1?0:rows-1, last2 = p===1?[0,1]:[rows-2,rows-1];
@@ -3413,6 +3416,11 @@ function isLegalMove(m, p, b){
     if(wouldKeepBikjang(p, m)) return false;   // ビッチャングン：相対を解消しない手は指せない
   }
   if(m.pass) return !!RULES.allowPass;         // パスはルールONのときだけ指せる
+  // 碁石の自殺手は人もCPUも指せない（判定は打ち先の候補と同じもの）
+  if(m.drop && isGo(m.drop)){
+    const L = m.pt ? ptsBoard : bd;
+    if(goIsSuicide(L, m.tr, m.tc, m.drop)) return false;
+  }
   const lbd = (m.pt && bd.L && bd.L.pts) ? bd.L.pts : bd;   // この手が動くレイヤー
   if(m.drop){
     return dropTargets(lbd, m.drop, p).some(([r,c])=>r===m.tr&&c===m.tc);
@@ -4081,25 +4089,85 @@ function fireBurn(r,c,p){
 }
 // 囲碁の囲み取り：縦横4方を敵(または盤端)で囲まれた碁石を、囲んだ側の持ち駒へ。
 // 碁石はコード(GOB/GOW)のまま持ち駒に入り色を保持する。各着手後に呼ぶ。
-function goCaptureScan(){
+// 呼吸点が0になった碁石の群を全て同時に取る（連結群単位）。
+function goCaptureScan(moverColor){
   ensurePts();
-  const orth=[[-1,0],[1,0],[0,-1],[0,1]];
-  const caps=[];
-  // 碁石の囲みは「マス・交点に関係なく」判定する（隣は2層のどちらでも可）
-  for(const layer of [board,ptsBoard]){
-    const isPt=(layer===ptsBoard);
-    for(let r=0;r<(isPt?NR+1:NR);r++)for(let c=0;c<(isPt?NC+1:NC);c++){
-      const q=layer[r]&&layer[r][c]; if(!q||!isGo(q.t))continue;
-      const enemy=-q.p;
-      if(isSurrounded(isPt,r,c,board,ptsBoard, n=>n.p===enemy)) caps.push([r,c,enemy,q.t,layer]);
+  const push=(side,t)=>{ if(RULES.drops) (side===1?capYou:capEnemy).push(t); }; // コード保持＝色そのまま
+  let n=0;
+  for(const layer of [board,ptsBoard]) n+=goCaptureGroupsOn(layer, moverColor, push);
+  return n;
+}
+/* ===== 碁石の連結群と呼吸点 =====
+   上下左右でつながった同じ色の石を1つの群として扱い、群全体の呼吸点を数える。
+   呼吸点＝群に隣り合う空き点。盤の外と、何か置かれている点は呼吸点にならない。
+   呼吸点が0になった群は丸ごと取られる。
+   人の操作・CPUの読み・実盤のどれもこの1つを使う（機構を分けない）。 */
+const GO_ORTHO=[[-1,0],[1,0],[0,-1],[0,1]];
+function goGroup(L, r0, c0){
+  const q0=L[r0]&&L[r0][c0];
+  if(!q0||!isGo(q0.t)) return null;
+  const RR=L.length, CC=(L[0]||[]).length;
+  const col=q0.t, seen=new Set([r0+','+c0]), stones=[[r0,c0]], libs=new Set(), st=[[r0,c0]];
+  while(st.length){
+    const [r,c]=st.pop();
+    for(const [dr,dc] of GO_ORTHO){
+      const rr=r+dr, cc=c+dc;
+      if(rr<0||rr>=RR||cc<0||cc>=CC) continue;         // 盤の外は呼吸点にならない
+      const q=L[rr]&&L[rr][cc];
+      if(!q){ libs.add(rr+','+cc); continue; }         // 空き＝呼吸点
+      if(q.t===col){                                    // 同じ色ならつながっている
+        const k=rr+','+cc;
+        if(!seen.has(k)){ seen.add(k); stones.push([rr,cc]); st.push([rr,cc]); }
+      }
     }
   }
-  for(const [r,c,enemy,t,layer] of caps){
-    layer[r][c]=null;
-    if(RULES.drops) (enemy===1?capYou:capEnemy).push(t); // コード保持＝色そのまま
-  }
-  return caps.length;
+  return {stones, libs:libs.size, t:col};
 }
+/* 呼吸点が0の群を全て同時に取る。相手の群から先に見る（囲碁の順序）。
+   moverColor を渡すと、その色の群は後回しになる。pushCap(取った側, 石のコード)。 */
+function goCaptureGroupsOn(L, moverColor, pushCap){
+  let n=0;
+  const RR=L.length, CC=(L[0]||[]).length;
+  for(const mineTurn of [false,true]){                  // 1周目＝相手の群、2周目＝自分の群
+    const done=new Set();
+    for(let r=0;r<RR;r++)for(let c=0;c<CC;c++){
+      const q=L[r]&&L[r][c]; if(!q||!isGo(q.t)) continue;
+      if(done.has(r+','+c)) continue;
+      const g=goGroup(L,r,c);
+      g.stones.forEach(([a,b])=>done.add(a+','+b));
+      const isMine = !!moverColor && g.t===moverColor;
+      if(isMine!==mineTurn) continue;
+      if(g.libs===0){
+        for(const [a,b] of g.stones){ L[a][b]=null; n++; if(pushCap) pushCap(-goOwner(g.t), g.t); }
+      }
+    }
+  }
+  return n;
+}
+/* その点に碁石 t を打つと自分の群の呼吸点が0になるか（＝自殺手）。
+   先に相手の群を取り、それで呼吸点が生まれるなら自殺ではない（合法）。
+   判定のあいだだけ盤を触り、必ず元に戻す。 */
+function goIsSuicide(L, r, c, t){
+  if(!L[r] || L[r][c]) return false;
+  const removed=[];
+  L[r][c]={t, p:goOwner(t)};
+  try{
+    const RR=L.length, CC=(L[0]||[]).length, done=new Set();
+    for(let a=0;a<RR;a++)for(let b=0;b<CC;b++){
+      const q=L[a]&&L[a][b]; if(!q||!isGo(q.t)||q.t===t) continue;
+      if(done.has(a+','+b)) continue;
+      const g=goGroup(L,a,b);
+      g.stones.forEach(([x,y])=>done.add(x+','+y));
+      if(g.libs===0) for(const [x,y] of g.stones){ removed.push([x,y,L[x][y]]); L[x][y]=null; }
+    }
+    const me=goGroup(L,r,c);
+    return !!me && me.libs===0;
+  } finally {
+    for(const [x,y,q] of removed) L[x][y]=q;
+    L[r][c]=null;
+  }
+}
+
 /* ===== 囲みの判定 =====
    同じ層の駒は「上下左右の4つ」、別の層の駒は「斜め半歩の4つ」で囲む。
      対象がマス(r,c)   → その正方形の4頂点の交点 (r,c)(r,c+1)(r+1,c)(r+1,c+1)
@@ -4516,17 +4584,10 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     return false;
   }
   // 囲碁の囲み取り。碁石は「囲んだ領域の駒はマス・交点に関係なく取れる」ので2層を通して数える
-  function simGoCapture(){
-    for(const layer of [nb,npts]){
-      const isPt=(layer===npts);
-      for(let r=0;r<(isPt?NR+1:NR);r++)for(let c=0;c<(isPt?NC+1:NC);c++){
-        const q=layer[r]&&layer[r][c]; if(!q||!isGo(q.t))continue;
-        const enemy=-q.p;
-        if(isSurrounded(isPt,r,c,nb,npts, n=>n.p===enemy)){
-          layer[r][c]=null; if(RULES.drops) (enemy===1?ncy:nce).push(q.t);
-        }
-      }
-    }
+  // 実盤と同じ「連結群の呼吸点が0なら丸ごと取る」を使う
+  function simGoCapture(moverColor){
+    const push=(side,t)=>{ if(RULES.drops) (side===1?ncy:nce).push(t); };
+    for(const layer of [nb,npts]) goCaptureGroupsOn(layer, moverColor, push);
   }
   // 碁石が囲んだ領域の駒を取る（層に関係なく）。囲碁石を打った直後に判定する。
   function simGoSurround(r,c,side){
@@ -4584,7 +4645,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
   }
   const hadGo = (b && b._go!==undefined) ? b._go : boardHasGo(b, srcPts);
   nb._go = hadGo || !!(m.drop && isGo(m.drop)) || (cy.some(isGo)||ce.some(isGo));
-  if(nb._go) simGoCapture(); // 囲碁の囲み取りを読みに反映
+  if(nb._go) simGoCapture(m&&m.drop&&isGo(m.drop)? m.drop : null); // 囲碁の囲み取りを読みに反映
   // 実ゲームと同じ判定にする：royal を1枚取っただけでは勝ちにしない。
   // 相手の royal が盤上から全て消えたときだけ「勝ち」。取り切るルールでは royal では決着しない。
   if(king) king = !RULES.captureAll && !anyRoyalIn(nb, npts, -p);
@@ -5198,10 +5259,14 @@ function applyMoveSilent(side,m,_legacySilent){
   if(m.pass){
     // パス：盤面は変えない。棋譜には残し、手番だけ進める（人間・CPU共通の経路）
     recordKifu({side,pass:true});
+    passStreak++;
     if(!silent) render();
+    // 双方が続けてパスしたら終局（間に通常の着手が入れば数え直し）
+    if(passStreak>=2){ endByDoublePass(); return; }
     checkSennichite();
     return;
   }
+  passStreak=0;              // 通常の着手が入ったら連続パスは途切れる
   ensurePts();
   const LB = m.pt ? ptsBoard : board;   // この手が動くレイヤー
   const OB = m.pt ? board : ptsBoard;   // もう一方のレイヤー
@@ -5305,7 +5370,7 @@ function applyMoveSilent(side,m,_legacySilent){
     }
     if(!RULES.captureAll && !hasRoyalOnBoard(-side)){ history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side); return; }
   }
-  goCaptureScan(); // 囲碁：縦横4方を囲まれた碁石を取る（色は保持して持ち駒へ）
+  goCaptureScan(m&&m.drop&&isGo(m.drop)? m.drop : null); // 呼吸点0の群を丸ごと取る（色は保持して持ち駒へ）
   history[history.length-1].to=[m.tr,m.tc];
   if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo);
   // 勝敗の一般則：盤上から味方の royal が居なくなった側の負け。
@@ -5336,15 +5401,17 @@ function squareAttackedBy(tr,tc,by){
 function endGame(winner,reason,detail){
   gameOver=true; render(); updateReplayUI();
   const isTry = reason==='try', isCap = reason==='capture', isPts = reason==='points';
-  const isPer = reason==='perpetual', isStuck = reason==='stuck';
+  const isPer = reason==='perpetual', isStuck = reason==='stuck', isPass = reason==='pass';
   const winMsg = isTry?'▲ あなたの勝ち！トライ成功（ライオンが敵陣の最奥へ到達）'
                : isCap?'▲ あなたの勝ち！相手の駒を全て取り切りました'
+               : isPass?'▲ あなたの勝ち！双方パスで終局（盤上の駒数で上回りました）'
                : isPts?'▲ あなたの勝ち！持将棋の点数計算（24点法）で勝利'
                : isPer?'▲ あなたの勝ち！相手の連続王手の千日手は禁じ手（長将）'
                : isStuck?'▲ あなたの勝ち！相手は指せる手がありません（困斃）'
                : '▲ あなたの勝ち！相手の王を攻め取りました';
   const loseMsg= isTry?'△ あなたの負け…相手のライオンがトライ成功'
                : isCap?'△ あなたの負け…自分の駒を全て取られました'
+               : isPass?'△ あなたの負け…双方パスで終局（盤上の駒数で下回りました）'
                : isPts?'△ あなたの負け…持将棋の点数計算（24点法）で敗北'
                : isPer?'△ あなたの負け…連続王手の千日手は禁じ手（長将）'
                : isStuck?'△ あなたの負け…指せる手がありません（困斃）'
@@ -5907,6 +5974,25 @@ function hasAnyLegalMove(side){
   return false;
 }
 // side の駒の総数（盤上＋持ち駒）。「取り切るまで戦う」勝敗判定に使う。
+// 盤上だけの駒数（持ち駒は数えない）。双方パスで終わったときの決着に使う。
+function boardPieces(side){
+  ensurePts();
+  let n=0;
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const q=board[r][c]; if(q&&q.p===side) n++; }
+  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===side) n++; }
+  return n;
+}
+/* 双方が続けてパスした＝もう打つ気が無い、として終局する。
+   取り切るルール（囲碁・オセロ・はさみ）は盤上の石数の多い方の勝ち。
+   それ以外は引き分け（チャンギのパスなど）。 */
+function endByDoublePass(){
+  if(RULES.captureAll){
+    const a=boardPieces(1), b=boardPieces(-1);
+    if(a>b){ endGame(1,'pass'); return; }
+    if(b>a){ endGame(-1,'pass'); return; }
+  }
+  endDraw('双方が続けてパスしました');
+}
 function sidePieces(side){
   ensurePts();
   let n=0;
@@ -6034,7 +6120,7 @@ function applyKifuStep(rec){
     if(rec.code==='HASA') hasamiCapture(tr,tc,rec.side); // はさみ取りを再現
     if(hasFire(rec.code)) fireBurn(tr,tc,rec.side);      // 火鬼の焼き取りを再現
   }
-  goCaptureScan(); // 囲碁の囲み取りを再現
+  goCaptureScan(rec&&rec.drop&&isGo(rec.drop)? rec.drop : null); // 囲碁の囲み取りを再現
 }
 // 起点から n 手目まで適用して描画
 function gotoStep(n){
@@ -6247,7 +6333,7 @@ function restoreSetup(){
     if(gameStartSnap.diag) cellDiag=gameStartSnap.diag.map(row=>row.slice());
     // PZ・youAreSente は対局開始から不変なので現状維持
   }
-  sel=null; history=[]; gameOver=false; pendingPromo=null; kifu=[]; gameStartSnap=null; posCount={}; repLog=[];
+  sel=null; history=[]; gameOver=false; pendingPromo=null; kifu=[]; gameStartSnap=null; posCount={}; repLog=[]; passStreak=0;
   turn = youAreSente ? 1 : -1;
   if(typeof redoStack!=='undefined') redoStack.length=0;
   updateSenteLabel(); syncSizeUI();
@@ -6263,7 +6349,7 @@ function newGameWithBoard(builder){
   syncLayers();             // 囲碁・シャンチー・チャンギの駒を交点レイヤーへ振り分ける
   sel=null; history=[]; gameOver=false; pendingPromo=null;
   turn = youAreSente ? 1 : -1;
-  kifu=[]; gameStartSnap=null; posCount={}; repLog=[];
+  kifu=[]; gameStartSnap=null; posCount={}; repLog=[]; passStreak=0;
   if(typeof redoStack!=='undefined') redoStack.length=0;
   rememberSetup();          // このプリセット/配置を「初期配置」として記憶
   updateSenteLabel(); syncSizeUI();
@@ -6294,7 +6380,8 @@ document.getElementById('applyPresetBtn').onclick=()=>{
   // チャンギ：打ち込み無し／王不見王ではなくビッチャングン／パスは既定で可能
   if(key==='janggi'){ RULES.drops=false; RULES.flyingGeneral=false; RULES.bikjang=true; }
   else RULES.bikjang=false;
-  RULES.allowPass = (key==='janggi');   // パスが標準なのはチャンギだけ
+  // パスが標準なのはチャンギと囲碁（囲碁は双方が続けてパスすると終局）
+  RULES.allowPass = (key==='janggi'||key==='go');
   updatePassBtn();
   syncSizeUI(); render();   // 盤の設定のチェック表示（九宮）を実際の設定に合わせる
   const label = PRESET_LABELS[key] || ('空盤 '+NR+'×'+NC);
