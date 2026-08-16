@@ -3047,9 +3047,11 @@ function moves(b,r,c){
       if(RULES.palaceEscape) { if(isJPalaceBound(pc.t)) res.push(...janggiDiagMoves(b,r,c,p,'step')); return res; }
       if(!isPalacePoint(r,c)) return [];                         // 宮の点に居ない
       const okDiag=new Set(here.map(d=>d[0]+','+d[1]));
+      const diagOnly=isDiagOnlyPalace(pc.t);
       let out=res.filter(([tr,tc])=>{
         const dr=Math.sign(tr-r), dc=Math.sign(tc-c);
         if(!isPalacePoint(tr,tc)) return false;                  // 行き先も宮の点
+        if(diagOnly && !diagStandOK(true,tr,tc)) return false;    // 仕・士は線の無い点へは行かない
         if(dr&&dc) return okDiag.has(dr+','+dc);                 // 斜めは線に沿ってのみ
         return true;                                             // 縦横は宮の点どうしなら可
       });
@@ -3068,8 +3070,11 @@ function moves(b,r,c){
     if(isJPalaceBound(pc.t)) res.push(...janggiDiagMoves(b,r,c,p,'step'));
     if(RULES.palaceEscape) return res;                           // 宮の外にも出られる設定
     if(!isPalaceCell(r,c)) return [];                            // 宮の外に居る場合は動けない
+    const diagOnlyCell=isDiagOnlyPalace(pc.t);
     return res.filter(([tr,tc])=>{
       if(!isPalaceCell(tr,tc)) return false;
+      // 仕・士は行った先のマスにも線が無いと、そこから動けなくなる
+      if(diagOnlyCell && !diagStandOK(false,tr,tc)) return false;
       const dr=tr-r, dc=tc-c;
       // 仕・士（斜めにしか動かない駒）は、そのマスに引かれた線の向きにだけ進める
       if(dr&&dc && !diagHas(r,c, dr===dc?'l':'r')) return false;
@@ -3130,6 +3135,19 @@ function isPalacePoint(R,C){
   return false;
 }
 function ptHasDir(R,C,dr,dc){ return ptDiagDirs(R,C).some(d=>d[0]===dr&&d[1]===dc); }
+/* 仕・士のように「宮の斜め線に沿ってしか動けない」駒は、線が通っていない場所に置かれると
+   二度と動けなくなる。宮かどうかの判定（isPalacePoint / isPalaceCell）は
+   「線に接するマスがあるか」という広い条件なので、そのままだと線の無い所へ置けてしまう。
+   この駒に限っては「実際に線が通っている場所」だけを立ち位置として認める。 */
+function isDiagOnlyPalace(t){
+  if(!isPalaceBound(t) || isJPalaceBound(t)) return false;   // チャンギの王・士は縦横にも動ける
+  const m=(TP[t]&&TP[t].m)||[];
+  return m.length>0 && m.every(d=>d[0]&&d[1]);               // 動きが斜めだけ＝仕・士
+}
+// その場所に線が通っているか（交点は端点として、マスは自分自身に線があるか）
+function diagStandOK(isPt, r, c){
+  return isPt ? ptDiagDirs(r,c).length>0 : !!getDiag(r,c);
+}
 // レイヤーに応じた「宮の点／宮のマス」判定
 function inPalaceOf(b,r,c){ return (b&&b.isPts)? isPalacePoint(r,c) : isPalaceCell(r,c); }
 // チャンギ：宮の斜め線に沿った移動。線が続く間だけ進める。
@@ -3357,10 +3375,12 @@ function dropTargets(b,t,p){
   const rows=LR(b), cols=LC(b);
   // 宮から出られない駒（帥・將／仕・士／漢・楚）は、宮の外へは打てない
   const palaceOnly = isPalaceBound(t) && !RULES.palaceEscape;
+  const diagOnlyPalace = palaceOnly && isDiagOnlyPalace(t);   // 仕・士は線の上にしか打てない
   const riverOnly = cantCrossRiver(t) && PZ>0;
   for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
     if(b[r]&&b[r][c])continue;
     if(palaceOnly && !(isPt? isPalacePoint(r,c) : isPalaceCell(r,c))) continue;
+    if(diagOnlyPalace && !diagStandOK(isPt,r,c)) continue;     // 線が無い所に打つと二度と動けない
     if(riverOnly && !(p===1 ? r>=rows-PZ : r<PZ)) continue;   // 象は河を渡れない
     // 行き所のない駒の禁止
     const last = p===1?0:rows-1, last2 = p===1?[0,1]:[rows-2,rows-1];
