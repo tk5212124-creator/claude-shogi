@@ -89,13 +89,15 @@
     border:1px dashed var(--sel);transform:none;cursor:pointer;font-family:sans-serif;}
 
   /* 盤の右下の図鑑ボタン。対局中でも駒の説明をすぐ開ける */
-  #zukanBtn{position:absolute;right:4px;bottom:4px;z-index:30;
+  /* 盤の駒に被らないよう、盤枠の下へ少しはみ出させる */
+  #zukanBtn{position:absolute;right:4px;bottom:-20px;z-index:30;
     min-height:0;padding:5px 9px;border-radius:11px;font-size:.7rem;font-weight:700;
     background:linear-gradient(160deg,#4a3a6e,#2e2447);border:1px solid rgba(245,207,107,.55);
     color:var(--gold);box-shadow:0 2px 8px rgba(0,0,0,.5);max-width:46%;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   #zukanBtn.has-piece{border-color:var(--glow);color:#ece3ff;
     background:linear-gradient(160deg,#5a4a9e,#3d3168);}
+  #zukanBtn.hidden{display:none;}
   .board-wrap{position:relative;padding:10px;
     background:linear-gradient(135deg,#4a3a6e,#2e2447);
     border-radius:18px;
@@ -1278,9 +1280,9 @@
         </select>
       </div>
       <p class="rule-note" style="margin:2px 0 6px;">※ 並びを変えたら「盤の設定」でチャンギのプリセットを適用し直してください。車も入れ替える北朝鮮ルールは編集ツールで自由に組めます。</p>
-      <p class="rule-note" style="margin:6px 0 2px;">引き分け（持将棋）</p>
-      <label class="rule-row"><input type="checkbox" id="rDrawNoMove"> どこにも動けない・打てなくなったら持将棋（引き分け）にする</label>
-      <label class="rule-row"><input type="checkbox" id="rDrawBothEnter"> 双方の王が敵陣に入ったら持将棋（引き分け）にする</label>
+      <p class="rule-note" style="margin:6px 0 2px;">持将棋</p>
+      <label class="rule-row"><input type="checkbox" id="rDrawNoMove"> どこにも動けない・打てなくなったら持将棋にする</label>
+      <label class="rule-row"><input type="checkbox" id="rDrawBothEnter"> 双方の王が敵陣に入ったら持将棋にする</label>
       <div class="rule-row" style="display:block;">
         <span class="rule-note">持将棋になったときの決め方</span>
         <select id="rJishogiMode" style="width:100%;margin-top:4px;">
@@ -2620,8 +2622,8 @@ const RULES={
   promoOnZone:true,  // 敵陣に入ったら成れる（本将棋の標準）
   promoOnLast:false, // 敵陣の一番奥に着いたら成れる
   promoOnCapture:false, // 敵駒を取ったら成れる（3つとも外すと成り自体が無くなる）
-  drawNoMove:true,   // どこにも動けない・打てなくなったら持将棋（引き分け）。初期ON
-  drawBothEnter:false,// 双方の王が敵陣に入ったら持将棋（引き分け）。初期OFF
+  drawNoMove:true,   // どこにも動けない・打てなくなったら持将棋。初期ON
+  drawBothEnter:false,// 双方の王が敵陣に入ったら持将棋。初期OFF
   jishogiMode:'points', // 持将棋の決め方：'points'=点数計算 / 'draw'=無条件で引き分け
   checkPoints:false,  // 王手をかけたら点数を足す（4人チェス式）
   capturedPoints:true,// 取った駒の駒価を点数に足す（王を取った分もここに入る）
@@ -2652,14 +2654,17 @@ function kifuToText(){
     if(k.pass) return (i+1)+'. '+who+'パス（着手放棄）';
     const L=k.pt?'◇':'';   // 交点の手は◇を付けて、マスの座標と区別する
     const to=L+'('+(k.to?(k.to[0]+1)+'行'+(k.to[1]+1)+'列':'?')+')';
-    if(k.drop) return (i+1)+'. '+who+((KANJI[k.drop]||k.drop))+' 打 '+to;
+    const nmOf=t=>KANJI[t]||t;
+    // 同じ層の取り＋相手レイヤーの取り（共有点・飛び越え）＋囲みで取った分をまとめて出す
+    const shown = (k.cap?[k.cap]:[]).concat(k.xcapCodes||[], k.enclCap||[]);
+    const cap = shown.length? (' 取:'+shown.map(nmOf).join('・')) : '';
+    // 自分の駒が囲まれて消えた分（自分の手で自分の群が死ぬことがある）
+    const lost = (k.enclLost&&k.enclLost.length)? (' 失:'+k.enclLost.map(nmOf).join('・')) : '';
+    if(k.drop) return (i+1)+'. '+who+nmOf(k.drop)+' 打 '+to+cap+lost;
     const from=k.from?(L+'('+(k.from[0]+1)+'行'+(k.from[1]+1)+'列)'):'';
-    const nm=KANJI[k.code]||k.code;
+    const nm=nmOf(k.code);
     const pr=k.promo?(' 成→'+(KANJI[k.promoTo]||k.promoTo||'')):'';
-    // 同じ層の取り＋相手レイヤーの取り（共有点・飛び越え）をまとめて出す
-    const shown = (k.cap?[k.cap]:[]).concat(k.xcapCodes||[]);
-    const cap = shown.length? (' 取:'+shown.map(t=>KANJI[t]||t).join('・')) : '';
-    return (i+1)+'. '+who+nm+' '+from+'→'+to+pr+cap;
+    return (i+1)+'. '+who+nm+' '+from+'→'+to+pr+cap+lost;
   }).join('\n');
 }
 function debugReport(){
@@ -3860,9 +3865,11 @@ function renderCap(id,arr,p){
     } else {
       // 対局中：自分の手番なら打つ駒として選ぶ。どちらの持ち駒でも図鑑用には必ず覚える。
       d.title='タップで図鑑に記録（自分の手番なら打つ駒として選択）';
-      d.onclick=()=>{ setInspect(t);
+      d.onclick=()=>{
+        const off = sel && sel.drop && sel.t===t;   // 同じ持ち駒をもう一度＝解除
+        setInspect(off ? null : t);
         if(gameOver||replaying||isAuto(p)||turn!==p){ render(); return; }
-        sel=(sel&&sel.drop&&sel.t===t)?null:{drop:true,t,p}; render(); };
+        sel=off?null:{drop:true,t,p}; render(); };
     }
     el.appendChild(d);
     if(needLabel){
@@ -4011,11 +4018,13 @@ function moveEditPiece(fr,fc,tr,tc,fromPt,toPt){
 /* ===== クリック処理 ===== */
 function onCell(r,c,isPt){
   if(gameOver||pendingPromo)return;
-  // 図鑑用に、タップした駒を覚えておく（自分の駒でも相手の駒でも）
+  // 図鑑用に、タップした駒を覚えておく（自分の駒でも相手の駒でも）。
+  // 空きマスを叩いた＝選択の解除なので、図鑑ボタンも選択なしに戻す。
   {
     const L = isPt ? ptsBoard : board;
     const q = L && L[r] && L[r][c];
-    if(q) setInspect(q.t);
+    const off = sel && !sel.drop && sel.r===r && sel.c===c && !!sel.pt===!!isPt;  // 同じ駒をもう一度＝解除
+    setInspect(off ? null : (q ? q.t : null));
   }
   if(editing){
     if(multiSel.length>0){ toggleMultiSel(r,c); return; } // 複数選択中はトグル
@@ -4211,109 +4220,95 @@ function fireBurn(r,c,p){
 // 囲碁の囲み取り：縦横4方を敵(または盤端)で囲まれた碁石を、囲んだ側の持ち駒へ。
 // 碁石はコード(GOB/GOW)のまま持ち駒に入り色を保持する。各着手後に呼ぶ。
 // 呼吸点が0になった群を全て同時に取る（駒の種類は問わない）。
-function captureSurroundedScan(moverSide, touched){
+function captureSurroundedScan(moverSide, touched, onCap){
   ensurePts();
-  const push=(side,q)=>{ if(RULES.drops) (side===1?capYou:capEnemy).push(capturedCode(q)); };
+  const push=(side,q)=>{
+    if(RULES.drops) (side===1?capYou:capEnemy).push(capturedCode(q));
+    if(onCap) onCap(side,q);              // 取った側と取られた駒（棋譜に残すため）
+  };
   return captureSurroundedNear(board, ptsBoard, touched||[], moverSide===undefined?null:moverSide, push);
 }
 /* ===== 囲みで取られる判定（駒の種類を問わない） =====
    上下左右でつながった「同じ側の駒」を1つの群として扱う。碁石でも将棋の駒でも同じ。
    群に隣り合う空きが呼吸点。呼吸点が0になった群は丸ごと同時に取られる。
 
-   2層の盤なので、辺は「その辺を挟む別の層の2つ」でも塞がる。
-     マス (r,c) の辺  … 挟むのは辺の両端の交点2つ
-     交点 (R,C) の辺  … 挟むのは辺の両側のマス2つ
+   2層の盤なので、隣へ抜ける「辺」が別の層の相手の駒2つで塞がれることがある。
+     マス (r,c) の辺  … 塞ぐのは辺の両端の交点2つ
+     交点 (R,C) の辺  … 塞ぐのは辺の両側のマス2つ
    これで、マスの駒は4頂点の交点で囲めば取れ、交点の駒はその点を囲む4マスで取れる。
-   盤の外は壁として塞がっている側に数える。
 
-   交点そのものが塞がるのは「駒が乗っているとき」だけ。
-   以前は「4辺のうち2辺が塞がっていれば交点も塞がり」としていたが、
-   将棋の初期配置のように駒が詰まっているとほとんどの交点が塞がり扱いになり、
-   目に見えて空いている隣に呼吸できず碁石が取られてしまった。
+   辺を見る順番が大事。各方向について
+     ① 辺が塞がっているか  → 塞がっていればその方向は接続も呼吸もしない
+     ② 隣が同じ側          → 同じ群としてつながる
+     ③ 隣が相手            → 呼吸点にならない
+     ④ 隣が空き            → 呼吸点
+   の順に見る。①を後回しにすると、塞がれた辺の向こうの味方まで同じ群になってしまい、
+   4辺を囲まれた玉将が「隣の金将には呼吸点があるから」と生き残ってしまう。
 
-   さらに層をまたぐ囲みとして、別の層の隣（マスなら4頂点の交点、交点なら4隅のマス）が
-   すべて相手の駒なら、その駒1つだけが取られる。群の呼吸点とは別の判定。
+   塞ぐのは「相手の駒」だけ。味方の駒や盤の外は辺を塞がない。
+   味方まで数えると、盤の縁に石を置いた瞬間に取られてしまう。
+
+   辺の塞がりは実際に置かれている駒だけで決める。空いている交点を
+   「塞がっている交点」と見なして別の辺の判定に使い回すことはしない
+   （以前それをやって、盤が駒で埋まっていると囲みが際限なく伝播した）。
 
    人の操作・打ち先の候補・CPUの読み・棋譜再生がすべてこの1組を使う。 */
 const ORTHO_4=[[-1,0],[1,0],[0,-1],[0,1]];
-// マスに駒があるか（盤の外は壁として「ある」扱い）
-function cellOcc(cells,r,c){ return (r<0||r>=NR||c<0||c>=NC) ? true : !!(cells[r]&&cells[r][c]); }
-/* 交点(R,C)から (dr,dc) へ伸びる辺が、その辺を挟む「2マス」で塞がれているか。
+// (r,c) に side から見た相手の駒があるか。盤の外は「無い」（＝辺を塞がない）
+function foeAt(L, rows, cols, r, c, side){
+  if(r<0||r>=rows||c<0||c>=cols) return false;
+  const q=L[r]&&L[r][c];
+  return !!q && ownerOf(q.t,q.p)!==side;
+}
+/* 交点(R,C)から (dr,dc) へ伸びる辺が、その辺を挟む「2マスの相手の駒」で塞がれているか。
      上へ … マス (R-1,C-1) と (R-1,C)      下へ … マス (R,C-1) と (R,C)
      左へ … マス (R-1,C-1) と (R,C-1)      右へ … マス (R-1,C) と (R,C)   */
-function ptEdgeBlocked(cells,R,C,dr,dc){
+function ptEdgeBlocked(cells,R,C,dr,dc,side){
   let a,b;
   if(dr===-1)      { a=[R-1,C-1]; b=[R-1,C]; }
   else if(dr===1)  { a=[R,C-1];   b=[R,C]; }
   else if(dc===-1) { a=[R-1,C-1]; b=[R,C-1]; }
   else             { a=[R-1,C];   b=[R,C]; }
-  return cellOcc(cells,a[0],a[1]) && cellOcc(cells,b[0],b[1]);
+  return foeAt(cells,NR,NC,a[0],a[1],side) && foeAt(cells,NR,NC,b[0],b[1],side);
 }
-/* 交点が塞がっているか。駒が乗っているとき（と盤の外）だけ。 */
-function pointBlocked(cells,pts,R,C){
-  if(R<0||R>NR||C<0||C>NC) return true;               // 盤の外は壁
-  return !!(pts && pts[R] && pts[R][C]);
-}
-/* マス(r,c)の (dr,dc) 側の辺が、その辺の両端の「2交点」で塞がれているか。
+/* マス(r,c)の (dr,dc) 側の辺が、その辺の両端の「2交点の相手の駒」で塞がれているか。
      上辺 … 交点 (r,c)   と (r,c+1)        下辺 … 交点 (r+1,c) と (r+1,c+1)
      左辺 … 交点 (r,c)   と (r+1,c)        右辺 … 交点 (r,c+1) と (r+1,c+1)  */
-function cellEdgeBlocked(cells,pts,r,c,dr,dc){
+function cellEdgeBlocked(pts,r,c,dr,dc,side){
   let a,b;
   if(dr===-1)      { a=[r,c];     b=[r,c+1]; }
   else if(dr===1)  { a=[r+1,c];   b=[r+1,c+1]; }
   else if(dc===-1) { a=[r,c];     b=[r+1,c]; }
   else             { a=[r,c+1];   b=[r+1,c+1]; }
-  return pointBlocked(cells,pts,a[0],a[1]) && pointBlocked(cells,pts,b[0],b[1]);
+  return foeAt(pts,NR+1,NC+1,a[0],a[1],side) && foeAt(pts,NR+1,NC+1,b[0],b[1],side);
+}
+// (r,c) の駒（層 isPt）から (dr,dc) へ抜ける辺が塞がっているか
+function edgeBlocked(cells,pts,isPt,r,c,dr,dc,side){
+  return isPt ? ptEdgeBlocked(cells,r,c,dr,dc,side) : cellEdgeBlocked(pts,r,c,dr,dc,side);
 }
 function surroundedGroup(cells, pts, isPt, r0, c0){
   const L=isPt?pts:cells;
   const q0=L[r0]&&L[r0][c0]; if(!q0) return null;
-  const side=q0.p;
+  const side=ownerOf(q0.t,q0.p);
   const RR=isPt?NR+1:NR, CC=isPt?NC+1:NC;
   const seen=new Set([r0+','+c0]), stones=[[r0,c0]], st=[[r0,c0]];
   while(st.length){
     const [r,c]=st.pop();
-    for(const [dr,dc] of ORTHO_4){                 // 上下左右（同じ層）
+    for(const [dr,dc] of ORTHO_4){
       const rr=r+dr, cc=c+dc;
       if(rr<0||rr>=RR||cc<0||cc>=CC) continue;     // 盤の外は呼吸点にならない
+      // ① まず辺。相手の駒2つで塞がれていれば、その方向には接続も呼吸もない
+      if(edgeBlocked(cells,pts,isPt,r,c,dr,dc,side)) continue;
       const q=L[rr]&&L[rr][cc];
-      if(q){                                       // 埋まっている＝呼吸点ではない
-        if(q.p===side){                            // 同じ側ならつながっている
-          const k=rr+','+cc;
-          if(!seen.has(k)){ seen.add(k); stones.push([rr,cc]); st.push([rr,cc]); }
-        }
-        continue;
+      if(!q) return {free:true, side, isPt};       // ④ 空き＝呼吸点。ここで打ち切る
+      if(ownerOf(q.t,q.p)===side){                 // ② 同じ側＝つながっている
+        const k=rr+','+cc;
+        if(!seen.has(k)){ seen.add(k); stones.push([rr,cc]); st.push([rr,cc]); }
       }
-      // 空いていても、そこへ抜ける辺が塞がっていれば呼吸できない
-      if(isPt){
-        if(ptEdgeBlocked(cells,r,c,dr,dc)) continue;        // 辺を挟む2マスが埋まっている
-      } else {
-        if(cellEdgeBlocked(cells,pts,r,c,dr,dc)) continue;  // 辺の両端の2交点が塞がっている
-      }
-      return {free:true, side, isPt};              // 呼吸点あり。ここで打ち切る
+      // ③ 相手の駒＝呼吸点にならない
     }
   }
   return {stones, free:false, side, isPt};
-}
-/* 層をまたぐ囲み。別の層の隣「4つすべて」が相手の駒なら、その駒だけが取られる。
-     マスの駒   … その正方形の4頂点の交点 (r,c)(r,c+1)(r+1,c)(r+1,c+1)
-     交点の駒   … その点を頂点とする4マス (R-1,C-1)(R-1,C)(R,C-1)(R,C)
-   ここでは盤の外を壁に数えない。数えると、盤の縁の交点は隣のマス2つだけで
-   囲まれたことになり、縁に石を置いた瞬間に取られてしまう。
-   縁の駒は同じ層の呼吸点（盤の外は呼吸点にならない）の側で面倒を見る。
-   同じ層でつながった味方がいても、この囲みからは守れない（群ではなく駒ごとの判定）。 */
-function crossSurrounded(cells, pts, isPt, r, c){
-  const L=isPt?pts:cells, O=isPt?cells:pts;
-  if(!L||!O) return false;
-  const q0=L[r]&&L[r][c]; if(!q0) return false;
-  const side=ownerOf(q0.t,q0.p);
-  const or=isPt?NR:NR+1, oc=isPt?NC:NC+1;
-  for(const [rr,cc] of surroundNeighbors(isPt,r,c).other){
-    if(rr<0||rr>=or||cc<0||cc>=oc) return false;      // 盤の外は囲みに数えない
-    const q=O[rr]&&O[rr][cc];
-    if(!q || ownerOf(q.t,q.p)===side) return false;
-  }
-  return true;
 }
 /* 呼吸点が0の群を取る。ただし盤全体は見ない。
    群が死ぬのは「呼吸点が埋まったとき」だけなので、
@@ -4348,14 +4343,6 @@ function captureSurroundedNear(cells, pts, touched, moverSide, pushCap, rec, ene
       const key=(isPt?'p':'c')+r+','+c;
       if(done.has(key)) continue;
       const q=L[r]&&L[r][c]; if(!q) continue;
-      if(crossSurrounded(cells,pts,isPt,r,c)){        // 層をまたぐ囲み（駒ごと）
-        const s=ownerOf(q.t,q.p);
-        if(isMine(s)!==mineTurn) continue;
-        done.add(key); L[r][c]=null; n++;
-        if(rec) rec.push([L,r,c,q]);
-        if(pushCap) pushCap(-s, q);
-        continue;
-      }
       const g=surroundedGroup(cells,pts,isPt,r,c); if(!g) continue;
       if(g.free){ done.add(key); continue; }
       g.stones.forEach(([a,b])=>done.add((isPt?'p':'c')+a+','+b));
@@ -4381,7 +4368,6 @@ function isSuicidePlacement(cells, pts, isPt, r, c, t, side){
   try{
     captureSurroundedNear(cells, pts, [[isPt,r,c]], owner, null, rec, owner);  // 相手の群だけ先に取る
     if(!L[r]||!L[r][c]) return false;                 // 相手を取った拍子に自分も消えることは無いが念のため
-    if(crossSurrounded(cells,pts,isPt,r,c)) return true;   // 層をまたいで囲まれる場所
     const g=surroundedGroup(cells,pts,isPt,r,c);
     return !!g && !g.free;
   } finally {
@@ -5439,6 +5425,7 @@ function applyMoveSilent(side,m,_legacySilent){
   let _fxPromo=false;
   const cap = side===-1? capEnemy : capYou;
   const touch=[];                 // 新しく埋まった／持ち主が変わった場所（囲みの判定に使う）
+  let _movedCode = m.drop || null;// 着地した駒の種類（王手の加点でクイーン系か見るため）
   if(m.pass){
     // パス：盤面は変えない。棋譜には残し、手番だけ進める（人間・CPU共通の経路）
     recordKifu({side,pass:true});
@@ -5518,6 +5505,7 @@ function applyMoveSilent(side,m,_legacySilent){
       if(v){ if(isRoyal(v.t)) tookRoyal=true; if(RULES.drops) cap.push(capturedCode(v)); OB[cr][cc]=null; }
     }
     const newCode = cpawnPromo ? 'cQ' : (promoNew || pc.t);
+    _movedCode = newCode;
     _fxPromo = !!(promoNew || cpawnPromo);
     const np={t:newCode,p:ownerOf(newCode,side)};
     if(promoNew) np.o = pc.o || pc.t;
@@ -5554,9 +5542,18 @@ function applyMoveSilent(side,m,_legacySilent){
     }
     if(!RULES.captureAll && !hasRoyalOnBoard(-side)){ history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side); return; }
   }
-  captureSurroundedScan(side, touch);   // 呼吸点0の群を丸ごと取る（駒の種類は問わない）
-  // 王手をかけた回数を数える（「王手で加点」ルール用。人もCPUも同じ経路で数える）
-  if(!gameOver && checkInfo(-side).check) checkCount[side]=(checkCount[side]||0)+1;
+  // 呼吸点0の群を丸ごと取る（駒の種類は問わない）。取れた分は棋譜にも残す
+  {
+    const got=[], lost=[];
+    captureSurroundedScan(side, touch, (taker,q)=>{ (taker===side?got:lost).push(capturedCode(q)); });
+    const kr=kifu[kifu.length-1];
+    if(kr){ if(got.length) kr.enclCap=got; if(lost.length) kr.enclLost=lost; }
+  }
+  // 王手をかけた点数（「王手で加点」ルール用。人もCPUも同じ経路で数える）
+  if(!gameOver){
+    const ci=checkInfo(-side);
+    if(ci.check) checkCount[side]=(checkCount[side]||0)+checkBonus(ci.cells.length, isQueenLike(_movedCode));
+  }
   history[history.length-1].to=[m.tr,m.tc];
   if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo);
   // 勝敗の一般則：盤上から味方の royal が居なくなった側の負け。
@@ -5648,6 +5645,25 @@ function calcPositionScore(side){
     if(q&&q.p===side&&!isRoyal(q.t)) v+=pieceValue(q.o||q.t, true); }
   return v + goTerritory(side);
 }
+/* 王手の加点（4人チェス式）。royal が複数あると1手で同時に王手を掛けられる。
+     同時に1つ … 1点
+     同時に2つ … クイーン系なら1点、それ以外は5点
+     同時に3つ以上 … クイーン系なら5点、それ以外は20点
+   「クイーン系」は8方向すべてへ無条件で走る駒（チェスのクイーン・奔王など）。 */
+const QUEEN_8=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+function isQueenLike(t){
+  if(!TP[t]) return false;
+  const fl=TP[t].fl||[];
+  if(fl.includes('cannon')||fl.includes('jcannon')) return false;   // 走るのに条件が要る
+  const mv=pvMoveSet(t);
+  return QUEEN_8.every(([dr,dc])=>mv.get(dr+','+dc)==='F');
+}
+function checkBonus(n, byQueen){
+  if(n<=0) return 0;
+  if(n===1) return 1;
+  if(n===2) return byQueen?1:5;
+  return byQueen?5:20;
+}
 /* 持将棋・終局時の点数。
    盤上の駒価＋取った駒（持ち駒）の駒価＋囲碁の領域点。
    「取った駒を点数に足す」がONなら取った駒の駒価も足す。取った駒には王も含める
@@ -5668,7 +5684,7 @@ function bothRoyalsEntered(){
 function resolveJishogi(msg){
   if(RULES.jishogiMode==='draw'){        // 点数を見ずに引き分けにする設定
     gameOver=true; stopAutoLoop(); render(); updateReplayUI();
-    setStatus('持将棋（引き分け）'+(msg?'：'+msg:''),'think');
+    setStatus('持将棋'+(msg?'：'+msg:''),'think');
     const rec=addRecord('d');
     showResult('draw','引き分け', (msg||'持将棋')+'\n通算 '+rec.w+'勝'+rec.l+'敗'+rec.d+'分');
     return;
@@ -5686,7 +5702,7 @@ function resolveJishogi(msg){
   }
   if(winner===0){
     gameOver=true; stopAutoLoop(); render(); updateReplayUI();
-    setStatus('持将棋（引き分け）：'+detail,'think');
+    setStatus('持将棋：'+detail,'think');
     const rec=addRecord('d');
     showResult('draw','引き分け', detail+'\n通算 '+rec.w+'勝'+rec.l+'敗'+rec.d+'分');
   } else endGame(winner,'points',detail);
@@ -5703,10 +5719,10 @@ function setStatus(t,cls){
   const s=document.getElementById('status');
   s.textContent=t; s.className='status'+(cls?' '+cls:'');
 }
-// 持将棋（引き分け）で終了
+// 持将棋で終了
 function endDraw(msg){
   gameOver=true; stopAutoLoop(); render(); updateReplayUI();
-  setStatus('持将棋（引き分け）'+(msg?'：'+msg:''),'think');
+  setStatus('持将棋'+(msg?'：'+msg:''),'think');
   const rec=addRecord('d');
   showResult('draw','引き分け', '持将棋'+(msg?'：'+msg:'')+'\n通算 '+rec.w+'勝'+rec.l+'敗'+rec.d+'分');
 }
@@ -6975,11 +6991,18 @@ let infoOnly=false, previewType=null;
 /* 対局中に「今どの駒を見ているか」。自分の駒でも相手の駒でも、盤でも持ち駒でも覚える。
    盤の右下の図鑑ボタンから、その駒の説明をすぐ開ける。 */
 let lastInspect=null;
+/* 図鑑ボタンに「今えらんでいる駒」を出す。t を省くと選択なしに戻す。 */
 function setInspect(t){
-  if(!t) return;
-  lastInspect=t;
+  lastInspect=t||null;
   const b=document.getElementById('zukanBtn');
-  if(b){ b.classList.add('has-piece'); b.textContent='図鑑：'+(isGo(t)?(t==='GOB'?'黒石':'白石'):dispName(t)); }
+  if(!b) return;
+  b.classList.toggle('has-piece', !!t);
+  b.textContent = t ? ('図鑑：'+(isGo(t)?(t==='GOB'?'黒石':'白石'):dispName(t))) : '図鑑';
+}
+// 駒の一覧・説明を開いているあいだは、盤の図鑑ボタンを隠す（画面に重なって見えるため）
+function syncZukanBtn(){
+  const b=document.getElementById('zukanBtn'), m=document.getElementById('pickModal');
+  if(b&&m) b.classList.toggle('hidden', m.classList.contains('show'));
 }
 function openZukan(){
   infoOnly=true; editCell=null; capPickSide=0; multiSel=[];
@@ -6992,7 +7015,7 @@ function openCapPick(p){
   buildPickGrid();
   document.getElementById('pickTitle').textContent=(p===1?'あなた':'相手')+'の持ち駒に追加';
   showList();
-  document.getElementById('pickModal').classList.add('show');
+  document.getElementById('pickModal').classList.add('show'); syncZukanBtn();
 }
 function openPickList(){
   capPickSide=0;
@@ -7004,7 +7027,7 @@ function openPickList(){
   const placing = !!(editCell && !infoOnly);
   const pl=document.getElementById('pickList'); if(pl) pl.classList.toggle('placing', placing);
   showList();
-  document.getElementById('pickModal').classList.add('show');
+  document.getElementById('pickModal').classList.add('show'); syncZukanBtn();
 }
 function openPick(r,c){ editCell={r,c}; infoOnly=false; openPickList(); }
 
@@ -7028,8 +7051,7 @@ function showPreview(t){
   const rk=pieceRank(t);
   const pm=document.getElementById('pvMove');
   const pv=pieceValueParts(t);
-  const pvTxt = pv ? ('｜駒価 <b>'+pv.V+'</b>' + (pv.royal? '（王駒）'
-      : '（1+I'+pv.I+'+S'+pv.S+'+'+pv.Q+'×(2×'+pv.R+'+'+pv.C+')+2×'+pv.N+'+L'+pv.L+'）')) : '';
+  const pvTxt = pv ? ('｜駒価 <b>'+pv.V+'</b>'+(pv.royal?'（王駒）':'')) : '';
   pm.innerHTML='強さ '+piecePower(t)+'｜格 <span class="rank-tag" style="background:'+rankColor(t)+'">'+(rankNames[rk]||'一般')+'</span>'+pvTxt+'｜'+moveSummary(t).replace(/</g,'&lt;');
   let extra = (typeof DESC!=='undefined' && DESC[t]) ? DESC[t] : '';
   const fl = (TP[t] && TP[t].fl) || [];
@@ -7137,7 +7159,7 @@ function applyPick(t){
   closePick(); render();
 }
 function closePick(){
-  document.getElementById('pickModal').classList.remove('show');
+  document.getElementById('pickModal').classList.remove('show'); syncZukanBtn();
   editCell=null; previewType=null; infoOnly=false; capPickSide=0; showList();
 }
 document.getElementById('pickEmpty').onclick=()=>{

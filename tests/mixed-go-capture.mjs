@@ -57,7 +57,7 @@ const out=await p.evaluate(([START,KIFU])=>{
     for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
       if(!L[r]||!L[r][c]) continue;
       const g=surroundedGroup(board,ptsBoard,isPt,r,c);
-      if((g&&!g.free) || crossSurrounded(board,ptsBoard,isPt,r,c))
+      if(g&&!g.free)
         left.push((isPt?'pt':'cell')+'['+r+','+c+']='+L[r][c].t);
     }
   }
