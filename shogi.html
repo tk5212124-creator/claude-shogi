@@ -830,6 +830,12 @@
   /* 注記のコントラスト改善（3.2:1 → 5.4:1） */
   .board-setup .bs-note, .rule-note, .sub{color:#9c8fc7 !important;}
   .board-setup .bs-pending{color:var(--gold) !important;}
+  /* BGMの曲を選ぶ行 */
+  .controls.bgm-row{display:flex;gap:8px;width:100%;max-width:430px;align-items:stretch;}
+  .controls.bgm-row select{flex:1 1 auto;min-width:0;font-size:.86rem;padding:9px 10px;border-radius:11px;
+    background:#2a2142;color:#ece3ff;border:1px solid rgba(139,107,255,.45);}
+  .controls.bgm-row select.on{border-color:rgba(245,207,107,.7);color:var(--gold);}
+  .controls.bgm-row button{flex:0 0 auto;white-space:nowrap;}
   /* 音・BGMトグルの2列グリッド行 */
   .controls.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;width:100%;max-width:430px;}
   .controls.grid2 button{width:100%;}
@@ -929,6 +935,10 @@
   <div class="controls grid2">
     <button id="sfxToggle">🔊 音・演出：ON</button>
     <button id="bgmToggle">🎵 BGM：OFF</button>
+  </div>
+  <div class="controls bgm-row">
+    <select id="bgmTrack" title="BGMの曲を選ぶ"></select>
+    <button id="bgmMode" title="1曲をくり返すか、全曲を順番に流すか">🔁 全曲</button>
   </div>
   <div class="controls">
     <button class="primary" id="playPause">▶ 開始</button>
@@ -1244,7 +1254,7 @@
         <h3>その他</h3>
         <ul>
           <li><b>棋譜リプレイ</b>…指した手を再生・コマ送りで見返せます。</li>
-          <li><b>音・演出</b>…効果音と演出のON/OFF。<b>BGM</b>は別ボタン。</li>
+          <li><b>音・演出</b>…効果音と演出のON/OFF。<b>BGM</b>は別ボタン。曲は下の欄で選べます（🔁全曲＝順番に流す／🔂1曲＝いまの曲をくり返す）。BGMはONにするまで読み込みません。</li>
           <li><b>先後入替</b>…あなたと相手を入れ替えます。</li>
         </ul>
       </div>
@@ -5766,11 +5776,10 @@ function endDraw(msg){
 
 /* ===== 効果音（Web Audioで合成・アセット不要） ===== */
 const SFX = (function(){
-  let ctx=null, master=null, bgmGain=null, on=true;
+  let ctx=null, master=null, on=true;
   function ensure(){
     if(!ctx){ try{ const AC=window.AudioContext||window.webkitAudioContext; ctx=new AC();
       master=ctx.createGain(); master.gain.value=0.6; master.connect(ctx.destination);
-      bgmGain=ctx.createGain(); bgmGain.gain.value=1; bgmGain.connect(master); // BGM専用（stopで即無音化）
     }catch(e){ ctx=null; } }
     if(ctx && ctx.state==='suspended'){ try{ctx.resume();}catch(_){} }
     return ctx;
@@ -5876,35 +5885,63 @@ const SFX = (function(){
         case 'draw': [523,523,415].forEach((f,i)=>tone(f,t+i*0.13,0.3,'sine',0.2)); break;
       }
     },
-    // ===== BGM：五音音階の琴風アルペジオ（合成・既定OFF） =====
+    // ===== BGM：曲ファイルを流す（既定OFF） =====
+    // bgm/ の mp3 を <audio> で再生する。効果音のWebAudioとは別系統なので、
+    // 「音・演出」を切ったときも stop() を通して必ず止める。
+    // preload="none" なので、ONにするまで1バイトも読み込まない。
     bgm:{
-      playing:false, timer:null,
-      start(){ if(this.playing || !ensure()) return; this.playing=true;
-        if(bgmGain){ bgmGain.gain.cancelScheduledValues(ctx.currentTime); bgmGain.gain.setValueAtTime(1,ctx.currentTime); }
-        this._loop(); },
-      stop(){ this.playing=false; if(this.timer){clearTimeout(this.timer); this.timer=null;}
-        // 予約済みの音も即座に無音化（BGM専用ゲインを0へ）
-        if(ctx&&bgmGain){ bgmGain.gain.cancelScheduledValues(ctx.currentTime); bgmGain.gain.setValueAtTime(0,ctx.currentTime); } },
-      _pluck(f,t0,g){ if(!ctx)return; const o=ctx.createOscillator(),o2=ctx.createOscillator(),gn=ctx.createGain();
-        o.type='triangle'; o.frequency.value=f; o2.type='sine'; o2.frequency.value=f*2.005;
-        gn.gain.setValueAtTime(0.0001,t0); gn.gain.exponentialRampToValueAtTime(g,t0+0.015);
-        gn.gain.exponentialRampToValueAtTime(0.0001,t0+1.3);
-        o.connect(gn); o2.connect(gn); gn.connect(bgmGain||master); o.start(t0); o2.start(t0); o.stop(t0+1.4); o2.stop(t0+1.4);
+      playing:false, el:null, idx:0, mode:'all',   // mode: 'all'=順番に全曲 / 'one'=いまの曲をくり返し
+      list:[
+        {f:'bgm/battle-loop.mp3',           n:'Battle Loop'},
+        {f:'bgm/kuro-kesa-pulse.mp3',       n:'Kuro Kesa Pulse'},
+        {f:'bgm/kimon-no-kodou.mp3',        n:'鬼門の鼓動'},
+        {f:'bgm/teion-no-shugeki.mp3',      n:'低音の襲撃'},
+        {f:'bgm/susume-monster-battle.mp3', n:'進め モンスターバトル'}
+      ],
+      _el(){
+        if(this.el) return this.el;
+        const a=document.createElement('audio');
+        a.preload='none'; a.volume=0.42;                  // 効果音を消さない音量
+        a.addEventListener('ended',()=>{                  // 1曲終わったら次へ（全曲モード）
+          if(!this.playing) return;
+          this.idx=(this.idx+1)%this.list.length;
+          this._load(); a.play().catch(()=>{});
+          if(typeof onBgmChange==='function') onBgmChange();
+        });
+        a.addEventListener('error',()=>{                  // 読めなかったら止めて知らせる
+          if(!this.playing) return;
+          this.playing=false;
+          if(typeof onBgmChange==='function') onBgmChange('読み込めませんでした');
+        });
+        document.body.appendChild(a);
+        return this.el=a;
       },
-      _loop(){
-        if(!this.playing || !ctx) return;
-        const scale=[261.6,293.7,329.6,392,440,523.3,587.3,659.3]; // 陽音階寄りのペンタ＋α
-        const t=ctx.currentTime;
-        // 2小節ぶん（8ステップ）をまとめて予約
-        for(let i=0;i<8;i++){
-          if(Math.random()<0.72){ this._pluck(scale[Math.floor(Math.random()*scale.length)], t+i*0.55, 0.055); }
-          if(i%4===0){ this._pluck(scale[0]/2, t+i*0.55, 0.045); } // 低音の根音
-        }
-        this.timer=setTimeout(()=>this._loop(), 8*550-120);
-      }
+      _load(){
+        const a=this._el(), t=this.list[this.idx];
+        a.loop = (this.mode==='one');                     // 1曲モードだけ自前でくり返す
+        const want=t.f;
+        if(!a.getAttribute('src') || a.getAttribute('src')!==want){ a.setAttribute('src',want); a.load(); }
+      },
+      title(){ const t=this.list[this.idx]; return t?t.n:''; },
+      start(){
+        if(this.playing) return;
+        this.playing=true; this._load();
+        this._el().play().catch(()=>{ this.playing=false; if(typeof onBgmChange==='function') onBgmChange('再生できませんでした'); });
+      },
+      stop(){ this.playing=false; if(this.el) this.el.pause(); },
+      // 曲を選び直す。再生中ならその場で切り替わる
+      select(i){
+        if(i<0||i>=this.list.length) return;
+        this.idx=i; if(this.el) this.el.currentTime=0;
+        this._load();
+        if(this.playing) this._el().play().catch(()=>{});
+      },
+      setMode(m){ this.mode=(m==='one'?'one':'all'); if(this.el) this.el.loop=(this.mode==='one'); }
     }
   };
 })();
+
+let onBgmChange=null;   // BGMの表示を合わせるための差し込み口（下のトグル側で入れる）
 
 /* ===== 着手の演出（取る・打つ・裏返る・着地・勝敗） ===== */
 let pendingFx=null; // applyMoveSilentで記録→render後に再生
@@ -6234,12 +6271,27 @@ function cutIn(text, kind){
   if(btn) btn.onclick=()=>{ SFX.on=!SFX.on; if(SFX.on) SFX.resume(); else SFX.bgm.stop(); updBgm(); upd(); };
   upd();
   const bgmBtn=document.getElementById('bgmToggle');
-  const updBgm=()=>{ if(bgmBtn){ const onB=SFX.bgm.playing; bgmBtn.textContent='🎵 BGM：'+(onB?'ON':'OFF'); bgmBtn.classList.toggle('on',onB); } };
+  const sel=document.getElementById('bgmTrack');
+  const modeBtn=document.getElementById('bgmMode');
+  if(sel && !sel.options.length){
+    SFX.bgm.list.forEach((t,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=t.n; sel.appendChild(o); });
+  }
+  const updBgm=(msg)=>{
+    const onB=SFX.bgm.playing;
+    if(bgmBtn){ bgmBtn.textContent='🎵 BGM：'+(onB?'ON':'OFF'); bgmBtn.classList.toggle('on',onB); }
+    if(sel){ sel.value=String(SFX.bgm.idx); sel.classList.toggle('on',onB); }
+    if(modeBtn){ const one=SFX.bgm.mode==='one';
+      modeBtn.textContent=one?'🔂 1曲':'🔁 全曲'; modeBtn.classList.toggle('on',one); }
+    if(msg) setStatus('BGMを'+msg+'（bgm/ のファイルを確認してください）','think');
+  };
+  onBgmChange=updBgm;                 // 曲が変わった・読めなかったときに表示を合わせる
   if(bgmBtn) bgmBtn.onclick=()=>{
     if(SFX.bgm.playing){ SFX.bgm.stop(); }
     else { if(!SFX.on){ SFX.on=true; upd(); } SFX.resume(); SFX.bgm.start(); }
     updBgm();
   };
+  if(sel) sel.onchange=e=>{ SFX.bgm.select(+e.target.value); updBgm(); };
+  if(modeBtn) modeBtn.onclick=()=>{ SFX.bgm.setMode(SFX.bgm.mode==='one'?'all':'one'); updBgm(); };
   updBgm();
   const rb=document.getElementById('resultBanner');
   const hide=()=>{ if(rb){ rb.classList.remove('show'); rb.querySelectorAll('.confetti').forEach(c=>c.remove()); } };

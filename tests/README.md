@@ -13,6 +13,7 @@ node tests/cross-layer-capture.mjs
 node tests/mixed-go-capture.mjs
 node tests/shogi-pieces-cannot-surround.mjs
 node tests/fx-layout.mjs        [new|old]
+node tests/bgm.mjs
 node tests/check-points.mjs
 node tests/piece-value.mjs
 node tests/score-and-territory.mjs
@@ -235,3 +236,20 @@ iOS が画面を縮めて表示していた（見出しがステータスバー�
 | トリプルチェック（クイーン／飛車） | 5点／20点 |
 | 王手が掛かっていない手 | 0点 |
 | 「王手で加点」ON/OFF | 点数の差がそのまま出る |
+
+## bgm.mjs が見るもの
+
+`bgm/` の mp3 を `<audio>` で流す。効果音（Web Audio）とは別系統。
+
+| 見るもの | 期待 |
+|---|---|
+| 曲の一覧と選択肢 | 5曲（Battle Loop／Kuro Kesa Pulse／鬼門の鼓動／低音の襲撃／進め モンスターバトル） |
+| BGMをONにする前 | mp3リクエスト0件・`<audio>` も作られない（`preload="none"`） |
+| ONにした後 | 再生が始まる・音量0.42・読み込むのは選んだ1曲だけ |
+| 曲を選び直す | その場で切り替わり、再生は続く |
+| 🔂1曲 ⇄ 🔁全曲 | `loop` が true/false で切り替わる |
+| 曲が終わったら（全曲） | 次の曲へ進み、選択欄の表示も追随する |
+| 「音・演出」をOFF | BGMも止まる |
+| BGMボタンでON→OFF | 鳴る／止まる |
+| 5曲すべての長さ | 2分43秒〜4分30秒（読み込めないファイル0） |
+| pageerror | 0 |
