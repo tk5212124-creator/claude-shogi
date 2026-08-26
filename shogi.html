@@ -854,6 +854,8 @@
     background:#2a2142;color:#ece3ff;border:1px solid rgba(139,107,255,.45);}
   .controls.bgm-row select.on{border-color:rgba(245,207,107,.7);color:var(--gold);}
   .controls.bgm-row button{flex:0 0 auto;white-space:nowrap;}
+  .controls.bgm-row .bgm-skip{padding:9px 12px;font-size:1rem;line-height:1;min-width:3.2em;}
+  .controls.bgm-row #bgmMode{flex:1 1 auto;}
   /* 音・BGMトグルの2列グリッド行 */
   .controls.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;width:100%;max-width:430px;}
   .controls.grid2 button{width:100%;}
@@ -960,7 +962,11 @@
     <button id="bgmToggle">🎵 BGM：OFF</button>
   </div>
   <div class="controls bgm-row">
+    <button id="bgmPrev" class="bgm-skip" title="前の曲へ（曲の途中なら頭出し）">⏮</button>
     <select id="bgmTrack" title="BGMの曲を選ぶ"></select>
+    <button id="bgmNext" class="bgm-skip" title="次の曲へ">⏭</button>
+  </div>
+  <div class="controls bgm-row">
     <button id="bgmMode" title="全曲を順番に／1曲をくり返し／ランダム">🔁 全曲</button>
   </div>
   <div class="controls">
@@ -1284,7 +1290,7 @@
         <h3>その他</h3>
         <ul>
           <li><b>棋譜リプレイ</b>…指した手を再生・コマ送りで見返せます。</li>
-          <li><b>音・演出</b>…効果音と演出のON/OFF。<b>BGM</b>は別ボタン。曲は下の欄で選べます（🔁全曲＝順番に流す／🔂1曲＝いまの曲をくり返す／🔀ランダム＝毎回ばらばらに選ぶ）。BGMはONにするまで読み込みません。</li>
+          <li><b>音・演出</b>…効果音と演出のON/OFF。<b>BGM</b>は別ボタン。曲は下の欄で選べます。⏮⏭で曲を戻す・送る（⏮は3秒より後まで進んでいたら頭出し）。くり返し方は押すたびに 🔁全曲＝順番に流す → 🔂1曲＝いまの曲をくり返す → 🔀ランダム＝毎回ばらばらに選ぶ と変わります。BGMはONにするまで読み込みません。</li>
           <li><b>先後入替</b>…あなたと相手を入れ替えます。</li>
         </ul>
       </div>
@@ -5968,11 +5974,15 @@ const SFX = (function(){
         {f:'bgm/kurogane-pulse.mp3',          n:'Kurogane Pulse'},
         {f:'bgm/crimson-shamisen-clash.mp3',  n:'Crimson Shamisen Clash'},
         {f:'bgm/crimson-shamisen-clash-2.mp3',n:'Crimson Shamisen Clash 2'},
+        {f:'bgm/iron-dynasty.mp3',            n:'Iron Dynasty'},
+        {f:'bgm/iron-dynasty-2.mp3',          n:'Iron Dynasty 2'},
         {f:'bgm/kimon-no-kodou.mp3',          n:'鬼門の鼓動'},
         {f:'bgm/teion-no-shugeki.mp3',        n:'低音の襲撃'},
         {f:'bgm/teion-no-shugeki-2.mp3',      n:'低音の襲撃 2'},
         {f:'bgm/susume-monster-battle.mp3',   n:'進め モンスターバトル'},
         {f:'bgm/susume-monster-battle-2.mp3', n:'進め モンスターバトル 2'},
+        {f:'bgm/banjo-battle.mp3',            n:'盤上バトル'},
+        {f:'bgm/banjo-battle-2.mp3',          n:'盤上バトル 2'},
         {f:'bgm/mudai.mp3',                   n:'Mudai'}
       ],
       _el(){
@@ -5981,6 +5991,8 @@ const SFX = (function(){
         a.preload='none'; a.volume=0.42;                  // 効果音を消さない音量
         a.addEventListener('ended',()=>{                  // 1曲終わったら次へ
           if(!this.playing) return;
+          this.hist=this.hist||[]; this.hist.push(this.idx);
+          if(this.hist.length>64) this.hist.shift();
           this.idx=this._next();
           this._load(); a.play().catch(()=>{});
           if(typeof onBgmChange==='function') onBgmChange();
@@ -6000,6 +6012,30 @@ const SFX = (function(){
         let i=this.idx;
         while(i===this.idx) i=Math.floor(Math.random()*n);
         return i;
+      },
+      /* 曲送り／曲戻し。d=+1 で次の曲、d=-1 で前の曲。
+         「1曲くり返し」でも押したときは動く（そのための操作なので）。
+         ランダムのときの「次」は _next()、「前」は聴いた順の1つ前へ戻る。 */
+      skip(d){
+        const n=this.list.length; if(!n) return;
+        this.hist=this.hist||[];
+        if(d>0){
+          this.hist.push(this.idx);
+          if(this.hist.length>64) this.hist.shift();
+          this.idx = (this.mode==='shuffle') ? this._next() : (this.idx+1)%n;
+        } else {
+          this.idx = (this.mode==='shuffle' && this.hist.length) ? this.hist.pop()
+                                                                : (this.idx-1+n)%n;
+        }
+        if(this.el) this.el.currentTime=0;
+        this._load();
+        if(this.playing) this._el().play().catch(()=>{});
+      },
+      // 頭出し（同じ曲をもう一度、最初から）
+      restart(){
+        this._load();
+        const a=this._el(); a.currentTime=0;
+        if(this.playing) a.play().catch(()=>{});
       },
       _load(){
         const a=this._el(), t=this.list[this.idx];
@@ -6465,6 +6501,15 @@ function cutIn(text, kind){
     updBgm();
   };
   if(sel) sel.onchange=e=>{ SFX.bgm.select(+e.target.value); updBgm(); };
+  const nextBtn=document.getElementById('bgmNext'), prevBtn=document.getElementById('bgmPrev');
+  if(nextBtn) nextBtn.onclick=()=>{ SFX.bgm.skip(+1); updBgm(); };
+  // 前へ：3秒より後まで進んでいたら、まず頭出し（音楽プレイヤーと同じ操作感）
+  if(prevBtn) prevBtn.onclick=()=>{
+    const a=SFX.bgm.el;
+    if(SFX.bgm.playing && a && a.currentTime>3) SFX.bgm.restart();
+    else SFX.bgm.skip(-1);
+    updBgm();
+  };
   // 全曲 → 1曲 → ランダム → 全曲 …
   if(modeBtn) modeBtn.onclick=()=>{
     const nx={all:'one', one:'shuffle', shuffle:'all'};

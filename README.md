@@ -502,20 +502,27 @@ royal を取って持ち駒にしても、取られた側の盤上に別の roya
 | Kurogane Pulse | `bgm/kurogane-pulse.mp3` | 3分17秒 | 4.7MB |
 | Crimson Shamisen Clash | `bgm/crimson-shamisen-clash.mp3` | 3分29秒 | 5.0MB |
 | Crimson Shamisen Clash 2 | `bgm/crimson-shamisen-clash-2.mp3` | 3分48秒 | 5.4MB |
+| Iron Dynasty | `bgm/iron-dynasty.mp3` | 2分50秒 | 4.0MB |
+| Iron Dynasty 2 | `bgm/iron-dynasty-2.mp3` | 2分50秒 | 3.8MB |
 | 鬼門の鼓動 | `bgm/kimon-no-kodou.mp3` | 4分01秒 | 5.6MB |
 | 低音の襲撃 | `bgm/teion-no-shugeki.mp3` | 4分30秒 | 6.2MB |
 | 低音の襲撃 2 | `bgm/teion-no-shugeki-2.mp3` | 4分05秒 | 5.7MB |
 | 進め モンスターバトル | `bgm/susume-monster-battle.mp3` | 4分22秒 | 6.0MB |
 | 進め モンスターバトル 2 | `bgm/susume-monster-battle-2.mp3` | 4分32秒 | 6.2MB |
+| 盤上バトル | `bgm/banjo-battle.mp3` | 3分49秒 | 5.2MB |
+| 盤上バトル 2 | `bgm/banjo-battle-2.mp3` | 3分35秒 | 4.9MB |
 | Mudai | `bgm/mudai.mp3` | 4分55秒 | 7.0MB |
 
 曲名は mp3 の ID3 タグ（TIT2）から取っている。同じ題の別テイクは末尾に 2 を付けて区別する。
 `Mudai` は ID3 の題が Untitled だったもの。
 
-BGMボタンの下の欄で曲を選ぶ。右のボタンはくり返し方で、押すたびに
+BGMボタンの下の欄で曲を選ぶ。両脇の **⏮ ⏭** で曲を戻す・送る。
+⏮ は曲の途中（3秒より後）なら頭出し、頭の近くなら前の曲へ。
+その下のボタンはくり返し方で、押すたびに
 🔁 **全曲**（1曲終わったら次へ。最後まで行ったら先頭に戻る）→ 🔂 **1曲**（くり返す）→
 🔀 **ランダム**（毎回ばらばらに選ぶ。いまと同じ曲は選ばない）と回る。
-音量は 0.42 固定（効果音を消さないため）。
+ランダム中の ⏭ は次をランダムに選び、⏮ は**聴いた順に**1つ戻る（`SFX.bgm.hist`）。
+⏮⏭ は「1曲くり返し」でも押せば曲が変わる。音量は 0.42 固定（効果音を消さないため）。
 
 GitHub Pages へは `.github/workflows` の `cp -r bgm _site/bgm` で一緒に載せている。
 
