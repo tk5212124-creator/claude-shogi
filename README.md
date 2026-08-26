@@ -490,10 +490,10 @@ royal を取って持ち駒にしても、取られた側の盤上に別の roya
 | 低音の襲撃 2 | `bgm/teion-no-shugeki-2.mp3` | 4分05秒 | 5.7MB |
 | 進め モンスターバトル | `bgm/susume-monster-battle.mp3` | 4分22秒 | 6.0MB |
 | 進め モンスターバトル 2 | `bgm/susume-monster-battle-2.mp3` | 4分32秒 | 6.2MB |
-| 無題 | `bgm/mudai.mp3` | 4分55秒 | 7.0MB |
+| Mudai | `bgm/mudai.mp3` | 4分55秒 | 7.0MB |
 
 曲名は mp3 の ID3 タグ（TIT2）から取っている。同じ題の別テイクは末尾に 2 を付けて区別する。
-`無題` は ID3 の題が Untitled のもの。
+`Mudai` は ID3 の題が Untitled だったもの。
 
 BGMボタンの下の欄で曲を選ぶ。🔁 **全曲**＝1曲終わったら次の曲へ（最後まで行ったら先頭に戻る）／
 🔂 **1曲**＝いまの曲をくり返す。音量は 0.42 固定（効果音を消さないため）。

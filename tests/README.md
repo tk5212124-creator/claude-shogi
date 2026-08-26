@@ -243,7 +243,7 @@ iOS が画面を縮めて表示していた（見出しがステータスバー�
 
 | 見るもの | 期待 |
 |---|---|
-| 曲の一覧と選択肢 | 13曲（Battle Loop 系2・Kuro Kesa Pulse 系2・Kurogane Pulse・Crimson Shamisen Clash 系2・鬼門の鼓動・低音の襲撃 系2・進め モンスターバトル 系2・無題） |
+| 曲の一覧と選択肢 | 13曲（Battle Loop 系2・Kuro Kesa Pulse 系2・Kurogane Pulse・Crimson Shamisen Clash 系2・鬼門の鼓動・低音の襲撃 系2・進め モンスターバトル 系2・Mudai） |
 | BGMをONにする前 | mp3リクエスト0件・`<audio>` も作られない（`preload="none"`） |
 | ONにした後 | 再生が始まる・音量0.42・読み込むのは選んだ1曲だけ |
 | 曲を選び直す | その場で切り替わり、再生は続く |
