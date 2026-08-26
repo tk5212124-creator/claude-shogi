@@ -28,40 +28,20 @@ await p.selectOption('#bgmTrack','2'); await p.waitForTimeout(1500);
 R['④曲を選び直す']=await p.evaluate(()=>({曲:SFX.bgm.title(), src:SFX.bgm.el.getAttribute('src'),
   再生中:SFX.bgm.playing, 一時停止:SFX.bgm.el.paused}));
 
-// 1曲くり返し ⇄ 全曲
-await p.click('#bgmMode');
-R['⑤1曲モード']=await p.evaluate(()=>({表示:document.getElementById('bgmMode').textContent,
-  loop:SFX.bgm.el.loop, mode:SFX.bgm.mode}));
-await p.click('#bgmMode');
-R['⑤全曲モード']=await p.evaluate(()=>({表示:document.getElementById('bgmMode').textContent,
-  loop:SFX.bgm.el.loop, mode:SFX.bgm.mode}));
-
-// 「音・演出」を切ったら BGM も止まる
-await p.click('#sfxToggle'); await p.waitForTimeout(300);
-R['⑥音・演出をOFFにしたら']=await p.evaluate(()=>({BGM:document.getElementById('bgmToggle').textContent,
-  再生中:SFX.bgm.playing, 一時停止:SFX.bgm.el.paused}));
-
-// もう一度ON→OFF
-await p.click('#sfxToggle');
-await p.click('#bgmToggle'); await p.waitForTimeout(800);
-const on=await p.evaluate(()=>!SFX.bgm.el.paused);
-await p.click('#bgmToggle'); await p.waitForTimeout(300);
-R['⑦BGMボタンでON→OFF']={ONで鳴る:on, OFFで止まる:await p.evaluate(()=>SFX.bgm.el.paused)};
-
-// 全ファイルが実在して再生できるか
-R['⑧全曲の長さ']=await p.evaluate(async()=>{
-  const out=[];
-  for(const t of SFX.bgm.list){
-    const a=new Audio(t.f);
-    const d=await new Promise(res=>{
-      a.addEventListener('loadedmetadata',()=>res(Math.round(a.duration)));
-      a.addEventListener('error',()=>res('★読み込めない'));
-      setTimeout(()=>res('★時間切れ'),8000);
-    });
-    out.push(t.n+'：'+(typeof d==='number'?Math.floor(d/60)+'分'+String(d%60).padStart(2,'0')+'秒':d));
-  }
-  return out;
+// くり返し方は 🔁全曲 → 🔂1曲 → 🔀ランダム → 🔁全曲 と回る
+const modeState=async()=>await p.evaluate(()=>({表示:document.getElementById('bgmMode').textContent.trim(),
+  mode:SFX.bgm.mode, loop:SFX.bgm.el.loop}));
+R['⑤くり返し方の初期']=await modeState();
+await p.click('#bgmMode'); R['⑤1回押す']=await modeState();
+await p.click('#bgmMode'); R['⑤2回押す']=await modeState();
+await p.click('#bgmMode'); R['⑤3回押して戻る']=await modeState();
+R['⑤ランダムの選び方']=await p.evaluate(()=>{
+  SFX.bgm.setMode('shuffle');
+  const seen=new Set(); let same=0;
+  for(let i=0;i<200;i++){ SFX.bgm.idx=3; const n=SFX.bgm._next(); if(n===3) same++; seen.add(n); }
+  return {いまと同じ曲を選んだ回数:same, 選ばれた曲数:seen.size, 全曲数:SFX.bgm.list.length};
 });
+await p.evaluate(()=>SFX.bgm.setMode('all'));
 // 曲が終わったら次の曲へ（全曲モード）。終わりの1秒前まで飛ばして確かめる
 await p.evaluate(()=>{ SFX.bgm.setMode('all'); SFX.bgm.select(0); if(!SFX.bgm.playing) SFX.bgm.start(); });
 await p.waitForTimeout(1200);

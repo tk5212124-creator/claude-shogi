@@ -11,11 +11,23 @@
     --board:#f0d49a;
     --board2:#e6c179;
     --board-line:#6b4a1e;
+    --board-edge:#7a5320;
     --grid:#c9a85c;
     --koma-top:#fdf0cf;
+    --koma-mid:#f0d9a4;
     --koma-bot:#e9c884;
     --koma-edge:#8a6126;
     --ink:#2a1d0c;
+    /* 相手の駒 */
+    --foe-top:#b7a6cf;
+    --foe-mid:#8d7ab0;
+    --foe-bot:#6a5790;
+    --foe-edge:#4a3a6e;
+    --foe-ink:#1a1330;
+    /* 背景 */
+    --bg1:#1a1530;
+    --bg2:#13102a;
+    --bg3:#0d0a1c;
     --accent:#e0563f;
     --gold:#f5cf6b;
     --sel:#62d1a0;
@@ -30,7 +42,7 @@
     background:
       radial-gradient(ellipse 80% 50% at 50% -5%, rgba(139,107,255,.28), transparent 60%),
       radial-gradient(ellipse 70% 40% at 50% 105%, rgba(224,86,63,.18), transparent 60%),
-      linear-gradient(170deg,#1a1530 0%,#13102a 45%,#0d0a1c 100%);
+      linear-gradient(170deg,var(--bg1) 0%,var(--bg2) 45%,var(--bg3) 100%);
     background-attachment:fixed;
     color:#ece3ff;
     font-family:'Zen Maru Gothic',sans-serif;
@@ -83,7 +95,8 @@
   .cap-koma.tiny  .koma-name{font-size:.5rem;}
   .cap-koma .koma-suffix{writing-mode:vertical-rl;text-orientation:upright;
     font-size:.34rem;line-height:1;opacity:.8;margin-right:.5px;align-self:center;}
-  .cap-koma.enemy{background:linear-gradient(160deg,#6a5a8a,#473a63);color:#ece3ff;transform:rotate(180deg);}
+  .cap-koma.enemy{background:linear-gradient(160deg,var(--foe-mid),var(--foe-bot));
+    color:var(--foe-ink);border-color:var(--foe-edge);transform:rotate(180deg);}
   .cap-koma .ct{position:absolute;bottom:-3px;right:-3px;font-size:.6rem;
     background:var(--accent);color:#fff;border-radius:9px;
     min-width:14px;width:auto;height:14px;padding:0 4px;box-sizing:border-box;
@@ -115,11 +128,14 @@
   }
   .board{
     display:grid;position:relative;
+    /* 1マスの大きさ。駒の字の大きさはすべてこれを基準に決める（列数は render で入れる） */
+    --cols:9;
+    --cell:calc(min(92vw,410px) / var(--cols));
     grid-template-columns:repeat(9,minmax(0,1fr));
     grid-template-rows:repeat(9,minmax(0,1fr));
     width:min(92vw,410px);height:min(92vw,410px);
     background:linear-gradient(160deg,var(--board),var(--board2));
-    border:3px solid #7a5320;
+    border:3px solid var(--board-edge);
     border-radius:6px;
     box-shadow:inset 0 0 24px rgba(106,74,30,.4);
     overflow:hidden;
@@ -140,7 +156,7 @@
   .board.has-pts{overflow:visible; background:none; border:none; box-shadow:none;}
   .board-wrap.pts-wrap{
     background:linear-gradient(160deg,var(--board),var(--board2));
-    box-shadow:0 0 0 3px #7a5320, 0 0 0 5px rgba(245,207,107,.35),
+    box-shadow:0 0 0 3px var(--board-edge), 0 0 0 5px rgba(245,207,107,.35),
       0 14px 40px rgba(0,0,0,.55), inset 0 0 30px rgba(106,74,30,.45);}
   .board-wrap.pts-wrap::before{border-color:rgba(122,83,32,.45);}
   .pt-layer{position:absolute; inset:0; z-index:6; pointer-events:none;}
@@ -258,12 +274,12 @@
     box-sizing:border-box;overflow:hidden;
     background:
       radial-gradient(ellipse 120% 60% at 50% 8%, rgba(255,255,255,.65), transparent 55%),
-      linear-gradient(158deg,var(--koma-top) 0%,#f0d9a4 50%,var(--koma-bot) 100%);
+      linear-gradient(158deg,var(--koma-top) 0%,var(--koma-mid) 50%,var(--koma-bot) 100%);
     color:var(--ink);
     border:1px solid var(--koma-edge);
     border-radius:18% 18% 10% 10%/34% 34% 10% 10%;
     display:flex;flex-direction:row-reverse;align-items:center;justify-content:center;
-    font-size:min(4.2vw,18px);line-height:1;
+    font-size:calc(var(--cell,42px) * .40);line-height:1;
     box-shadow:0 2px 5px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.7), inset 0 -2px 4px rgba(138,97,38,.3);
     user-select:none;
     text-align:center;
@@ -271,11 +287,14 @@
   }
   /* 駒名は縦書き1列。サイズは駒名の文字数（small=2字, tiny=3字以上）で調整。 */
   .koma-name{writing-mode:vertical-rl;text-orientation:upright;line-height:1.02;letter-spacing:0;max-height:100%;overflow:hidden;}
-  .koma.small .koma-name{font-size:min(3.4vw,15px);}
-  .koma.tiny  .koma-name{font-size:min(2.4vw,10.5px);}
+  .koma.small .koma-name{font-size:calc(var(--cell,42px) * .33);}
+  .koma.tiny  .koma-name{font-size:calc(var(--cell,42px) * .215);}
+  /* 4文字以上は2列になるので、横に2列ぶん入るところまで細くする */
+  .koma.daikyoku .koma-name{font-size:calc(var(--cell,42px) * .30);}
+  .koma.daikyoku.tiny .koma-name{font-size:calc(var(--cell,42px) * .205);}
   /* 「(大局)」は駒名の左に細く小さく縦書きで添える */
   .koma-suffix{writing-mode:vertical-rl;text-orientation:upright;
-    font-size:min(1.7vw,7.5px);line-height:1;opacity:.8;margin-right:1px;align-self:center;}
+    font-size:calc(var(--cell,42px) * .16);line-height:1;opacity:.8;margin-right:1px;align-self:center;}
   .koma.daikyoku{gap:0;}
   .koma.promoted{color:var(--accent);}
   .koma{position:relative;}
@@ -293,7 +312,7 @@
     clip-path:none;
     background:
       radial-gradient(circle at 34% 28%, rgba(255,255,255,.75), transparent 55%),
-      linear-gradient(160deg,var(--koma-top) 0%,#f2ddb0 55%,var(--koma-bot) 100%);
+      linear-gradient(160deg,var(--koma-top) 0%,var(--koma-mid) 55%,var(--koma-bot) 100%);
     border:1.5px solid var(--koma-edge);
     box-shadow:0 2px 5px rgba(0,0,0,.4), inset 0 0 0 2px rgba(138,97,38,.35);
     aspect-ratio:1/1; width:auto; height:88%;
@@ -329,8 +348,11 @@
   .go-disc.white{background:radial-gradient(circle at 32% 27%, #ffffff 0%, #eef0f4 40%, #b3b6c2 100%);}
   .cap-koma .go-disc{width:74%;height:74%;}
   .koma.enemy{transform:rotate(180deg);
-    background:linear-gradient(158deg,#b7a6cf,#8d7ab0 55%,#6a5790);
-    color:#1a1330;border-color:#4a3a6e;}
+    background:linear-gradient(158deg,var(--foe-top),var(--foe-mid) 55%,var(--foe-bot));
+    color:var(--foe-ink);border-color:var(--foe-edge);}
+  .koma.enemy.round-koma{background:
+      radial-gradient(circle at 34% 28%, rgba(255,255,255,.55), transparent 55%),
+      linear-gradient(160deg,var(--foe-top) 0%,var(--foe-mid) 55%,var(--foe-bot) 100%);}
 
   .controls{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;justify-content:center;max-width:440px;}
   button{
@@ -469,11 +491,7 @@
   /* 大盤では駒名を縮めて角も落とすが、シャンチーの丸駒だけは丸のまま残す。
      五角形・八角形は clip-path で形を作るので border-radius の影響を受けないが、
      丸駒だけは border-radius:50% が形そのものなので、ここで潰すと四角くなってしまう。 */
-  .board.bigboard .koma:not(.round-koma){font-size:min(2.2vw,10px);border-radius:0;}
-  .board.bigboard .koma.round-koma{font-size:min(2.2vw,10px);}
-  .board.bigboard .koma-name{font-size:min(2vw,9px);}
-  .board.bigboard .koma.small .koma-name{font-size:min(1.6vw,7px);}
-  .board.bigboard .koma.tiny .koma-name{font-size:min(1.2vw,5.5px);}
+  .board.bigboard .koma:not(.round-koma){border-radius:0;}
   .board.bigboard .koma-suffix{display:none;}
   .multi-bar{
     width:100%;max-width:430px;margin-top:10px;
@@ -842,6 +860,11 @@
   /* プレイヤー札：手番側が金色に光る */
   .captured{transition:box-shadow .3s, border-color .3s;}
   .captured .lbl{font-weight:700;letter-spacing:.14em;}
+  /* いまの点数（点数で勝敗を決める設定のときだけ出す） */
+  .cap-score{flex:0 0 auto;align-self:center;margin-left:2px;padding:2px 8px;border-radius:9px;
+    font-size:.72rem;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.04em;
+    color:var(--gold);background:rgba(245,207,107,.12);border:1px solid rgba(245,207,107,.4);}
+  .cap-score.zero{color:#8ff0c4;background:rgba(98,209,160,.12);border-color:rgba(98,209,160,.45);}
   .captured.turn-active{border-color:rgba(245,207,107,.85);
     box-shadow:0 0 0 1px rgba(245,207,107,.5), 0 0 18px rgba(245,207,107,.3), inset 0 1px 0 rgba(255,255,255,.1);}
   .captured.turn-active .lbl{color:var(--gold);}
@@ -938,7 +961,7 @@
   </div>
   <div class="controls bgm-row">
     <select id="bgmTrack" title="BGMの曲を選ぶ"></select>
-    <button id="bgmMode" title="1曲をくり返すか、全曲を順番に流すか">🔁 全曲</button>
+    <button id="bgmMode" title="全曲を順番に／1曲をくり返し／ランダム">🔁 全曲</button>
   </div>
   <div class="controls">
     <button class="primary" id="playPause">▶ 開始</button>
@@ -1013,6 +1036,13 @@
     <div class="bs-note" id="bsPalaceHelp">※ 九宮は「宮マス（斜め線）」として盤に描かれます。押すとその場で反映され、盤の大きさを変えても消えません。1マスずつ変えるには編集メニューの「宮マス変更」から。</div>
     <div class="bs-note bs-pending" id="bsPalaceNote" style="display:none;">※ 敵陣の変更は「適用」または「作成」を押すと反映されます</div>
     <div class="bs-note">「適用」「作成」で盤を作り直します（駒は編集ツールで配置）。初期配置は出典に基づく正確な配置です。</div>
+    <span class="bs-lbl" style="margin-top:12px;">色</span>
+    <div class="bs-row"><label for="thBoard">盤</label><select id="thBoard"></select></div>
+    <div class="bs-row"><label for="thMine">自分の駒</label><select id="thMine"></select></div>
+    <div class="bs-row"><label for="thFoe">相手の駒</label><select id="thFoe"></select></div>
+    <div class="bs-row"><label for="thBg">背景</label><select id="thBg"></select></div>
+    <div class="bs-row"><button type="button" id="thReset">色を元に戻す</button></div>
+    <div class="bs-note">色はこの端末に覚えます。対局の内容・保存データには影響しません。</div>
    </div>
   </div>
   <div class="acc" id="accEdit">
@@ -1254,7 +1284,7 @@
         <h3>その他</h3>
         <ul>
           <li><b>棋譜リプレイ</b>…指した手を再生・コマ送りで見返せます。</li>
-          <li><b>音・演出</b>…効果音と演出のON/OFF。<b>BGM</b>は別ボタン。曲は下の欄で選べます（🔁全曲＝順番に流す／🔂1曲＝いまの曲をくり返す）。BGMはONにするまで読み込みません。</li>
+          <li><b>音・演出</b>…効果音と演出のON/OFF。<b>BGM</b>は別ボタン。曲は下の欄で選べます（🔁全曲＝順番に流す／🔂1曲＝いまの曲をくり返す／🔀ランダム＝毎回ばらばらに選ぶ）。BGMはONにするまで読み込みません。</li>
           <li><b>先後入替</b>…あなたと相手を入れ替えます。</li>
         </ul>
       </div>
@@ -1306,10 +1336,13 @@
         <select id="rJishogiMode" style="width:100%;margin-top:4px;">
           <option value="points">点数計算で勝敗を決める</option>
           <option value="draw">点数を見ずに引き分けにする</option>
+          <option value="zero">点数だけで勝負する（相手の点数を0にしたら勝ち）</option>
         </select>
       </div>
       <label class="rule-row"><input type="checkbox" id="rCapturedPoints"> 取った駒の駒価を点数に足す</label>
       <label class="rule-row"><input type="checkbox" id="rCheckPoints"> 王手をかけたら点数を足す（4人チェス式）</label>
+      <p class="rule-note" style="margin:6px 0 2px;">「点数だけで勝負する」は王を取っても終わりません。盤上の駒価＋囲碁の領域点だけを数え、
+      <b>相手のその点数を0にした方の勝ち</b>です（取った駒の点は減らないので数えません）。点数は持ち駒の欄にいつも出ます。</p>
       <p class="rule-note" style="margin:6px 0 2px;">点数は盤上の駒価＋取った駒の駒価＋囲碁の領域点。王を取った分もここに入ります。
       24点・31点・500手のルールは「双方の王が敵陣に入ったら持将棋」がONで、実際にその形になったときだけ使います。
       それ以外は単純に点数の多い方の勝ちです。</p>
@@ -3746,6 +3779,7 @@ function render(){
   // 行列比に合わせて縦横比を可変（高さは固定値を解除してaspect-ratioで決定）
   bd.style.aspectRatio=NC+' / '+NR;
   bd.style.height='auto';
+  bd.style.setProperty('--cols', NC);   // 駒の字の大きさは1マスの大きさから決まる
   bd.classList.toggle('bigboard', Math.max(NR,NC)>=13);
   ensurePts();
   // 可動マスのキー：マスは "r_c"、交点は "Pr_c"（2層を区別する）
@@ -3858,6 +3892,15 @@ function diagSvg(kind,r,c){
 function renderCap(id,arr,p){
   const el=document.getElementById(id);
   el.innerHTML='<span class="lbl">'+(p===1?'あなた':'相手')+'</span>';
+  // 点数で勝敗を決める設定のときは、その時点の点数をいつも出す
+  if(RULES.jishogiMode==='points' || RULES.jishogiMode==='zero'){
+    const sc=document.createElement('span');
+    sc.className='cap-score'+(RULES.jishogiMode==='zero'?' zero':'');
+    sc.textContent=currentScore(p)+'点';
+    sc.title=RULES.jishogiMode==='zero' ? '盤上の駒価＋囲碁の領域点。0になった側の負け'
+                                        : '盤上の駒価＋囲碁の領域点＋取った駒の駒価（＋王手の点）';
+    el.appendChild(sc);
+  }
   el.classList.toggle('is-empty', arr.length===0 && !editing); // 空なら箱を詰める
   const counts={};
   arr.forEach(t=>counts[t]=(counts[t]||0)+1);
@@ -4152,7 +4195,7 @@ function doMoveChessPromo(fr,fc,tr,tc,toCode,p){
   board[fr][fc]=null;
   history[history.length-1].to=[tr,tc];
   pendingFx=computeFx(_prev,p,{fr,fc,tr,tc},true);
-  if(!RULES.captureAll && tookRoyal && !hasRoyalOnBoard(-p)){ endGame(p); return; }
+  if(royalDecides() && tookRoyal && !hasRoyalOnBoard(-p)){ endGame(p); return; }
   checkSennichite();
 }
 // キャスリング：cKが横に2マス動く手を検出。可能なら{rookFrom,rookTo}を返す。
@@ -4863,7 +4906,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
   // 相手の royal が盤上から全て消えたときだけ「勝ち」。取り切るルールでは royal では決着しない。
   // 取ったときだけでなく、囲みで消えた場合も同じ扱いにするため無条件に見る
   // （実ゲームも着手の最後に hasRoyalOnBoard を無条件で見ている）。
-  king = !RULES.captureAll && !anyRoyalIn(nb, npts, -p);
+  king = royalDecides() && !anyRoyalIn(nb, npts, -p);
   return {nb,ncy,nce,king};
 }
 
@@ -5577,17 +5620,17 @@ function applyMoveSilent(side,m,_legacySilent){
     if(pc.t==='HASA'){ hasamiCapture(m.tr,m.tc,side); }
     if(hasFire(pc.t)){ fireBurn(m.tr,m.tc,side); }   // 火鬼：移動後に隣接敵を焼く
     // どうぶつしょうぎ「トライ」：ライオンが相手陣の最奥段に到達し、その場で取り返されないなら勝ち
-    if(newCode==='zLion' && !RULES.captureAll){
+    if(newCode==='zLion' && royalDecides()){
       const goalRow = side===1 ? 0 : board.length-1;
       if(m.tr===goalRow && !squareAttackedBy(m.tr,m.tc,-side)){
         history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side,'try'); return;
       }
     }
     // 「取り切るまで戦う」ONのときは王を取られても終局しない（勝敗は全滅のみ）
-    if(!RULES.captureAll && tookRoyal && !hasRoyalOnBoard(-side)){
+    if(royalDecides() && tookRoyal && !hasRoyalOnBoard(-side)){
       history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side); return;
     }
-    if(!RULES.captureAll && !hasRoyalOnBoard(-side)){ history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side); return; }
+    if(royalDecides() && !hasRoyalOnBoard(-side)){ history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side); return; }
   }
   // 呼吸点0の群を丸ごと取る（駒の種類は問わない）。取れた分は棋譜にも残す
   {
@@ -5606,12 +5649,23 @@ function applyMoveSilent(side,m,_legacySilent){
   // 勝敗の一般則：盤上から味方の royal が居なくなった側の負け。
   // 取られた・裏返された・囲まれた・焼かれた…どの理由でも同じ扱いにする。
   // 「取り切るまで戦う」ルールのときだけ別（王の有無では決着しない）。
-  if(!RULES.captureAll){
+  if(royalDecides()){
     const meHas=hasRoyalOnBoard(side), foeHas=hasRoyalOnBoard(-side);
     if(!foeHas || !meHas){
       render();
       // 王を残している側の勝ち。両方失ったら指した側の勝ち。
       endGame(!foeHas ? side : -side);
+      return;
+    }
+  }
+  // 点数だけで勝負するモード：相手の盤上の点数を0にしたら勝ち
+  if(scoreOnlyMode()){
+    const pY=calcPositionScore(1), pE=calcPositionScore(-1);
+    if(pY<=0 || pE<=0){
+      render();
+      const detail='点数計算：あなた '+pY+'点・相手 '+pE+'点';
+      if(pY<=0 && pE<=0) endDraw('双方の点数が0になりました。'+detail);
+      else endGame(pE<=0 ? 1 : -1, 'points', detail);
       return;
     }
   }
@@ -5723,6 +5777,18 @@ function jishogiPoints(side){
   if(RULES.checkPoints) pts += (checkCount[side]||0);
   return pts;
 }
+/* いま画面に出す点数。持将棋の決め方（jishogiMode）で中身が変わる。
+     'points' … 持将棋点（盤上＋領域＋取った駒＋王手）
+     'zero'   … 盤上の点数（盤上の駒価＋領域点）。これが0になった側の負け。
+                取った駒の点は永久に減らないので、0にできる盤上の点だけを見る。 */
+function currentScore(side){
+  return RULES.jishogiMode==='zero' ? calcPositionScore(side) : jishogiPoints(side);
+}
+function scoreLabel(){ return RULES.jishogiMode==='zero' ? '盤上' : '点'; }
+// 「点数だけで勝負する」モードか（王の有無では決着しない）
+function scoreOnlyMode(){ return RULES.jishogiMode==='zero'; }
+// 王の有無で決着するか
+function royalDecides(){ return !RULES.captureAll && !scoreOnlyMode(); }
 // 持将棋成立時の判定：24点未満=負け／31点以上=勝ち／両者24〜30=引き分け（無勝負）
 /* 双方の王が敵陣に入っているか。24点・31点・500手のルールはこのときだけ使う。 */
 function bothRoyalsEntered(){
@@ -5736,10 +5802,13 @@ function resolveJishogi(msg){
     showResult('draw','引き分け', (msg||'持将棋')+'\n通算 '+rec.w+'勝'+rec.l+'敗'+rec.d+'分');
     return;
   }
-  const pY=jishogiPoints(1), pE=jishogiPoints(-1);
+  const pY=currentScore(1), pE=currentScore(-1);
   const detail=(msg?msg+'。':'')+'点数計算：あなた '+pY+'点・相手 '+pE+'点';
   let winner=0;
-  if(bothRoyalsEntered()){
+  if(scoreOnlyMode()){
+    // 点数だけで勝負するモードは単純に多い方の勝ち
+    if(pY>pE) winner=1; else if(pE>pY) winner=-1;
+  } else if(bothRoyalsEntered()){
     // 双方入玉のときだけ 24点未満=負け／31点以上=勝ち／両者24〜30=引き分け
     if(pY>=31 || pE<24) winner=1;
     else if(pE>=31 || pY<24) winner=-1;
@@ -5890,7 +5959,7 @@ const SFX = (function(){
     // 「音・演出」を切ったときも stop() を通して必ず止める。
     // preload="none" なので、ONにするまで1バイトも読み込まない。
     bgm:{
-      playing:false, el:null, idx:0, mode:'all',   // mode: 'all'=順番に全曲 / 'one'=いまの曲をくり返し
+      playing:false, el:null, idx:0, mode:'all',   // 'all'=順番に全曲 / 'one'=くり返し / 'shuffle'=ランダム
       list:[
         {f:'bgm/battle-loop.mp3',             n:'Battle Loop'},
         {f:'bgm/battle-loop-2.mp3',           n:'Battle Loop 2'},
@@ -5910,9 +5979,9 @@ const SFX = (function(){
         if(this.el) return this.el;
         const a=document.createElement('audio');
         a.preload='none'; a.volume=0.42;                  // 効果音を消さない音量
-        a.addEventListener('ended',()=>{                  // 1曲終わったら次へ（全曲モード）
+        a.addEventListener('ended',()=>{                  // 1曲終わったら次へ
           if(!this.playing) return;
-          this.idx=(this.idx+1)%this.list.length;
+          this.idx=this._next();
           this._load(); a.play().catch(()=>{});
           if(typeof onBgmChange==='function') onBgmChange();
         });
@@ -5923,6 +5992,14 @@ const SFX = (function(){
         });
         document.body.appendChild(a);
         return this.el=a;
+      },
+      // 次に流す曲。ランダムは「いまと同じ曲は選ばない」（2曲以上あるとき）
+      _next(){
+        const n=this.list.length;
+        if(this.mode!=='shuffle' || n<2) return (this.idx+1)%n;
+        let i=this.idx;
+        while(i===this.idx) i=Math.floor(Math.random()*n);
+        return i;
       },
       _load(){
         const a=this._el(), t=this.list[this.idx];
@@ -5944,12 +6021,100 @@ const SFX = (function(){
         this._load();
         if(this.playing) this._el().play().catch(()=>{});
       },
-      setMode(m){ this.mode=(m==='one'?'one':'all'); if(this.el) this.el.loop=(this.mode==='one'); }
+      setMode(m){ this.mode=(m==='one'||m==='shuffle')?m:'all'; if(this.el) this.el.loop=(this.mode==='one'); }
     }
   };
 })();
 
 let onBgmChange=null;   // BGMの表示を合わせるための差し込み口（下のトグル側で入れる）
+
+/* ===== 色の設定 =====
+   盤・自分の駒・相手の駒・背景の4つを別々に選べる。中身は CSS 変数の差し替えだけで、
+   対局の内容にも保存データにも影響しない。選んだ色はこの端末に覚えておく。 */
+const THEMES={
+  board:{
+    key:'--board-set', label:'盤',
+    def:'kaya',
+    opts:[
+      {id:'kaya',  n:'榧（きほん）', v:{'--board':'#f0d49a','--board2':'#e6c179','--board-line':'#6b4a1e','--board-edge':'#7a5320','--grid':'#c9a85c'}},
+      {id:'hinoki',n:'白木',         v:{'--board':'#f7e7c8','--board2':'#eed9ac','--board-line':'#8a6b3a','--board-edge':'#a8834a','--grid':'#d8bd88'}},
+      {id:'keyaki',n:'濃い木',       v:{'--board':'#d8a86a','--board2':'#c08f4e','--board-line':'#4a3011','--board-edge':'#5a3d18','--grid':'#a97f42'}},
+      {id:'sumi',  n:'墨（暗い）',   v:{'--board':'#5a5568','--board2':'#46424f','--board-line':'#1d1a24','--board-edge':'#2a2633','--grid':'#6f6980'}},
+      {id:'ai',    n:'藍',           v:{'--board':'#8fb0c8','--board2':'#7196b4','--board-line':'#22394d','--board-edge':'#2f4b63','--grid':'#a6c2d6'}},
+      {id:'midori',n:'若草',         v:{'--board':'#c3d69b','--board2':'#a9c07c','--board-line':'#3d4a24','--board-edge':'#4e5e2e','--grid':'#b3c78c'}}
+    ]
+  },
+  mine:{
+    key:'--mine-set', label:'自分の駒',
+    def:'kiji',
+    opts:[
+      {id:'kiji',  n:'木地（きほん）', v:{'--koma-top':'#fdf0cf','--koma-mid':'#f0d9a4','--koma-bot':'#e9c884','--koma-edge':'#8a6126','--ink':'#2a1d0c'}},
+      {id:'shiro', n:'白',             v:{'--koma-top':'#ffffff','--koma-mid':'#f4f2ee','--koma-bot':'#e2ded6','--koma-edge':'#9a958c','--ink':'#20202a'}},
+      {id:'kuro',  n:'黒',             v:{'--koma-top':'#5c5c6b','--koma-mid':'#42424f','--koma-bot':'#2c2c37','--koma-edge':'#15151c','--ink':'#f2efff'}},
+      {id:'aka',   n:'朱',             v:{'--koma-top':'#ffd0bd','--koma-mid':'#f0a98e','--koma-bot':'#d97f5f','--koma-edge':'#8d3d21','--ink':'#3a1408'}},
+      {id:'ao',    n:'空',             v:{'--koma-top':'#d5ecff','--koma-mid':'#aed5f2','--koma-bot':'#89bade','--koma-edge':'#2f5c80','--ink':'#0d2436'}},
+      {id:'midori',n:'翠',             v:{'--koma-top':'#d3f2dc','--koma-mid':'#a9dfbb','--koma-bot':'#84c69a','--koma-edge':'#2f6b45','--ink':'#0d2a1a'}}
+    ]
+  },
+  foe:{
+    key:'--foe-set', label:'相手の駒',
+    def:'murasaki',
+    opts:[
+      {id:'murasaki',n:'紫（きほん）', v:{'--foe-top':'#b7a6cf','--foe-mid':'#8d7ab0','--foe-bot':'#6a5790','--foe-edge':'#4a3a6e','--foe-ink':'#1a1330'}},
+      {id:'kuro',    n:'黒',           v:{'--foe-top':'#6b6b7a','--foe-mid':'#4a4a58','--foe-bot':'#32323d','--foe-edge':'#17171f','--foe-ink':'#f2efff'}},
+      {id:'aka',     n:'朱',           v:{'--foe-top':'#f0a690','--foe-mid':'#d97a5c','--foe-bot':'#b1553a','--foe-edge':'#71301c','--foe-ink':'#2b0e05'}},
+      {id:'ao',      n:'紺',           v:{'--foe-top':'#9ab6dc','--foe-mid':'#6f8fc0','--foe-bot':'#4e6b9c','--foe-edge':'#2c4268','--foe-ink':'#0b1526'}},
+      {id:'midori',  n:'深緑',         v:{'--foe-top':'#9ecdae','--foe-mid':'#6faa86','--foe-bot':'#4d8563','--foe-edge':'#265138','--foe-ink':'#08210f'}},
+      {id:'kiji',    n:'木地（同色）', v:{'--foe-top':'#fdf0cf','--foe-mid':'#f0d9a4','--foe-bot':'#e9c884','--foe-edge':'#8a6126','--foe-ink':'#2a1d0c'}}
+    ]
+  },
+  bg:{
+    key:'--bg-set', label:'背景',
+    def:'yoru',
+    opts:[
+      {id:'yoru',  n:'夜（きほん）', v:{'--bg1':'#1a1530','--bg2':'#13102a','--bg3':'#0d0a1c'}},
+      {id:'sumi',  n:'墨',           v:{'--bg1':'#26262c','--bg2':'#1b1b20','--bg3':'#111114'}},
+      {id:'ai',    n:'藍',           v:{'--bg1':'#12233a','--bg2':'#0e1b2c','--bg3':'#08111c'}},
+      {id:'mori',  n:'森',           v:{'--bg1':'#14291f','--bg2':'#0f1f18','--bg3':'#0a1410'}},
+      {id:'akane', n:'茜',           v:{'--bg1':'#33161c','--bg2':'#251016','--bg3':'#170a0e'}},
+      {id:'usu',   n:'薄墨（明るめ）',v:{'--bg1':'#4a4658','--bg2':'#3a3746','--bg3':'#2b2934'}}
+    ]
+  }
+};
+const themePick={};
+function applyTheme(){
+  const root=document.documentElement;
+  for(const k of Object.keys(THEMES)){
+    const g=THEMES[k];
+    const o=g.opts.find(x=>x.id===themePick[k]) || g.opts.find(x=>x.id===g.def);
+    for(const [name,val] of Object.entries(o.v)) root.style.setProperty(name,val);
+  }
+  try{ localStorage.setItem('shogiTheme', JSON.stringify(themePick)); }catch(_){}
+}
+function initTheme(){
+  let saved={};
+  try{ saved=JSON.parse(localStorage.getItem('shogiTheme')||'{}')||{}; }catch(_){}
+  for(const k of Object.keys(THEMES)){
+    const g=THEMES[k];
+    themePick[k]= g.opts.some(o=>o.id===saved[k]) ? saved[k] : g.def;
+    const sel=document.getElementById('th'+k[0].toUpperCase()+k.slice(1));
+    if(!sel) continue;
+    sel.innerHTML='';
+    g.opts.forEach(o=>{ const e=document.createElement('option'); e.value=o.id; e.textContent=o.n; sel.appendChild(e); });
+    sel.value=themePick[k];
+    sel.onchange=e=>{ themePick[k]=e.target.value; applyTheme(); };
+  }
+  const rs=document.getElementById('thReset');
+  if(rs) rs.onclick=()=>{
+    for(const k of Object.keys(THEMES)){
+      themePick[k]=THEMES[k].def;
+      const sel=document.getElementById('th'+k[0].toUpperCase()+k.slice(1));
+      if(sel) sel.value=themePick[k];
+    }
+    applyTheme();
+  };
+  applyTheme();
+}
 
 /* ===== 着手の演出（取る・打つ・裏返る・着地・勝敗） ===== */
 let pendingFx=null; // applyMoveSilentで記録→render後に再生
@@ -6288,8 +6453,9 @@ function cutIn(text, kind){
     const onB=SFX.bgm.playing;
     if(bgmBtn){ bgmBtn.textContent='🎵 BGM：'+(onB?'ON':'OFF'); bgmBtn.classList.toggle('on',onB); }
     if(sel){ sel.value=String(SFX.bgm.idx); sel.classList.toggle('on',onB); }
-    if(modeBtn){ const one=SFX.bgm.mode==='one';
-      modeBtn.textContent=one?'🔂 1曲':'🔁 全曲'; modeBtn.classList.toggle('on',one); }
+    if(modeBtn){ const m=SFX.bgm.mode;
+      modeBtn.textContent = m==='one'?'🔂 1曲' : m==='shuffle'?'🔀 ランダム' : '🔁 全曲';
+      modeBtn.classList.toggle('on', m!=='all'); }
     if(msg) setStatus('BGMを'+msg+'（bgm/ のファイルを確認してください）','think');
   };
   onBgmChange=updBgm;                 // 曲が変わった・読めなかったときに表示を合わせる
@@ -6299,7 +6465,11 @@ function cutIn(text, kind){
     updBgm();
   };
   if(sel) sel.onchange=e=>{ SFX.bgm.select(+e.target.value); updBgm(); };
-  if(modeBtn) modeBtn.onclick=()=>{ SFX.bgm.setMode(SFX.bgm.mode==='one'?'all':'one'); updBgm(); };
+  // 全曲 → 1曲 → ランダム → 全曲 …
+  if(modeBtn) modeBtn.onclick=()=>{
+    const nx={all:'one', one:'shuffle', shuffle:'all'};
+    SFX.bgm.setMode(nx[SFX.bgm.mode]||'all'); updBgm();
+  };
   updBgm();
   const rb=document.getElementById('resultBanner');
   const hide=()=>{ if(rb){ rb.classList.remove('show'); rb.querySelectorAll('.confetti').forEach(c=>c.remove()); } };
@@ -7602,6 +7772,7 @@ newGame();
 syncSizeUI();    // 盤の設定（行・列・敵陣の深さ・九宮）の表示を起動時から実際の値に合わせる
 rememberSetup(); // 起動時の本将棋配置を初期配置として記憶
 paused=true; updatePlayPauseLabel();
+initTheme();
 setStatus('▶ 開始 で対局を始めます（あなたが手動なら盤をタップ）');
 
 </script>
