@@ -831,7 +831,7 @@
   .board-setup .bs-note, .rule-note, .sub{color:#9c8fc7 !important;}
   .board-setup .bs-pending{color:var(--gold) !important;}
   /* BGMの曲を選ぶ行 */
-  .controls.bgm-row{display:flex;gap:8px;width:100%;max-width:430px;align-items:stretch;}
+  .controls.bgm-row{display:flex;flex-wrap:nowrap;gap:8px;width:100%;max-width:430px;align-items:stretch;}
   .controls.bgm-row select{flex:1 1 auto;min-width:0;font-size:.86rem;padding:9px 10px;border-radius:11px;
     background:#2a2142;color:#ece3ff;border:1px solid rgba(139,107,255,.45);}
   .controls.bgm-row select.on{border-color:rgba(245,207,107,.7);color:var(--gold);}
@@ -5892,11 +5892,19 @@ const SFX = (function(){
     bgm:{
       playing:false, el:null, idx:0, mode:'all',   // mode: 'all'=順番に全曲 / 'one'=いまの曲をくり返し
       list:[
-        {f:'bgm/battle-loop.mp3',           n:'Battle Loop'},
-        {f:'bgm/kuro-kesa-pulse.mp3',       n:'Kuro Kesa Pulse'},
-        {f:'bgm/kimon-no-kodou.mp3',        n:'鬼門の鼓動'},
-        {f:'bgm/teion-no-shugeki.mp3',      n:'低音の襲撃'},
-        {f:'bgm/susume-monster-battle.mp3', n:'進め モンスターバトル'}
+        {f:'bgm/battle-loop.mp3',             n:'Battle Loop'},
+        {f:'bgm/battle-loop-2.mp3',           n:'Battle Loop 2'},
+        {f:'bgm/kuro-kesa-pulse.mp3',         n:'Kuro Kesa Pulse'},
+        {f:'bgm/kuro-kesa-pulse-2.mp3',       n:'Kuro Kesa Pulse 2'},
+        {f:'bgm/kurogane-pulse.mp3',          n:'Kurogane Pulse'},
+        {f:'bgm/crimson-shamisen-clash.mp3',  n:'Crimson Shamisen Clash'},
+        {f:'bgm/crimson-shamisen-clash-2.mp3',n:'Crimson Shamisen Clash 2'},
+        {f:'bgm/kimon-no-kodou.mp3',          n:'鬼門の鼓動'},
+        {f:'bgm/teion-no-shugeki.mp3',        n:'低音の襲撃'},
+        {f:'bgm/teion-no-shugeki-2.mp3',      n:'低音の襲撃 2'},
+        {f:'bgm/susume-monster-battle.mp3',   n:'進め モンスターバトル'},
+        {f:'bgm/susume-monster-battle-2.mp3', n:'進め モンスターバトル 2'},
+        {f:'bgm/mudai.mp3',                   n:'無題'}
       ],
       _el(){
         if(this.el) return this.el;

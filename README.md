@@ -479,10 +479,21 @@ royal を取って持ち駒にしても、取られた側の盤上に別の roya
 | 曲 | ファイル | 長さ | 大きさ |
 |---|---|---|---|
 | Battle Loop | `bgm/battle-loop.mp3` | 2分43秒 | 3.8MB |
+| Battle Loop 2 | `bgm/battle-loop-2.mp3` | 3分26秒 | 4.6MB |
 | Kuro Kesa Pulse | `bgm/kuro-kesa-pulse.mp3` | 3分35秒 | 5.3MB |
+| Kuro Kesa Pulse 2 | `bgm/kuro-kesa-pulse-2.mp3` | 3分52秒 | 5.4MB |
+| Kurogane Pulse | `bgm/kurogane-pulse.mp3` | 3分17秒 | 4.7MB |
+| Crimson Shamisen Clash | `bgm/crimson-shamisen-clash.mp3` | 3分29秒 | 5.0MB |
+| Crimson Shamisen Clash 2 | `bgm/crimson-shamisen-clash-2.mp3` | 3分48秒 | 5.4MB |
 | 鬼門の鼓動 | `bgm/kimon-no-kodou.mp3` | 4分01秒 | 5.6MB |
 | 低音の襲撃 | `bgm/teion-no-shugeki.mp3` | 4分30秒 | 6.2MB |
+| 低音の襲撃 2 | `bgm/teion-no-shugeki-2.mp3` | 4分05秒 | 5.7MB |
 | 進め モンスターバトル | `bgm/susume-monster-battle.mp3` | 4分22秒 | 6.0MB |
+| 進め モンスターバトル 2 | `bgm/susume-monster-battle-2.mp3` | 4分32秒 | 6.2MB |
+| 無題 | `bgm/mudai.mp3` | 4分55秒 | 7.0MB |
+
+曲名は mp3 の ID3 タグ（TIT2）から取っている。同じ題の別テイクは末尾に 2 を付けて区別する。
+`無題` は ID3 の題が Untitled のもの。
 
 BGMボタンの下の欄で曲を選ぶ。🔁 **全曲**＝1曲終わったら次の曲へ（最後まで行ったら先頭に戻る）／
 🔂 **1曲**＝いまの曲をくり返す。音量は 0.42 固定（効果音を消さないため）。
