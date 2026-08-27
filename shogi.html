@@ -1048,7 +1048,7 @@
     <div class="bs-row"><label for="thFoe">相手の駒</label><select id="thFoe"></select></div>
     <div class="bs-row"><label for="thBg">背景</label><select id="thBg"></select></div>
     <div class="bs-row"><button type="button" id="thReset">色を元に戻す</button></div>
-    <div class="bs-note">色はこの端末に覚えます。対局の内容・保存データには影響しません。</div>
+    <div class="bs-note">4つとも同じ色の一覧から選べます。背景はどの色でも文字が読めるよう暗めに寄せてあります。色はこの端末に覚えます。対局の内容・保存データには影響しません。</div>
    </div>
   </div>
   <div class="acc" id="accEdit">
@@ -6065,87 +6065,131 @@ const SFX = (function(){
 let onBgmChange=null;   // BGMの表示を合わせるための差し込み口（下のトグル側で入れる）
 
 /* ===== 色の設定 =====
-   盤・自分の駒・相手の駒・背景の4つを別々に選べる。中身は CSS 変数の差し替えだけで、
-   対局の内容にも保存データにも影響しない。選んだ色はこの端末に覚えておく。 */
-const THEMES={
-  board:{
-    key:'--board-set', label:'盤',
-    def:'kaya',
-    opts:[
-      {id:'kaya',  n:'榧（きほん）', v:{'--board':'#f0d49a','--board2':'#e6c179','--board-line':'#6b4a1e','--board-edge':'#7a5320','--grid':'#c9a85c'}},
-      {id:'hinoki',n:'白木',         v:{'--board':'#f7e7c8','--board2':'#eed9ac','--board-line':'#8a6b3a','--board-edge':'#a8834a','--grid':'#d8bd88'}},
-      {id:'keyaki',n:'濃い木',       v:{'--board':'#d8a86a','--board2':'#c08f4e','--board-line':'#4a3011','--board-edge':'#5a3d18','--grid':'#a97f42'}},
-      {id:'sumi',  n:'墨（暗い）',   v:{'--board':'#5a5568','--board2':'#46424f','--board-line':'#1d1a24','--board-edge':'#2a2633','--grid':'#6f6980'}},
-      {id:'ai',    n:'藍',           v:{'--board':'#8fb0c8','--board2':'#7196b4','--board-line':'#22394d','--board-edge':'#2f4b63','--grid':'#a6c2d6'}},
-      {id:'midori',n:'若草',         v:{'--board':'#c3d69b','--board2':'#a9c07c','--board-line':'#3d4a24','--board-edge':'#4e5e2e','--grid':'#b3c78c'}}
-    ]
-  },
-  mine:{
-    key:'--mine-set', label:'自分の駒',
-    def:'kiji',
-    opts:[
-      {id:'kiji',  n:'木地（きほん）', v:{'--koma-top':'#fdf0cf','--koma-mid':'#f0d9a4','--koma-bot':'#e9c884','--koma-edge':'#8a6126','--ink':'#2a1d0c'}},
-      {id:'shiro', n:'白',             v:{'--koma-top':'#ffffff','--koma-mid':'#f4f2ee','--koma-bot':'#e2ded6','--koma-edge':'#9a958c','--ink':'#20202a'}},
-      {id:'kuro',  n:'黒',             v:{'--koma-top':'#5c5c6b','--koma-mid':'#42424f','--koma-bot':'#2c2c37','--koma-edge':'#15151c','--ink':'#f2efff'}},
-      {id:'aka',   n:'朱',             v:{'--koma-top':'#ffd0bd','--koma-mid':'#f0a98e','--koma-bot':'#d97f5f','--koma-edge':'#8d3d21','--ink':'#3a1408'}},
-      {id:'ao',    n:'空',             v:{'--koma-top':'#d5ecff','--koma-mid':'#aed5f2','--koma-bot':'#89bade','--koma-edge':'#2f5c80','--ink':'#0d2436'}},
-      {id:'midori',n:'翠',             v:{'--koma-top':'#d3f2dc','--koma-mid':'#a9dfbb','--koma-bot':'#84c69a','--koma-edge':'#2f6b45','--ink':'#0d2a1a'}}
-    ]
-  },
-  foe:{
-    key:'--foe-set', label:'相手の駒',
-    def:'murasaki',
-    opts:[
-      {id:'murasaki',n:'紫（きほん）', v:{'--foe-top':'#b7a6cf','--foe-mid':'#8d7ab0','--foe-bot':'#6a5790','--foe-edge':'#4a3a6e','--foe-ink':'#1a1330'}},
-      {id:'kuro',    n:'黒',           v:{'--foe-top':'#6b6b7a','--foe-mid':'#4a4a58','--foe-bot':'#32323d','--foe-edge':'#17171f','--foe-ink':'#f2efff'}},
-      {id:'aka',     n:'朱',           v:{'--foe-top':'#f0a690','--foe-mid':'#d97a5c','--foe-bot':'#b1553a','--foe-edge':'#71301c','--foe-ink':'#2b0e05'}},
-      {id:'ao',      n:'紺',           v:{'--foe-top':'#9ab6dc','--foe-mid':'#6f8fc0','--foe-bot':'#4e6b9c','--foe-edge':'#2c4268','--foe-ink':'#0b1526'}},
-      {id:'midori',  n:'深緑',         v:{'--foe-top':'#9ecdae','--foe-mid':'#6faa86','--foe-bot':'#4d8563','--foe-edge':'#265138','--foe-ink':'#08210f'}},
-      {id:'kiji',    n:'木地（同色）', v:{'--foe-top':'#fdf0cf','--foe-mid':'#f0d9a4','--foe-bot':'#e9c884','--foe-edge':'#8a6126','--foe-ink':'#2a1d0c'}}
-    ]
-  },
-  bg:{
-    key:'--bg-set', label:'背景',
-    def:'yoru',
-    opts:[
-      {id:'yoru',  n:'夜（きほん）', v:{'--bg1':'#1a1530','--bg2':'#13102a','--bg3':'#0d0a1c'}},
-      {id:'sumi',  n:'墨',           v:{'--bg1':'#26262c','--bg2':'#1b1b20','--bg3':'#111114'}},
-      {id:'ai',    n:'藍',           v:{'--bg1':'#12233a','--bg2':'#0e1b2c','--bg3':'#08111c'}},
-      {id:'mori',  n:'森',           v:{'--bg1':'#14291f','--bg2':'#0f1f18','--bg3':'#0a1410'}},
-      {id:'akane', n:'茜',           v:{'--bg1':'#33161c','--bg2':'#251016','--bg3':'#170a0e'}},
-      {id:'usu',   n:'薄墨（明るめ）',v:{'--bg1':'#4a4658','--bg2':'#3a3746','--bg3':'#2b2934'}}
-    ]
-  }
-};
+   盤・自分の駒・相手の駒・背景の4つを別々に選べる。
+   **同じ色の一覧を4つとも共有する**ので、どの色もどこにでも使える。
+   1色につき「盤として使うとき」「駒として使うとき」「背景として使うとき」の
+   3組の値を持たせてある（背景は文字が読めるよう、どの色も暗めに寄せてある）。
+   中身は CSS 変数の差し替えだけで、対局の内容にも保存データにも影響しない。
+   選んだ色はこの端末に覚えておく。 */
+const PALETTE=[
+  {id:'kiji', n:'木地',
+   board:{f:'#f0d49a',f2:'#e6c179',line:'#6b4a1e',edge:'#7a5320',grid:'#c9a85c'},
+   koma:{top:'#fdf0cf',mid:'#f0d9a4',bot:'#e9c884',edge:'#8a6126',ink:'#2a1d0c'},
+   bg:['#2a2118','#1f1811','#14100b']},
+  {id:'shiraki', n:'白木',
+   board:{f:'#f7e7c8',f2:'#eed9ac',line:'#8a6b3a',edge:'#a8834a',grid:'#d8bd88'},
+   koma:{top:'#fff8ea',mid:'#f6e8cd',bot:'#ead7b0',edge:'#a8864f',ink:'#3a2c16'},
+   bg:['#332b20','#262017','#1a150f']},
+  {id:'koiki', n:'濃い木',
+   board:{f:'#d8a86a',f2:'#c08f4e',line:'#4a3011',edge:'#5a3d18',grid:'#a97f42'},
+   koma:{top:'#d9ab72',mid:'#c69257',bot:'#a9773f',edge:'#5e3f18',ink:'#241704'},
+   bg:['#241a0e','#1a130a','#110c06']},
+  {id:'shiro', n:'白',
+   board:{f:'#f4f2ee',f2:'#e4e0d8',line:'#8d8880',edge:'#a09a90',grid:'#cfcac0'},
+   koma:{top:'#ffffff',mid:'#f4f2ee',bot:'#e2ded6',edge:'#9a958c',ink:'#20202a'},
+   bg:['#35343a','#28272c','#1b1a1e']},
+  {id:'kuro', n:'黒',
+   board:{f:'#5c5c6b',f2:'#45454f',line:'#17171f',edge:'#23232c',grid:'#6f6f7e'},
+   koma:{top:'#5c5c6b',mid:'#42424f',bot:'#2c2c37',edge:'#15151c',ink:'#f2efff'},
+   bg:['#26262c','#1b1b20','#111114']},
+  {id:'sumi', n:'墨',
+   board:{f:'#6a6578',f2:'#524e5e',line:'#1d1a24',edge:'#2a2633',grid:'#7d7790'},
+   koma:{top:'#74707f',mid:'#5a5666',bot:'#423f4c',edge:'#211e28',ink:'#f0edf8'},
+   bg:['#2b2833','#201e27','#16141b']},
+  {id:'usuzumi', n:'薄墨',
+   board:{f:'#cfcbd8',f2:'#b5b0c2',line:'#4a4658',edge:'#5d5870',grid:'#bdb8ca'},
+   koma:{top:'#ddd9e8',mid:'#c3bed2',bot:'#a9a3ba',edge:'#5d5870',ink:'#23202c'},
+   bg:['#4a4658','#3a3746','#2b2934']},
+  {id:'murasaki', n:'紫',
+   board:{f:'#c9bbe0',f2:'#b0a0cd',line:'#3a2d55',edge:'#4a3a6e',grid:'#a294c0'},
+   koma:{top:'#b7a6cf',mid:'#8d7ab0',bot:'#6a5790',edge:'#4a3a6e',ink:'#1a1330'},
+   bg:['#241c3d','#1a142d','#110d1e']},
+  {id:'yoru', n:'夜',
+   board:{f:'#8f86bd',f2:'#7166a3',line:'#241c46',edge:'#332a5c',grid:'#9d94c9'},
+   koma:{top:'#a89ed6',mid:'#8479b8',bot:'#665c93',edge:'#332a5c',ink:'#100b26'},
+   bg:['#1a1530','#13102a','#0d0a1c']},
+  {id:'shu', n:'朱',
+   board:{f:'#f0b49c',f2:'#dd9578',line:'#6b2c14',edge:'#8d3d21',grid:'#c98a6d'},
+   koma:{top:'#ffd0bd',mid:'#f0a98e',bot:'#d97f5f',edge:'#8d3d21',ink:'#3a1408'},
+   bg:['#3a1a12','#2a120d','#1b0b08']},
+  {id:'akane', n:'茜',
+   board:{f:'#e0a3ad',f2:'#c9808d',line:'#5a2029',edge:'#71303a',grid:'#bb8a93'},
+   koma:{top:'#f5c0c8',mid:'#de98a3',bot:'#c2717e',edge:'#77303c',ink:'#330d14'},
+   bg:['#33161c','#251016','#170a0e']},
+  {id:'ai', n:'藍',
+   board:{f:'#8fb0c8',f2:'#7196b4',line:'#22394d',edge:'#2f4b63',grid:'#a6c2d6'},
+   koma:{top:'#b7d3e6',mid:'#8fb4cf',bot:'#6d93b0',edge:'#2f4b63',ink:'#0c2231'},
+   bg:['#12233a','#0e1b2c','#08111c']},
+  {id:'kon', n:'紺',
+   board:{f:'#94a9c9',f2:'#7189b0',line:'#1e2c47',edge:'#2c4268',grid:'#a2b4cf'},
+   koma:{top:'#9ab6dc',mid:'#6f8fc0',bot:'#4e6b9c',edge:'#2c4268',ink:'#0b1526'},
+   bg:['#141c33','#0f1526','#0a0e19']},
+  {id:'sora', n:'空',
+   board:{f:'#cfe6f7',f2:'#aecfe9',line:'#35566e',edge:'#45708e',grid:'#b9d5ea'},
+   koma:{top:'#d5ecff',mid:'#aed5f2',bot:'#89bade',edge:'#2f5c80',ink:'#0d2436'},
+   bg:['#1a2c3d','#13212e','#0d161f']},
+  {id:'midori', n:'翠',
+   board:{f:'#c2e6cd',f2:'#a1d3b1',line:'#2c5a3f',edge:'#3a7351',grid:'#aed7ba'},
+   koma:{top:'#d3f2dc',mid:'#a9dfbb',bot:'#84c69a',edge:'#2f6b45',ink:'#0d2a1a'},
+   bg:['#14291f','#0f1f18','#0a1410']},
+  {id:'fukamidori', n:'深緑',
+   board:{f:'#9ec5aa',f2:'#7ba888',line:'#1f4630',edge:'#2b5c40',grid:'#93bd9f'},
+   koma:{top:'#9ecdae',mid:'#6faa86',bot:'#4d8563',edge:'#265138',ink:'#08210f'},
+   bg:['#11241a','#0c1a13','#08110c']},
+  {id:'mori', n:'森',
+   board:{f:'#9dbf9f',f2:'#7fa382',line:'#1e3a24',edge:'#2a4d31',grid:'#93b596'},
+   koma:{top:'#b3d4b5',mid:'#8db390',bot:'#6e946f',edge:'#2a4d31',ink:'#0b1c0e'},
+   bg:['#16281a','#101e13','#0a140d']},
+  {id:'wakakusa', n:'若草',
+   board:{f:'#c3d69b',f2:'#a9c07c',line:'#3d4a24',edge:'#4e5e2e',grid:'#b3c78c'},
+   koma:{top:'#dbeaad',mid:'#bfd489',bot:'#a0b76a',edge:'#4b5c28',ink:'#1e2708'},
+   bg:['#222b14','#19200f','#10150a']}
+];
+// どの役でどの色が「きほん」か
+const THEME_DEFAULT={board:'kiji', mine:'kiji', foe:'murasaki', bg:'yoru'};
+const THEME_SLOTS=[['board','盤','thBoard'],['mine','自分の駒','thMine'],
+                   ['foe','相手の駒','thFoe'],['bg','背景','thBg']];
+// 古い保存に入っていた名前を今の名前へ
+const THEME_ALIAS={aka:'shu', hinoki:'shiraki', keyaki:'koiki', usu:'usuzumi'};
 const themePick={};
+function paletteOf(id){ return PALETTE.find(p=>p.id===id) || PALETTE[0]; }
 function applyTheme(){
-  const root=document.documentElement;
-  for(const k of Object.keys(THEMES)){
-    const g=THEMES[k];
-    const o=g.opts.find(x=>x.id===themePick[k]) || g.opts.find(x=>x.id===g.def);
-    for(const [name,val] of Object.entries(o.v)) root.style.setProperty(name,val);
-  }
+  const root=document.documentElement, set=(k,v)=>root.style.setProperty(k,v);
+  const b=paletteOf(themePick.board).board;
+  set('--board',b.f); set('--board2',b.f2); set('--board-line',b.line);
+  set('--board-edge',b.edge); set('--grid',b.grid);
+  const m=paletteOf(themePick.mine).koma;
+  set('--koma-top',m.top); set('--koma-mid',m.mid); set('--koma-bot',m.bot);
+  set('--koma-edge',m.edge); set('--ink',m.ink);
+  const f=paletteOf(themePick.foe).koma;
+  set('--foe-top',f.top); set('--foe-mid',f.mid); set('--foe-bot',f.bot);
+  set('--foe-edge',f.edge); set('--foe-ink',f.ink);
+  const g=paletteOf(themePick.bg).bg;
+  set('--bg1',g[0]); set('--bg2',g[1]); set('--bg3',g[2]);
   try{ localStorage.setItem('shogiTheme', JSON.stringify(themePick)); }catch(_){}
 }
 function initTheme(){
   let saved={};
   try{ saved=JSON.parse(localStorage.getItem('shogiTheme')||'{}')||{}; }catch(_){}
-  for(const k of Object.keys(THEMES)){
-    const g=THEMES[k];
-    themePick[k]= g.opts.some(o=>o.id===saved[k]) ? saved[k] : g.def;
-    const sel=document.getElementById('th'+k[0].toUpperCase()+k.slice(1));
+  for(const [slot,label,id] of THEME_SLOTS){
+    let v=THEME_ALIAS[saved[slot]] || saved[slot];
+    themePick[slot]= PALETTE.some(p=>p.id===v) ? v : THEME_DEFAULT[slot];
+    const sel=document.getElementById(id);
     if(!sel) continue;
     sel.innerHTML='';
-    g.opts.forEach(o=>{ const e=document.createElement('option'); e.value=o.id; e.textContent=o.n; sel.appendChild(e); });
-    sel.value=themePick[k];
-    sel.onchange=e=>{ themePick[k]=e.target.value; applyTheme(); };
+    PALETTE.forEach(p=>{
+      const e=document.createElement('option'); e.value=p.id;
+      e.textContent=p.n + (p.id===THEME_DEFAULT[slot] ? '（きほん）' : '');
+      sel.appendChild(e);
+    });
+    sel.value=themePick[slot];
+    sel.onchange=e=>{ themePick[slot]=e.target.value; applyTheme(); };
   }
   const rs=document.getElementById('thReset');
   if(rs) rs.onclick=()=>{
-    for(const k of Object.keys(THEMES)){
-      themePick[k]=THEMES[k].def;
-      const sel=document.getElementById('th'+k[0].toUpperCase()+k.slice(1));
-      if(sel) sel.value=themePick[k];
+    for(const [slot,label,id] of THEME_SLOTS){
+      themePick[slot]=THEME_DEFAULT[slot];
+      const sel=document.getElementById(id); if(sel) sel.value=themePick[slot];
     }
     applyTheme();
   };
