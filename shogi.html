@@ -2710,7 +2710,8 @@ function kifuToText(){
     const who=k.side===1?'▲':'△';
     if(k.pass) return (i+1)+'. '+who+'パス（着手放棄）';
     const L=k.pt?'◇':'';   // 交点の手は◇を付けて、マスの座標と区別する
-    const to=L+'('+(k.to?(k.to[0]+1)+'行'+(k.to[1]+1)+'列':'?')+')';
+    const LT=(k.toPt!==undefined? k.toPt : k.pt)?'◇':'';   // 行き先の層（層をまたぐ手は違う）
+    const to=LT+'('+(k.to?(k.to[0]+1)+'行'+(k.to[1]+1)+'列':'?')+')';
     const nmOf=t=>KANJI[t]||t;
     // 同じ層の取り＋相手レイヤーの取り（共有点・飛び越え）＋囲みで取った分をまとめて出す
     const shown = (k.cap?[k.cap]:[]).concat(k.xcapCodes||[], k.enclCap||[]);
@@ -3079,7 +3080,7 @@ function moves(b,r,c){
   }
   // p=1(あなた)は前=上(dr<0)のまま。p=-1(相手)は前後を反転（dr,dcを反転）
   const flip = p===-1;
-  const res=[];
+  let res=[];
   const vecs=moveVecs(pc.t);
   for(const v of vecs){
     let dr=v.dr, dc=v.dc;
@@ -3118,8 +3119,18 @@ function moves(b,r,c){
     if(!ownHalf(r)) return [];                       // すでに河の向こうなら動けない
     return res.filter(([tr])=>ownHalf(tr));
   }
-  // 斜めに動ける駒は、半歩ずれた「もう一方のレイヤー」の点にも進める
-  if(crossLayerOn(b,r,c)) res.push(...crossLayerMoves(b,r,c,p,flip,vecs));
+  /* 斜めに動ける駒は、半歩ずれた「もう一方のレイヤー」の点にも進める。
+     層を行き来できないルール（交点の駒は交点だけ／マスの駒はマスだけ）でも、
+     九宮の交差マス（×）は「マスであり交点でもある共有点」なので、そこへだけは入れる。 */
+  {
+    const cl = crossLayerMoves(b,r,c,p,flip,vecs);
+    if(crossLayerOn(b,r,c)) res.push(...cl);
+    else {
+      // 半歩ななめの隣（自分を囲む4つ）だけ。走って遠くの×まで行くことはできない
+      const near = new Set(surroundNeighbors(!!(b&&b.isPts),r,c).other.map(x=>x[0]+'_'+x[1]));
+      res.push(...cl.filter(([tr,tc])=>isSharedPoint(tr,tc) && near.has(tr+'_'+tc)));
+    }
+  }
   // 範囲攻撃（大将・副将・角将・飛将・猛龍・飛鰐）：格下駒を飛び越えて進める
   if(hasRangeAttack(pc.t)){
     const myRank=pieceRank(pc.t);
@@ -3156,6 +3167,9 @@ function moves(b,r,c){
       if(!isPalacePoint(r,c)) return [];                         // 宮の点に居ない
       const okDiag=new Set(here.map(d=>d[0]+','+d[1]));
       const diagOnly=isDiagOnlyPalace(pc.t);
+      // 層をまたぐ手はこの絞り込みの対象外。交差マス（×）＝宮の共有点へだけは入れる
+      const crossOK=res.filter(m=>m[2] && isSharedPoint(m[0],m[1]));
+      res=res.filter(m=>!m[2]);
       let out=res.filter(([tr,tc])=>{
         const dr=Math.sign(tr-r), dc=Math.sign(tc-c);
         if(!isPalacePoint(tr,tc)) return false;                  // 行き先も宮の点
@@ -3172,6 +3186,20 @@ function moves(b,r,c){
         const q=b[nr][nc]; if(q&&q.p===p) continue;
         if(!out.some(([a,bb])=>a===nr&&bb===nc)) out.push([nr,nc]);
       }
+      out.push(...crossOK);
+      /* 交差マス（×）は「マスであり交点でもある共有点」。宮の斜め線に沿って半歩進めば
+         その中へ入れる。漢・楚・士は自分の動きに斜めが無いので、ここで足す。
+         （斜めに動ける駒は crossOK 側で拾われる） */
+      if(isJPalaceBound(pc.t)){
+        const o=otherLayer(b);
+        for(const [dr,dc] of here){
+          const cr=r+(dr>0?0:-1), cc=c+(dc>0?0:-1);
+          if(cr<0||cr>=NR||cc<0||cc>=NC) continue;
+          if(getDiag(cr,cc)!=='x') continue;
+          const q=o&&o[cr]&&o[cr][cc]; if(q&&q.p===p) continue;
+          if(!out.some(m=>m[2]&&m[0]===cr&&m[1]===cc)) out.push([cr,cc,1]);
+        }
+      }
       return out;
     }
     // マスの中に居るとき：仕/士は斜め線の向きだけ、帥/漢は宮のマス（＋交差マスの縦横1マス隣）
@@ -3179,6 +3207,9 @@ function moves(b,r,c){
     if(RULES.palaceEscape) return res;                           // 宮の外にも出られる設定
     if(!isPalaceCell(r,c)) return [];                            // 宮の外に居る場合は動けない
     const diagOnlyCell=isDiagOnlyPalace(pc.t);
+    // 層をまたぐ手はこの絞り込みの対象外。交差マス（×）＝宮の共有点へだけは入れる
+    const crossOKc=res.filter(m=>m[2] && isSharedPoint(m[0],m[1]));
+    res=res.filter(m=>!m[2]);
     return res.filter(([tr,tc])=>{
       if(!isPalaceCell(tr,tc)) return false;
       // 仕・士は行った先のマスにも線が無いと、そこから動けなくなる
@@ -3187,7 +3218,7 @@ function moves(b,r,c){
       // 仕・士（斜めにしか動かない駒）は、そのマスに引かれた線の向きにだけ進める
       if(dr&&dc && !diagHas(r,c, dr===dc?'l':'r')) return false;
       return true;
-    });
+    }).concat(crossOKc);
   }
   // チャンギの車は宮の斜め線に沿って走れる
   if((pc.t==='JR'||pc.t==='JRb')) res.push(...janggiDiagMoves(b,r,c,p,'slide'));
@@ -4883,8 +4914,9 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
       if(isRoyal(tg.t)) king=true;
       if(RULES.drops) myCap.push(capturedCode(tg));
     }
-    // 九宮の交差マス（2層の共有点）では、もう一方のレイヤーの敵も取れる
-    const sh=ob[m.tr]&&ob[m.tr][m.tc];
+    // 九宮の交差マス（2層の共有点）では、もう一方のレイヤーの敵も取れる。
+    // ただし層をまたいで着地したときは ob が着地した層そのものなので、tg と二重に数えない
+    const sh=(ob!==db)?(ob[m.tr]&&ob[m.tr][m.tc]):null;
     if(isSharedPoint(m.tr,m.tc) && sh && sh.p!==p){
       if(isRoyal(sh.t)) king=true; if(RULES.drops) myCap.push(capturedCode(sh));
       ob[m.tr][m.tc]=null;
@@ -5577,7 +5609,8 @@ function applyMoveSilent(side,m,_legacySilent){
     //   ・九宮の交差マス（2層の共有点）に居る敵
     //   ・斜めに飛び越えて動く駒が跳び越えた先に居る敵
     const xcaps=[];
-    const shTg = OB[m.tr] && OB[m.tr][m.tc];
+    // 層をまたいで着地した場合、OB は着地した層そのもの。移動先の駒は tg で取るので二重に数えない
+    const shTg = (OB!==DB) ? (OB[m.tr] && OB[m.tr][m.tc]) : null;
     if(isSharedPoint(m.tr,m.tc) && shTg && shTg.p!==side) xcaps.push([m.tr,m.tc,shTg.t]);
     for(const [cr,cc] of crossJumpPoints(LB, pc.t, m.fr, m.fc, m.tr, m.tc, side)){
       const v=OB[cr] && OB[cr][cc];
