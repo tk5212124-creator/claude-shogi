@@ -1321,9 +1321,11 @@
       <label class="rule-row"><input type="checkbox" id="rRandomPromote"> 成り先のない駒は、成るとき全駒からランダムな駒に変化する（王将・玉将はroyalな駒へ）</label>
       <label class="rule-row"><input type="checkbox" id="rCaptureAll"> 相手の駒を全て取る（取り切る）まで戦う（王の有無に関係なく勝敗判定。囲碁・オセロ・はさみ将棋向け）</label>
       <label class="rule-row"><input type="checkbox" id="rScoreOnly"> 点数だけで勝負する</label>
-      <p class="rule-note" style="margin:2px 0 6px;">上の「相手の駒を全て取るまで戦う」と<b>両方ON</b>にしたときだけ効きます。
-      盤上の駒価＋囲碁の領域点だけを数え、相手のその点数が無くなるまで戦います（取った駒の点は減らないので数えません）。
-      どちらか一方でも外れていれば、王を取った時点で決着します。点数は持ち駒の欄にいつも出ます。</p>
+      <p class="rule-note" style="margin:2px 0 6px;">勝ち負けを点数で決めます。数えるのは<b>盤上の駒価＋囲碁の領域点</b>だけです
+      （取った駒の点は減らないので数えません）。これだけONなら、終わり方は今までどおり王を取った時点ですが、
+      <b>どちらが王を取ったかに関係なく点数の多い方の勝ち</b>になります。
+      上の「相手の駒を全て取るまで戦う」と<b>両方ON</b>にすると、王を取っても終わらず、
+      <b>相手の点数が無くなった時点で決着</b>します。点数は持ち駒の欄にいつも出ます。</p>
       <p class="rule-note" style="margin:6px 0 2px;">シャンチー（中国象棋）</p>
       <label class="rule-row"><input type="checkbox" id="rFlyingGeneral"> 王不見王（帥と将を同じ筋で相対させる手は指せない。全ての手が相対になる場合は負け）</label>
       <label class="rule-row"><input type="checkbox" id="rPalaceEscape"> 九宮の駒（帥・將／仕・士）が宮マスの外にも出られるようにする（九宮ONのときだけ効きます）</label>
@@ -3937,12 +3939,12 @@ function renderCap(id,arr,p){
   const el=document.getElementById(id);
   el.innerHTML='<span class="lbl">'+(p===1?'あなた':'相手')+'</span>';
   // 点数で勝敗を決める設定のときは、その時点の点数をいつも出す
-  if(RULES.jishogiMode==='points' || scoreOnlyMode()){
+  if(RULES.jishogiMode==='points' || scoreDecides()){
     const sc=document.createElement('span');
-    sc.className='cap-score'+(scoreOnlyMode()?' zero':'');
+    sc.className='cap-score'+(scoreDecides()?' zero':'');
     sc.textContent=currentScore(p)+'点';
-    sc.title=scoreOnlyMode() ? '盤上の駒価＋囲碁の領域点。無くなった側の負け'
-                             : '盤上の駒価＋囲碁の領域点＋取った駒の駒価（＋王手の点）';
+    sc.title=scoreDecides() ? '盤上の駒価＋囲碁の領域点。この点で勝敗が決まる'
+                            : '盤上の駒価＋囲碁の領域点＋取った駒の駒価（＋王手の点）';
     el.appendChild(sc);
   }
   el.classList.toggle('is-empty', arr.length===0 && !editing); // 空なら箱を詰める
@@ -4239,7 +4241,7 @@ function doMoveChessPromo(fr,fc,tr,tc,toCode,p){
   board[fr][fc]=null;
   history[history.length-1].to=[tr,tc];
   pendingFx=computeFx(_prev,p,{fr,fc,tr,tc},true);
-  if(royalDecides() && tookRoyal && !hasRoyalOnBoard(-p)){ endGame(p); return; }
+  if(royalDecides() && tookRoyal && !hasRoyalOnBoard(-p)){ endByRoyal(p); return; }
   checkSennichite();
 }
 // キャスリング：cKが横に2マス動く手を検出。可能なら{rookFrom,rookTo}を返す。
@@ -5674,9 +5676,9 @@ function applyMoveSilent(side,m,_legacySilent){
     }
     // 「取り切るまで戦う」ONのときは王を取られても終局しない（勝敗は全滅のみ）
     if(royalDecides() && tookRoyal && !hasRoyalOnBoard(-side)){
-      history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side); return;
+      history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endByRoyal(side); return;
     }
-    if(royalDecides() && !hasRoyalOnBoard(-side)){ history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endGame(side); return; }
+    if(royalDecides() && !hasRoyalOnBoard(-side)){ history[history.length-1].to=[m.tr,m.tc]; if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo); render(); endByRoyal(side); return; }
   }
   // 呼吸点0の群を丸ごと取る（駒の種類は問わない）。取れた分は棋譜にも残す
   {
@@ -5700,12 +5702,13 @@ function applyMoveSilent(side,m,_legacySilent){
     if(!foeHas || !meHas){
       render();
       // 王を残している側の勝ち。両方失ったら指した側の勝ち。
-      endGame(!foeHas ? side : -side);
+      // 「点数だけで勝負する」なら、勝ち負けは点数で決める。
+      endByRoyal(!foeHas ? side : -side);
       return;
     }
   }
-  // 点数だけで勝負するモード：相手の盤上の点数を0にしたら勝ち
-  if(scoreOnlyMode()){
+  // 取り切る＋点数だけで勝負する：相手の盤上の点数を0にしたら決着
+  if(scoreZeroEnds()){
     const pY=calcPositionScore(1), pE=calcPositionScore(-1);
     if(pY<=0 || pE<=0){
       render();
@@ -5824,19 +5827,31 @@ function jishogiPoints(side){
   if(RULES.checkPoints) pts += (checkCount[side]||0);
   return pts;
 }
-/* 「点数だけで勝負する」モードか。
-   「相手の駒を全て取るまで戦う」と両方ONのときだけ効く。
-   このとき、相手の盤上の点数（駒価＋囲碁の領域点）が0になったら決着する。
+/* 「点数だけで勝負する」（scoreOnly）＝ 勝ち負けを点数で決める。
+   終わり方（いつ終局するか）は変えない。終局したとき、誰が王を取ったかに関係なく
+   点数の多い方の勝ちになる。 */
+function scoreDecides(){ return !!RULES.scoreOnly; }
+/* 「相手の駒を全て取るまで戦う」と両方ONのときは、終わり方も点数で決まる。
+   相手の盤上の点数（駒価＋囲碁の領域点）が0になったら決着。
    取った駒の点は永久に減らないので、0にできる盤上の点だけを見る。 */
-function scoreOnlyMode(){ return !!(RULES.captureAll && RULES.scoreOnly); }
-/* いま画面に出す点数。
+function scoreZeroEnds(){ return !!(RULES.captureAll && RULES.scoreOnly); }
+/* いま画面に出す点数（勝敗を決めるのもこの数）。
      ふだん … 持将棋点（盤上＋領域＋取った駒＋王手）
      点数だけで勝負する … 盤上の点数（盤上の駒価＋領域点） */
 function currentScore(side){
-  return scoreOnlyMode() ? calcPositionScore(side) : jishogiPoints(side);
+  return scoreDecides() ? calcPositionScore(side) : jishogiPoints(side);
 }
-// 王の有無で決着するか（取り切るルールのときは決着しない）
+// 王の有無で終局するか（取り切るルールのときは終局しない）
 function royalDecides(){ return !RULES.captureAll; }
+/* 王が居なくなって終局するときの勝敗。
+   「点数だけで勝負する」がONなら、誰が王を取ったかに関係なく点数の多い方の勝ち。 */
+function endByRoyal(defaultWinner){
+  if(!scoreDecides()){ endGame(defaultWinner); return; }
+  const pY=currentScore(1), pE=currentScore(-1);
+  const detail='王が取られました。点数計算：あなた '+pY+'点・相手 '+pE+'点';
+  if(pY===pE) endDraw(detail);
+  else endGame(pY>pE?1:-1,'points',detail);
+}
 // 持将棋成立時の判定：24点未満=負け／31点以上=勝ち／両者24〜30=引き分け（無勝負）
 /* 双方の王が敵陣に入っているか。24点・31点・500手のルールはこのときだけ使う。 */
 function bothRoyalsEntered(){
@@ -5853,8 +5868,8 @@ function resolveJishogi(msg){
   const pY=currentScore(1), pE=currentScore(-1);
   const detail=(msg?msg+'。':'')+'点数計算：あなた '+pY+'点・相手 '+pE+'点';
   let winner=0;
-  if(scoreOnlyMode()){
-    // 点数だけで勝負するモードは単純に多い方の勝ち
+  if(scoreDecides()){
+    // 「点数だけで勝負する」は単純に多い方の勝ち
     if(pY>pE) winner=1; else if(pE>pY) winner=-1;
   } else if(bothRoyalsEntered()){
     // 双方入玉のときだけ 24点未満=負け／31点以上=勝ち／両者24〜30=引き分け
