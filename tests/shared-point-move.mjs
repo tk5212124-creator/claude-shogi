@@ -141,6 +141,29 @@ const out=await p.evaluate((C50)=>{
       合法でない手:bad.length?bad:'なし', 対局終了:gameOver,
       状態:document.getElementById('status').textContent};
   }
+  // ⑨ 持ち駒からも × のマスへ打てる
+  {
+    const dg=D(); dg[4][4]='x';
+    const bd=B(); bd[8][8]={t:'hK',p:1}; bd[0][0]={t:'hK',p:-1};
+    loadState(JSON.stringify({v:2,NR:9,NC:9,PZ:3,turn:1,youAreSente:true,gameOver:false,
+      RULES:{drops:true,captureAll:false,pointMode:'auto',allowPass:false,banSennichite:false,
+        sennichiteMode:'none',nifu:false,palaceEscape:false},
+      board:bd,pts:P(),diag:dg,capYou:['JC','hP'],capEnemy:[]}));
+    SFX.on=false; gameOver=false;
+    // 交点に置かれる駒（包）の打ち先に、× のマスが層をまたいで入るか
+    const tg=dropTargets(ptsBoard,'JC',1);
+    R['⑨包の打ち先に×のマスが入るか']=tg.filter(x=>x[2]).map(x=>'マス('+(x[0]+1)+'行'+(x[1]+1)+'列)');
+    R['⑨マスに置かれる駒（歩）が交点に打てるか']=dropTargets(board,'hP',1).filter(x=>x[2])
+      .map(x=>'交点('+(x[0]+1)+'行'+(x[1]+1)+'列)');
+    // 実際に打てるか
+    const dm={drop:'JC',tr:4,tc:4};      // pt を付けない＝マスの層へ打つ
+    R['⑨合法か']=isLegalMove(dm,1);
+    R['⑨CPUも生成するか']=genMoves(board,1,capYou,capEnemy)
+      .some(g=>g.drop==='JC'&&g.tr===4&&g.tc===4&&!g.pt);
+    turn=1; applyMoveSilent(1,dm);
+    R['⑨打ったあと']={マス:board[4][4]?board[4][4].t:'★空', 交点:ptsBoard[4][4]?'★ある':'空',
+      持ち駒:capYou.slice(), 棋譜:kifuToText().split('\n').pop()};
+  }
   // ⑧ 通常の対局に影響しないこと（宮マスの無い盤では層をまたぐ手が出ない）
   {
     let cross=0;

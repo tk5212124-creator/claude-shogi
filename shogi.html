@@ -3508,34 +3508,48 @@ function jtMoves(b,r,c){
 }
 
 /* ===== 持ち駒を打てるマス ===== */
+/* 打ち先の候補。b はその駒が本来置かれる層。
+   戻り値は [行, 列]。九宮の交差マス(×)へ層をまたいで打つときだけ [行, 列, 1] を返す
+   （×は「マスであり交点でもある共有点」なので、そこへだけは反対の層にも打てる）。 */
 function dropTargets(b,t,p){
   const res=[];
   const isPt=!!(b&&b.isPts);
-  const rows=LR(b), cols=LC(b);
+  const cells=(b&&b.L)? b.L.cells : board;
+  const pts  =(b&&b.L)? b.L.pts   : ptsBoard;
   // 宮から出られない駒（帥・將／仕・士／漢・楚）は、宮の外へは打てない
   const palaceOnly = isPalaceBound(t) && !RULES.palaceEscape;
   const diagOnlyPalace = palaceOnly && isDiagOnlyPalace(t);   // 仕・士は線の上にしか打てない
   const riverOnly = cantCrossRiver(t) && PZ>0;
-  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
-    if(b[r]&&b[r][c])continue;
-    if(palaceOnly && !(isPt? isPalacePoint(r,c) : isPalaceCell(r,c))) continue;
-    if(diagOnlyPalace && !diagStandOK(isPt,r,c)) continue;     // 線が無い所に打つと二度と動けない
+  // その層のその場所へ打てるか
+  const ok=(L,onPt,r,c)=>{
+    if(!L||!L[r]) return false;
+    if(L[r][c]) return false;
+    if(palaceOnly && !(onPt? isPalacePoint(r,c) : isPalaceCell(r,c))) return false;
+    if(diagOnlyPalace && !diagStandOK(onPt,r,c)) return false;  // 線が無い所に打つと二度と動けない
     // 碁石の自殺手は打てない（相手の群を取って呼吸点が生まれるなら合法）
-    if(isSuicidePlacement(b.L?b.L.cells:board, b.L?b.L.pts:ptsBoard, isPt, r, c, t, p)) continue;
-    if(riverOnly && !(p===1 ? r>=rows-PZ : r<PZ)) continue;   // 象は河を渡れない
+    if(isSuicidePlacement(cells, pts, onPt, r, c, t, p)) return false;
+    const rows = onPt? NR+1 : NR;
+    if(riverOnly && !(p===1 ? r>=rows-PZ : r<PZ)) return false;   // 象は河を渡れない
     // 行き所のない駒の禁止
     const last = p===1?0:rows-1, last2 = p===1?[0,1]:[rows-2,rows-1];
-    if(t==='hP'||t==='hL'||t==='P'||t==='L'){ if(r===last)continue; }
-    if(t==='hN'||t==='N'){ if(last2.includes(r))continue; }
+    if(t==='hP'||t==='hL'||t==='P'||t==='L'){ if(r===last) return false; }
+    if(t==='hN'||t==='N'){ if(last2.includes(r)) return false; }
     // 二歩（ルールで有効時のみ）。本将棋の歩 hP は hP同士、大局の歩 P は P同士で判定。
     if((t==='hP'||t==='P') && RULES.nifu){
-      let dbl=false;
-      for(let rr=0;rr<rows;rr++){const q=b[rr]&&b[rr][c]; if(q&&q.p===p&&q.t===t){dbl=true;break;}}
-      if(dbl)continue;
+      for(let rr=0;rr<rows;rr++){ const q=L[rr]&&L[rr][c]; if(q&&q.p===p&&q.t===t) return false; }
     }
     // オセロ駒：最低1枚裏返せる場所にしか置けない
-    if(t==='OTH' && othelloFlipCount(r,c,p,b)===0) continue;
-    res.push([r,c]);
+    if(t==='OTH' && othelloFlipCount(r,c,p,L)===0) return false;
+    return true;
+  };
+  const rows=LR(b), cols=LC(b);
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++) if(ok(b,isPt,r,c)) res.push([r,c]);
+  // 交差宮マス(×)＝2層の共有点。そこへだけは層をまたいで打てる
+  const o = isPt? cells : pts;
+  if(o && o!==b){
+    const oR = isPt? NR : NR+1, oC = isPt? NC : NC+1;
+    for(let r=0;r<oR;r++)for(let c=0;c<oC;c++)
+      if(isSharedPoint(r,c) && ok(o,!isPt,r,c)) res.push([r,c,1]);
   }
   return res;
 }
@@ -3556,7 +3570,10 @@ function isLegalMove(m, p, b){
   }
   const lbd = (m.pt && bd.L && bd.L.pts) ? bd.L.pts : bd;   // この手が動くレイヤー
   if(m.drop){
-    return dropTargets(lbd, m.drop, p).some(([r,c])=>r===m.tr&&c===m.tc);
+    // 層をまたぐ打ち（×のマス）かどうかも一致させる
+    const wantPt = !!m.pt, natPt = !!(lbd&&lbd.isPts);
+    return dropTargets(lbd, m.drop, p).some(([r,c,x])=>
+      r===m.tr && c===m.tc && ((x? !natPt : natPt)===wantPt));
   }
   const pc = lbd[m.fr] && lbd[m.fr][m.fc];
   if(!pc || pc.p!==p) return false;
@@ -3834,7 +3851,8 @@ function render(){
   if(sel){
     // 可動表示も合法判定と同じゲートを通す（千日手回避で禁じられた手は光らせない）
     if(sel.drop){ const sp=sel.p||turn; const isPt=goesOnPoint(sel.t); const L=isPt?ptsBoard:board;
-      dropTargets(L,sel.t,sp).forEach(([r,c])=>{ if(isLegalMove(isPt?{drop:sel.t,tr:r,tc:c,pt:true}:{drop:sel.t,tr:r,tc:c},sp)) movable.add(mkey(isPt,r,c)); }); }
+      dropTargets(L,sel.t,sp).forEach(([r,c,x])=>{ const dp = x? !isPt : isPt;
+        if(isLegalMove(dp?{drop:sel.t,tr:r,tc:c,pt:true}:{drop:sel.t,tr:r,tc:c},sp)) movable.add(mkey(dp,r,c)); }); }
     else if(sel.pt){
       const mv=ptsBoard[sel.r]&&ptsBoard[sel.r][sel.c], mp=mv?mv.p:turn;
       if(mv) moves(ptsBoard,sel.r,sel.c).forEach(([r,c,x])=>{
@@ -4167,11 +4185,13 @@ function onCell(r,c,isPt){
   if(sel){
     if(sel.drop){
       const dPt=goesOnPoint(sel.t), L=dPt?ptsBoard:board;
-      if(!!isPt===dPt && dropTargets(L,sel.t,me).some(([a,b])=>a===r&&b===c)){
+      // タップした層に打てるか（×のマスなら本来と逆の層でも打てる）
+      const hitDrop=dropTargets(L,sel.t,me).some(([a,b,x])=>a===r&&b===c&&((x?!dPt:dPt)===!!isPt));
+      if(hitDrop){
         // 合法判定は人間・CPU共通の isLegalMove を必ず通す（千日手回避を含む）
-        const dm=dPt?{drop:sel.t,tr:r,tc:c,pt:true}:{drop:sel.t,tr:r,tc:c};
+        const dm=isPt?{drop:sel.t,tr:r,tc:c,pt:true}:{drop:sel.t,tr:r,tc:c};
         if(!isLegalMove(dm, me)){ setStatus('千日手になるため、その手は指せません','think'); return; }
-        doDrop(sel.t,r,c,me); sel=null; afterPlayer(); return;
+        doDrop(sel.t,r,c,me,!!isPt); sel=null; afterPlayer(); return;
       }
     } else if(!isPt) {
       // 獅子型：2歩取り・居喰いを含む着手を優先（途中の駒も取る）
@@ -4544,8 +4564,10 @@ function isSurrounded(isPt, r, c, cells, pts, ok){
 }
 // 碁石を打った直後：その石が囲んだ領域の駒を、マス・交点に関係なく取る。
 // 手動の打ちも唯一の着手実体 applyMoveSilent を通す（CPUと共通化）。
-function doDrop(t,r,c,p){
-  applyMoveSilent(p, {drop:t,tr:r,tc:c, pt:goesOnPoint(t)||undefined}, false);
+function doDrop(t,r,c,p,isPt){
+  // isPt を省くと、その駒が本来置かれる層へ打つ（×のマスへ打つときだけ明示する）
+  const onPt = (isPt===undefined) ? goesOnPoint(t) : !!isPt;
+  applyMoveSilent(p, {drop:t,tr:r,tc:c, pt:onPt||undefined}, false);
 }
 // (r,c)に置いた側pのオセロ駒が、8方向で自軍オセロ駒との間に挟んだ相手駒を裏返す（自軍に）
 // 裏返し：成駒は成る前に戻し、未成は成り駒にする。成りが無い駒はそのまま。
@@ -4992,7 +5014,8 @@ function genMoves(b,p,cy,ce){
     [...new Set(cap)].forEach(t=>{
       const isPt=!!(goesOnPoint(t)&&b&&b.L&&b.L.pts);
       const lb=isPt? b.L.pts : b;
-      dropTargets(lb,t,p).forEach(([tr,tc])=>list.push(isPt?{drop:t,tr,tc,pt:true}:{drop:t,tr,tc}));
+      dropTargets(lb,t,p).forEach(([tr,tc,x])=>{ const dp = x? !isPt : isPt;
+        list.push(dp?{drop:t,tr,tc,pt:true}:{drop:t,tr,tc}); });
     });
   }
   if(RULES.allowPass) list.push({pass:true});  // パス（着手放棄）。人間・CPU共通の手として扱う
@@ -6648,7 +6671,8 @@ function hasAnyLegalMove(side){
     const cap=side===1?capYou:capEnemy;
     for(const t of new Set(cap)){
       const isPt=goesOnPoint(t), L=isPt?ptsBoard:board;
-      for(const [tr,tc] of dropTargets(L,t,side)){ if(isLegalMove(isPt?{drop:t,tr,tc,pt:true}:{drop:t,tr,tc},side)) return true; }
+      for(const [tr,tc,x] of dropTargets(L,t,side)){ const dp = x? !isPt : isPt;
+        if(isLegalMove(dp?{drop:t,tr,tc,pt:true}:{drop:t,tr,tc},side)) return true; }
     }
   }
   return false;
