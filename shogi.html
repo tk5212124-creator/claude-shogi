@@ -1320,6 +1320,10 @@
       <label class="rule-row"><input type="checkbox" id="rRepromote"> 成り条件をもう一度満たすと、もう一度成れる（成駒の成駒。例：敵駒を取ると成るルールなら、再度敵駒を取ると更に成る）</label>
       <label class="rule-row"><input type="checkbox" id="rRandomPromote"> 成り先のない駒は、成るとき全駒からランダムな駒に変化する（王将・玉将はroyalな駒へ）</label>
       <label class="rule-row"><input type="checkbox" id="rCaptureAll"> 相手の駒を全て取る（取り切る）まで戦う（王の有無に関係なく勝敗判定。囲碁・オセロ・はさみ将棋向け）</label>
+      <label class="rule-row"><input type="checkbox" id="rScoreOnly"> 点数だけで勝負する</label>
+      <p class="rule-note" style="margin:2px 0 6px;">上の「相手の駒を全て取るまで戦う」と<b>両方ON</b>にしたときだけ効きます。
+      盤上の駒価＋囲碁の領域点だけを数え、相手のその点数が無くなるまで戦います（取った駒の点は減らないので数えません）。
+      どちらか一方でも外れていれば、王を取った時点で決着します。点数は持ち駒の欄にいつも出ます。</p>
       <p class="rule-note" style="margin:6px 0 2px;">シャンチー（中国象棋）</p>
       <label class="rule-row"><input type="checkbox" id="rFlyingGeneral"> 王不見王（帥と将を同じ筋で相対させる手は指せない。全ての手が相対になる場合は負け）</label>
       <label class="rule-row"><input type="checkbox" id="rPalaceEscape"> 九宮の駒（帥・將／仕・士）が宮マスの外にも出られるようにする（九宮ONのときだけ効きます）</label>
@@ -1342,13 +1346,10 @@
         <select id="rJishogiMode" style="width:100%;margin-top:4px;">
           <option value="points">点数計算で勝敗を決める</option>
           <option value="draw">点数を見ずに引き分けにする</option>
-          <option value="zero">点数だけで勝負する（相手の点数を0にしたら勝ち）</option>
         </select>
       </div>
       <label class="rule-row"><input type="checkbox" id="rCapturedPoints"> 取った駒の駒価を点数に足す</label>
       <label class="rule-row"><input type="checkbox" id="rCheckPoints"> 王手をかけたら点数を足す（4人チェス式）</label>
-      <p class="rule-note" style="margin:6px 0 2px;">「点数だけで勝負する」は王を取っても終わりません。盤上の駒価＋囲碁の領域点だけを数え、
-      <b>相手のその点数を0にした方の勝ち</b>です（取った駒の点は減らないので数えません）。点数は持ち駒の欄にいつも出ます。</p>
       <p class="rule-note" style="margin:6px 0 2px;">点数は盤上の駒価＋取った駒の駒価＋囲碁の領域点。王を取った分もここに入ります。
       24点・31点・500手のルールは「双方の王が敵陣に入ったら持将棋」がONで、実際にその形になったときだけ使います。
       それ以外は単純に点数の多い方の勝ちです。</p>
@@ -2685,6 +2686,7 @@ const RULES={
   checkPoints:false,  // 王手をかけたら点数を足す（4人チェス式）
   capturedPoints:true,// 取った駒の駒価を点数に足す（王を取った分もここに入る）
   captureAll:false,  // 相手の駒を全て取り切るまで戦う（王の有無に関係なく勝敗判定）。囲碁/オセロ/はさみ向け
+  scoreOnly:false,   // 点数だけで勝負する。captureAll と両方ONのときだけ効く
   banSennichite:true,  // 千日手回避：同一局面が4回目になる手を禁じる（＝千日手が成立しない）
   flyingGeneral:false, // 王不見王：帥と将を同じ筋で相対させる手は指せない（シャンチー）
   pointMode:'auto',    // 駒の置き方：'auto'（囲碁・シャンチー・チャンギ駒があれば交点）|'point'|'cell'
@@ -2799,6 +2801,8 @@ function loadState(text){
   cellDiag=Array.from({length:NR},(_,r)=>Array.from({length:NC},(_,c)=>(d.diag&&d.diag[r]&&d.diag[r][c])||null));
   capYou=[...(d.capYou||[])]; capEnemy=[...(d.capEnemy||[])];
   if(d.RULES) Object.keys(RULES).forEach(k=>{ if(d.RULES[k]!==undefined) RULES[k]=d.RULES[k]; });
+  // 古い保存の jishogiMode:'zero'（持将棋の決め方に「点数だけで勝負する」があった版）を読み替える
+  if(RULES.jishogiMode==='zero'){ RULES.jishogiMode='points'; RULES.captureAll=true; RULES.scoreOnly=true; }
   setSennichiteMode(RULES.sennichiteMode||'avoid');
   youAreSente = d.youAreSente!==undefined? !!d.youAreSente : true;
   turn = d.turn===-1? -1 : 1;
@@ -3933,12 +3937,12 @@ function renderCap(id,arr,p){
   const el=document.getElementById(id);
   el.innerHTML='<span class="lbl">'+(p===1?'あなた':'相手')+'</span>';
   // 点数で勝敗を決める設定のときは、その時点の点数をいつも出す
-  if(RULES.jishogiMode==='points' || RULES.jishogiMode==='zero'){
+  if(RULES.jishogiMode==='points' || scoreOnlyMode()){
     const sc=document.createElement('span');
-    sc.className='cap-score'+(RULES.jishogiMode==='zero'?' zero':'');
+    sc.className='cap-score'+(scoreOnlyMode()?' zero':'');
     sc.textContent=currentScore(p)+'点';
-    sc.title=RULES.jishogiMode==='zero' ? '盤上の駒価＋囲碁の領域点。0になった側の負け'
-                                        : '盤上の駒価＋囲碁の領域点＋取った駒の駒価（＋王手の点）';
+    sc.title=scoreOnlyMode() ? '盤上の駒価＋囲碁の領域点。無くなった側の負け'
+                             : '盤上の駒価＋囲碁の領域点＋取った駒の駒価（＋王手の点）';
     el.appendChild(sc);
   }
   el.classList.toggle('is-empty', arr.length===0 && !editing); // 空なら箱を詰める
@@ -5820,18 +5824,19 @@ function jishogiPoints(side){
   if(RULES.checkPoints) pts += (checkCount[side]||0);
   return pts;
 }
-/* いま画面に出す点数。持将棋の決め方（jishogiMode）で中身が変わる。
-     'points' … 持将棋点（盤上＋領域＋取った駒＋王手）
-     'zero'   … 盤上の点数（盤上の駒価＋領域点）。これが0になった側の負け。
-                取った駒の点は永久に減らないので、0にできる盤上の点だけを見る。 */
+/* 「点数だけで勝負する」モードか。
+   「相手の駒を全て取るまで戦う」と両方ONのときだけ効く。
+   このとき、相手の盤上の点数（駒価＋囲碁の領域点）が0になったら決着する。
+   取った駒の点は永久に減らないので、0にできる盤上の点だけを見る。 */
+function scoreOnlyMode(){ return !!(RULES.captureAll && RULES.scoreOnly); }
+/* いま画面に出す点数。
+     ふだん … 持将棋点（盤上＋領域＋取った駒＋王手）
+     点数だけで勝負する … 盤上の点数（盤上の駒価＋領域点） */
 function currentScore(side){
-  return RULES.jishogiMode==='zero' ? calcPositionScore(side) : jishogiPoints(side);
+  return scoreOnlyMode() ? calcPositionScore(side) : jishogiPoints(side);
 }
-function scoreLabel(){ return RULES.jishogiMode==='zero' ? '盤上' : '点'; }
-// 「点数だけで勝負する」モードか（王の有無では決着しない）
-function scoreOnlyMode(){ return RULES.jishogiMode==='zero'; }
-// 王の有無で決着するか
-function royalDecides(){ return !RULES.captureAll && !scoreOnlyMode(); }
+// 王の有無で決着するか（取り切るルールのときは決着しない）
+function royalDecides(){ return !RULES.captureAll; }
 // 持将棋成立時の判定：24点未満=負け／31点以上=勝ち／両者24〜30=引き分け（無勝負）
 /* 双方の王が敵陣に入っているか。24点・31点・500手のルールはこのときだけ使う。 */
 function bothRoyalsEntered(){
@@ -7755,6 +7760,7 @@ function openRuleModal(){
   document.getElementById('rPromoLast').checked=RULES.promoOnLast;
   document.getElementById('rPromoCap').checked=RULES.promoOnCapture;
   document.getElementById('rCaptureAll').checked=RULES.captureAll;
+  document.getElementById('rScoreOnly').checked=!!RULES.scoreOnly;
   document.getElementById('rDrawNoMove').checked=RULES.drawNoMove;
   document.getElementById('rDrawBothEnter').checked=RULES.drawBothEnter;
   document.getElementById('rJishogiMode').value=RULES.jishogiMode||'points';
@@ -7811,7 +7817,8 @@ document.getElementById('rRandomPromote').onchange=e=>{ RULES.randomPromote=e.ta
 document.getElementById('rPromoZone').onchange=e=>{ RULES.promoOnZone=e.target.checked; };
 document.getElementById('rPromoLast').onchange=e=>{ RULES.promoOnLast=e.target.checked; };
 document.getElementById('rPromoCap').onchange=e=>{ RULES.promoOnCapture=e.target.checked; };
-document.getElementById('rCaptureAll').onchange=e=>{ RULES.captureAll=e.target.checked; };
+document.getElementById('rCaptureAll').onchange=e=>{ RULES.captureAll=e.target.checked; render(); };
+document.getElementById('rScoreOnly').onchange=e=>{ RULES.scoreOnly=e.target.checked; render(); };
 document.getElementById('rDrawNoMove').onchange=e=>{ RULES.drawNoMove=e.target.checked; };
 document.getElementById('rDrawBothEnter').onchange=e=>{ RULES.drawBothEnter=e.target.checked; };
 document.getElementById('rJishogiMode').onchange=e=>{ RULES.jishogiMode=e.target.value; };
