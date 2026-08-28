@@ -13,6 +13,7 @@ node tests/cross-layer-capture.mjs
 node tests/mixed-go-capture.mjs
 node tests/shogi-pieces-cannot-surround.mjs
 node tests/shared-point-move.mjs
+node tests/check-layer.mjs      [new|old]
 node tests/fx-layout.mjs        [new|old]
 node tests/bgm.mjs
 node tests/board-text-fit.mjs  [new|old]
@@ -333,3 +334,17 @@ iOS が画面を縮めて表示していた（見出しがステータスバー�
 
 `case50-shared-point.json` は報告のあった **9×9＋チャンギ駒・50手**の実局。
 盤・交点・持ち駒・棋譜のすべてが報告どおりに再現できることも確かめる（`V50` 相当）。
+
+## check-layer.mjs が見るもの
+
+王手は **「どの層のどの royal に掛かっているか」** で持つ（`行_列_層`）。
+旧版は座標だけで持っていたので、マスと交点の同じ座標に別々の royal が居ると
+**片方の王手で両方が赤く光って**いた。
+
+| 見るもの | 旧版 | 現在 |
+|---|---|---|
+| 交点の將だけが王手（包が狙う） | マスの玉将も赤くなる | **交点だけ** |
+| マスの玉将だけが王手（飛車が狙う） | 交点の將も赤くなる | **マスだけ** |
+| 両方が王手 | 王手の場所は1つ（`0_4`） | **2つ**（`0_4_c` `0_4_p`）＝同時王手2として数える |
+| ×のマスへ層をまたいで王手 | — | 行き先の層（マス）だけが王手になる |
+| 同じ座標の交点側 | — | 王手にしない |

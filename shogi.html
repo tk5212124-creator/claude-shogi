@@ -3633,10 +3633,13 @@ function checkInfo(p){
     const pc=L[r]&&L[r][c];
     if(pc&&pc.p===-p){
       const tag=(L===ptsBoard?'p':'c');
-      for(const [tr,tc] of moves(L,r,c)){
-        if(key.has(tr+'_'+tc+'_'+tag)) hit.add(tr+'_'+tc);
-        // 共有点（九宮の交差マス）では層をまたいで王手になる
-        if(isSharedPoint(tr,tc) && key.has(tr+'_'+tc+'_'+(tag==='p'?'c':'p'))) hit.add(tr+'_'+tc);
+      for(const [tr,tc,x] of moves(L,r,c)){
+        // x が立っている手は「もう一方の層」へ行く手。行き先の層で見る
+        const dst = x ? (tag==='p'?'c':'p') : tag;
+        if(key.has(tr+'_'+tc+'_'+dst)) hit.add(tr+'_'+tc+'_'+dst);
+        // 共有点（九宮の交差マス）では層をまたいで取り合えるので、そこも王手
+        const other = (dst==='p'?'c':'p');
+        if(isSharedPoint(tr,tc) && key.has(tr+'_'+tc+'_'+other)) hit.add(tr+'_'+tc+'_'+other);
       }
     }
   }
@@ -3748,7 +3751,7 @@ function renderPtLayer(bd, movable, checkCells){
     any=true;
     const w=document.createElement('div');
     w.className='pt-slot'+(movable&&movable.has('P'+r+'_'+c)?' movable':'')
-      +(checkCells&&checkCells.has(r+'_'+c)?' check':'')
+      +(checkCells&&checkCells.has(r+'_'+c+'_p')?' check':'')
       +(sel&&sel.pt&&!sel.drop&&sel.r===r&&sel.c===c?' sel':'');
     w.dataset.r=r; w.dataset.c=c; w.dataset.pt='1';
     w.style.cssText='left:'+(c*100/NC)+'%;top:'+(r*100/NR)+'%;width:'+(100/NC)+'%;height:'+(100/NR)+'%;';
@@ -3855,7 +3858,7 @@ function render(){
   if(!turbo && !gameOver){
     for(const pl of [1,-1]){
       const ci=checkInfo(pl);
-      if(ci.check) ci.cells.forEach(k=>checkCells.add(k));
+      if(ci.check) ci.cells.forEach(k=>checkCells.add(k));   // "行_列_層"（層は c=マス / p=交点）
     }
   }
   for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
@@ -3864,7 +3867,7 @@ function render(){
     const dg=diagSvg(getDiag(r,c),r,c); if(dg) cell.appendChild(dg);  // 斜め線属性（駒の背面）
     const pc=board[r][c];
     if(movable.has(r+'_'+c)){ cell.classList.add('movable'); if(pc)cell.classList.add('has-koma'); }
-    if(checkCells.has(r+'_'+c)) cell.classList.add('check');
+    if(checkCells.has(r+'_'+c+'_c')) cell.classList.add('check');
     if(sel&&!sel.drop&&!sel.pt&&sel.r===r&&sel.c===c)cell.classList.add('sel');
     if(history.length){const lm=history[history.length-1].to; if(lm&&lm[0]===r&&lm[1]===c)cell.classList.add('last');}
     const msIdx = multiSel.length? multiSel.findIndex(s=>s.r===r&&s.c===c&&!s.pt) : -1;
@@ -5717,7 +5720,8 @@ function applyMoveSilent(side,m,_legacySilent){
 function squareAttackedBy(tr,tc,by){
   for(let r=0;r<board.length;r++){ const row=board[r]; if(!row) continue;
     for(let c=0;c<row.length;c++){ const pc=row[c];
-      if(pc&&pc.p===by){ const ms=moves(board,r,c); for(const mm of ms){ if(mm[0]===tr&&mm[1]===tc) return true; } }
+      if(pc&&pc.p===by){ const ms=moves(board,r,c);
+        for(const mm of ms){ if(!mm[2] && mm[0]===tr && mm[1]===tc) return true; } }
     } }
   return false;
 }
