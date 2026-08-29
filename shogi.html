@@ -1027,13 +1027,14 @@
       <label for="ptSel">駒の置き方</label>
       <select id="ptSel">
         <option value="auto">囲碁・シャンチー・チャンギの駒は交点に置く</option>
+        <option value="crossCap">囲碁・シャンチー・チャンギの駒は交点に置く（斜めの通り道の駒を取れる）</option>
         <option value="cell">すべての駒をマスの中に置く</option>
         <option value="point">すべての駒を交点に置く</option>
         <option value="free">すべての駒をマスにも交点にも置ける（交差宮マスからは行き来できる）</option>
         <option value="freeMove">すべての駒がマスにも交点にも常時進める</option>
       </select>
     </div>
-    <div class="bs-note">※ 交点の駒とマスの駒は別の点にいるので、互いに取り合えません（斜めに動くときの障壁にはなります）。碁石が囲んだ駒は交点・マスに関係なく取れ、九宮の交差マス（×）だけは両方が置ける共有点として取り合えます。斜めに飛び越えて動く駒は交点の駒も取れます。</div>
+    <div class="bs-note">※ 交点の駒とマスの駒は別の点にいるので、互いに取り合えません（斜めに動くときの障壁にはなります）。碁石が囲んだ駒は交点・マスに関係なく取れ、九宮の交差マス（×）だけは「マスであり交点でもある」共有点として、交点の駒が出入りでき、取り合えます。斜めに飛び越えて動く駒は交点の駒も取れます。<br>※「斜めの通り道の駒を取れる」を選ぶと、斜めに1歩・走りで動く駒も、通り道にいる相手レイヤーの駒（マスの駒から見た交点の駒／交点の駒から見たマスの駒）を取って進めます。</div>
     <div class="bs-row" id="bsPalaceRow">
       <button type="button" id="bsMakePalace">九宮をつくる</button>
       <button type="button" id="bsClearPalace">宮マスを消す</button>
@@ -2327,7 +2328,8 @@ function syncLayers(){
   if(RULES.pointMode==='free'||RULES.pointMode==='freeMove') return;   // 自由配置は置いた場所をそのまま保つ
   for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){
     const cell=(r<NR&&c<NC)?board[r][c]:null, pt=ptsBoard[r]&&ptsBoard[r][c];
-    if(cell && goesOnPoint(cell.t)){                       // マス→交点へ
+    // ×（交差宮マス）は「マスであり交点でもある」共有点なので、そこに居る駒は動かさない
+    if(cell && goesOnPoint(cell.t) && !(r<NR&&c<NC&&isSharedPoint(r,c))){   // マス→交点へ
       if(!pt){ ptsBoard[r][c]=cell; board[r][c]=null; }
     }
     if(pt && !goesOnPoint(pt.t) && r<NR && c<NC){          // 交点→マスへ（盤の外の交点はそのまま）
@@ -2918,8 +2920,11 @@ function crossPointOf(b,r,c,dr,dc){
 function LR(b){ return (b&&b.isPts)? NR+1 : NR; }
 function LC(b){ return (b&&b.isPts)? NC+1 : NC; }
 function otherLayer(b){ return (b&&b.L) ? (b.isPts? b.L.cells : b.L.pts) : null; }
+// 「斜めの通り道の駒を取れる」ルールか（マス駒から見た交点駒・交点駒から見たマス駒を取る）
+function crossCapMode(){ return RULES.pointMode==='crossCap'; }
 // 斜めに「飛び越えて」動く駒（馬・象・桂馬型など）が、跳び越える途中で通る相手レイヤーの点。
 // 走りの斜めは交点駒に塞がれるだけで取れないが、飛び越える駒はそこの駒を取れる。
+// 「斜めの通り道の駒を取れる」ルールでは、跳ばない斜め（1歩・走り）でも通り道の駒を取る。
 function crossJumpPoints(b, code, fr, fc, tr, tc, p){
   if(!ptLayerOn() || !b || !b.L) return [];
   const dr=tr-fr, dc=tc-fc;
@@ -2927,7 +2932,8 @@ function crossJumpPoints(b, code, fr, fc, tr, tc, p){
   const flip = p===-1;
   const isJump = moveVecs(code).some(v=>v.r==='jump' &&
     (flip ? (-v.dr===dr && -v.dc===dc) : (v.dr===dr && v.dc===dc)));
-  if(!isJump) return [];
+  const diagCap = crossCapMode() && Math.abs(dr)===Math.abs(dc);   // 45度の斜めだけ
+  if(!isJump && !diagCap) return [];
   const sr=Math.sign(dr), sc=Math.sign(dc);
   const steps=Math.min(Math.abs(dr),Math.abs(dc));   // 斜めに進んだ歩数だけ点を通る
   const out=[]; let rr=fr, cc=fc;
@@ -2939,11 +2945,15 @@ function crossJumpPoints(b, code, fr, fc, tr, tc, p){
   return out;
 }
 // 斜め1歩が相手レイヤーの駒に塞がれるか（＝通り抜けられないか）
-function diagBlocked(b,r,c,dr,dc){
+// p を渡すと、「斜めの通り道の駒を取れる」ルールでは相手の駒を取って通り抜けられる。
+function diagBlocked(b,r,c,dr,dc,p){
   if(!ptLayerOn()) return false;
   const o=otherLayer(b); if(!o) return false;
   const cp=crossPointOf(b,r,c,dr,dc); if(!cp) return false;
-  return !!(o[cp[0]] && o[cp[0]][cp[1]]);
+  const q=o[cp[0]] && o[cp[0]][cp[1]];
+  if(!q) return false;
+  if(crossCapMode() && p!==undefined && q.p!==p) return false;   // 相手の駒なら取って進める
+  return true;
 }
 // 共有点（九宮の交差マス）にいる相手レイヤーの駒。ここだけは層をまたいで取り合える。
 function sharedFoeAt(b,r,c,p){
@@ -2963,10 +2973,22 @@ function sharedBlockAt(b,r,c,p){
    マスの中心と交点は「斜め半歩」ずれている。だから斜めに動ける駒だけが層を行き来できる。
    マス(r,c)から斜め(sr,sc)へ  → 最初の交点は (r+(sr>0?1:0), c+(sc>0?1:0))、以後 (sr,sc) ずつ
    交点(R,C)から斜め(sr,sc)へ  → 最初のマスは (R+(sr>0?0:-1), C+(sc>0?0:-1))、以後 (sr,sc) ずつ */
+/* ×（交差宮マス）は「マスであり交点でもある」中心なので、マスの層に持つ。
+   だから ×に立てるのはマスの層に居る駒だけ。 */
+function atCrossCell(b,r,c){ return !(b&&b.isPts) && isSharedPoint(r,c); }
+// どこへでも層をまたげるか。「行き来できる」ルールでは ×の中に居るときだけ。
 function crossLayerOn(b,r,c){
   if(RULES.pointMode==='freeMove') return true;                 // 常時どちらへも進める
-  if(RULES.pointMode==='free') return isSharedPoint(r,c);       // 交差宮マスに居るときだけ
+  if(RULES.pointMode==='free') return atCrossCell(b,r,c);       // ×の中に居るときだけ
   return false;
+}
+/* 上のルールでないときでも、×は共有点なので、交点の駒だけは半歩ななめで ×の中へ入れる。
+   ×の中に居る交点の駒は交点へ戻れるが、マスの駒は ×に居ても交点へは出られない。 */
+// ×の中に居る「交点の駒」は、行き来できるルールでなければ交点か他の×にしか行けない
+function stuckOnCross(b,r,c,t){
+  const m=RULES.pointMode;
+  if(m==='free'||m==='freeMove') return false;
+  return atCrossCell(b,r,c) && goesOnPoint(t);
 }
 function crossLayerMoves(b,r,c,p,flip,vecs){
   const o=otherLayer(b); if(!o) return [];
@@ -2993,7 +3015,17 @@ function crossLayerMoves(b,r,c,p,flip,vecs){
   }
   return out;
 }
+/* 行き先の一覧。戻り値は [行,列]（同じ層）または [行,列,1]（もう一方の層）。
+   ×の中に居る交点の駒だけは、行き来できるルールでなければ
+   「交点」か「他の×」にしか行けない（ふつうのマスへは出られない）。 */
 function moves(b,r,c){
+  const res=movesInner(b,r,c);
+  const pc=b[r]&&b[r][c];
+  if(pc && stuckOnCross(b,r,c,pc.t))
+    return res.filter(m=>m[2] ? true : isSharedPoint(m[0],m[1]));
+  return res;
+}
+function movesInner(b,r,c){
   const pc=b[r][c]; if(!pc)return[];
   const p=pc.p;
   // 自在天王：盤上どこへでも（敵は取り返されないマスのみ）
@@ -3116,7 +3148,7 @@ function moves(b,r,c){
       let nr=r+dr, nc=c+dc, cnt=0;
       while(nr>=0&&nr<LR(b)&&nc>=0&&nc<LC(b)&&cnt<max){
         // 斜めの通り道に相手レイヤーの駒があると、そこから先へは進めない
-        if(diagBlocked(b,nr-dr,nc-dc,dr,dc)) break;
+        if(diagBlocked(b,nr-dr,nc-dc,dr,dc,p)) break;
         const tg=b[nr][nc];
         if(tg&&tg.p===p)break;
         if(sharedBlockAt(b,nr,nc,p))break;    // 共有点に自駒がいるので入れない
@@ -3136,14 +3168,20 @@ function moves(b,r,c){
   }
   /* 斜めに動ける駒は、半歩ずれた「もう一方のレイヤー」の点にも進める。
      層を行き来できないルール（交点の駒は交点だけ／マスの駒はマスだけ）でも、
-     九宮の交差マス（×）は「マスであり交点でもある共有点」なので、そこへだけは入れる。 */
+     九宮の交差マス（×）は「マスであり交点でもある共有点」なので、
+     交点に置かれる駒だけは、そこへ半歩ななめで出入りできる。 */
   {
     const cl = crossLayerMoves(b,r,c,p,flip,vecs);
     if(crossLayerOn(b,r,c)) res.push(...cl);
     else {
+      const isPtL=!!(b&&b.isPts);
       // 半歩ななめの隣（自分を囲む4つ）だけ。走って遠くの×まで行くことはできない
-      const near = new Set(surroundNeighbors(!!(b&&b.isPts),r,c).other.map(x=>x[0]+'_'+x[1]));
-      res.push(...cl.filter(([tr,tc])=>isSharedPoint(tr,tc) && near.has(tr+'_'+tc)));
+      const near = new Set(surroundNeighbors(isPtL,r,c).other.map(x=>x[0]+'_'+x[1]));
+      if(isPtL)                        // 交点の駒が ×の中へ入る
+        res.push(...cl.filter(([tr,tc])=>isSharedPoint(tr,tc) && near.has(tr+'_'+tc)));
+      else if(isSharedPoint(r,c) && goesOnPoint(pc.t))
+        // ×の中に居る交点の駒が交点へ戻る（×の四隅の交点だけ）。マスの駒は交点へ出られない
+        res.push(...cl.filter(([tr,tc])=>near.has(tr+'_'+tc)));
     }
   }
   // 範囲攻撃（大将・副将・角将・飛将・猛龍・飛鰐）：格下駒を飛び越えて進める
@@ -3182,8 +3220,8 @@ function moves(b,r,c){
       if(!isPalacePoint(r,c)) return [];                         // 宮の点に居ない
       const okDiag=new Set(here.map(d=>d[0]+','+d[1]));
       const diagOnly=isDiagOnlyPalace(pc.t);
-      // 層をまたぐ手はこの絞り込みの対象外。交差マス（×）＝宮の共有点へだけは入れる
-      const crossOK=res.filter(m=>m[2] && isSharedPoint(m[0],m[1]));
+      // 層をまたぐ手はこの絞り込みの対象外。ただし宮のマスから出ることはできない
+      const crossOK=res.filter(m=>m[2] && isPalaceCell(m[0],m[1]));
       res=res.filter(m=>!m[2]);
       let out=res.filter(([tr,tc])=>{
         const dr=Math.sign(tr-r), dc=Math.sign(tc-c);
@@ -3197,7 +3235,7 @@ function moves(b,r,c){
         const nr=r+dr, nc=c+dc;
         if(nr<0||nr>=LR(b)||nc<0||nc>=LC(b)) continue;
         if(!isPalacePoint(nr,nc)) continue;
-        if(diagBlocked(b,r,c,dr,dc)) continue;
+        if(diagBlocked(b,r,c,dr,dc,p)) continue;
         const q=b[nr][nc]; if(q&&q.p===p) continue;
         if(!out.some(([a,bb])=>a===nr&&bb===nc)) out.push([nr,nc]);
       }
@@ -3222,8 +3260,8 @@ function moves(b,r,c){
     if(RULES.palaceEscape) return res;                           // 宮の外にも出られる設定
     if(!isPalaceCell(r,c)) return [];                            // 宮の外に居る場合は動けない
     const diagOnlyCell=isDiagOnlyPalace(pc.t);
-    // 層をまたぐ手はこの絞り込みの対象外。交差マス（×）＝宮の共有点へだけは入れる
-    const crossOKc=res.filter(m=>m[2] && isSharedPoint(m[0],m[1]));
+    // 層をまたぐ手はこの絞り込みの対象外。ただし宮の交点から出ることはできない
+    const crossOKc=res.filter(m=>m[2] && isPalacePoint(m[0],m[1]));
     res=res.filter(m=>!m[2]);
     return res.filter(([tr,tc])=>{
       if(!isPalaceCell(tr,tc)) return false;
@@ -3314,12 +3352,12 @@ function janggiDiagMoves(b,r,c,p,mode,forwardOnly){
     if(mode==='step'){
       const nr=r+dr, nc=c+dc;
       if(nr<0||nr>=LR(b)||nc<0||nc>=LC(b) || !cont(nr,nc,d,dr,dc)) continue;
-      if(diagBlocked(b,r,c,dr,dc)) continue;             // 相手レイヤーの駒が斜めの通り道にある
+      if(diagBlocked(b,r,c,dr,dc,p)) continue;             // 相手レイヤーの駒が斜めの通り道にある
       const q=b[nr][nc]; if(!q||q.p!==p) res.push([nr,nc]);
     } else if(mode==='slide'){
       let nr=r+dr, nc=c+dc;
       while(nr>=0&&nr<LR(b)&&nc>=0&&nc<LC(b)&&cont(nr,nc,d,dr,dc)){
-        if(diagBlocked(b,nr-dr,nc-dc,dr,dc)) break;      // 相手レイヤーの駒が斜めの通り道にある
+        if(diagBlocked(b,nr-dr,nc-dc,dr,dc,p)) break;      // 相手レイヤーの駒が斜めの通り道にある
         const q=b[nr][nc];
         if(q){ if(q.p!==p) res.push([nr,nc]); break; }
         res.push([nr,nc]); nr+=dr; nc+=dc;
@@ -3553,12 +3591,12 @@ function dropTargets(b,t,p){
   };
   const rows=LR(b), cols=LC(b);
   for(let r=0;r<rows;r++)for(let c=0;c<cols;c++) if(ok(b,isPt,r,c)) res.push([r,c]);
-  // 交差宮マス(×)＝2層の共有点。そこへだけは層をまたいで打てる
-  const o = isPt? cells : pts;
-  if(o && o!==b){
-    const oR = isPt? NR : NR+1, oC = isPt? NC : NC+1;
-    for(let r=0;r<oR;r++)for(let c=0;c<oC;c++)
-      if(isSharedPoint(r,c) && ok(o,!isPt,r,c)) res.push([r,c,1]);
+  /* 交差宮マス(×)＝「マスであり交点でもある」共有点。
+     交点の駒はそこへ層をまたいで打てる。逆にマスの駒を交点へ打つことはできない
+     （×の四隅の交点は、ただの交点であって共有点ではない）。 */
+  if(isPt && cells && cells!==b){
+    for(let r=0;r<NR;r++)for(let c=0;c<NC;c++)
+      if(isSharedPoint(r,c) && ok(cells,false,r,c)) res.push([r,c,1]);
   }
   return res;
 }
@@ -3579,9 +3617,15 @@ function isLegalMove(m, p, b){
   }
   const lbd = (m.pt && bd.L && bd.L.pts) ? bd.L.pts : bd;   // この手が動くレイヤー
   if(m.drop){
-    // 層をまたぐ打ち（×のマス）かどうかも一致させる
-    const wantPt = !!m.pt, natPt = !!(lbd&&lbd.isPts);
-    return dropTargets(lbd, m.drop, p).some(([r,c,x])=>
+    /* 打ち先は「その駒が本来置かれる層」から数える（人・CPU・表示で同じ）。
+       ×のマスへ層をまたいで打つときだけ、本来と逆の層に着地する。 */
+    const natPt = goesOnPoint(m.drop);
+    const cellsL = (bd.L && bd.L.cells) ? bd.L.cells : (bd.isPts ? null : bd);
+    const ptsL   = (bd.L && bd.L.pts)   ? bd.L.pts   : (bd.isPts ? bd : null);
+    const nb = natPt ? ptsL : cellsL;
+    if(!nb) return false;
+    const wantPt = !!m.pt;
+    return dropTargets(nb, m.drop, p).some(([r,c,x])=>
       r===m.tr && c===m.tc && ((x? !natPt : natPt)===wantPt));
   }
   const pc = lbd[m.fr] && lbd[m.fr][m.fc];
@@ -7849,8 +7893,9 @@ document.getElementById('pzSel').onchange=e=>{ e.target.dataset.touched='1'; upd
 // 駒の置き方（交点／マス）は見た目だけなので、選んだらすぐ反映する
 document.getElementById('ptSel').onchange=e=>{
   RULES.pointMode=e.target.value; syncLayers(); sel=null; render();
-  setStatus(ptLayerOn()?'囲碁・シャンチー・チャンギの駒を線の交点に置きます'
-                      :'すべての駒をマスの中に置きます');
+  setStatus(!ptLayerOn() ? 'すべての駒をマスの中に置きます'
+    : crossCapMode() ? '交点に置きます。斜めの通り道にいる相手レイヤーの駒は取れます'
+    : '囲碁・シャンチー・チャンギの駒を線の交点に置きます');
 };
 function updatePalacePending(){
   const note=document.getElementById('bsPalaceNote');

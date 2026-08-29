@@ -48,12 +48,12 @@ const out=await p.evaluate((C50)=>{
     const dg=D(); dg[4][4]='x';
     R['⑤freeMove']=canReach(dg,'freeMove');
   }
-  // ⑥ 逆向き：マスの駒も × の交点へ入れる
+  // ⑥ 逆向きは通らない。マスの駒は × に居ても交点へは出られない（＝空であるべき）
   {
     const dg=D(); dg[4][4]='x';
     const bd=B(); bd[4][4]={t:'hB',p:1};
     loadState(mk(bd,P(),dg,'auto')); SFX.on=false;
-    R['⑥マスの角行が入れる交点']=moves(board,4,4).filter(m=>m[2]).map(m=>'交点('+(m[0]+1)+'行'+(m[1]+1)+'列)').sort();
+    R['⑥×に居るマスの角行が入れる交点']=moves(board,4,4).filter(m=>m[2]).map(m=>'交点('+(m[0]+1)+'行'+(m[1]+1)+'列)').sort();
   }
   // ⑦ 実際に指せて、共有点の敵も取れる
   {
