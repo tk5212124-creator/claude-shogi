@@ -1320,12 +1320,14 @@
       <label class="rule-row"><input type="checkbox" id="rRepromote"> 成り条件をもう一度満たすと、もう一度成れる（成駒の成駒。例：敵駒を取ると成るルールなら、再度敵駒を取ると更に成る）</label>
       <label class="rule-row"><input type="checkbox" id="rRandomPromote"> 成り先のない駒は、成るとき全駒からランダムな駒に変化する（王将・玉将はroyalな駒へ）</label>
       <label class="rule-row"><input type="checkbox" id="rCaptureAll"> 相手の駒を全て取る（取り切る）まで戦う（王の有無に関係なく勝敗判定。囲碁・オセロ・はさみ将棋向け）</label>
+      <label class="rule-row"><input type="checkbox" id="rEndByScore"> 相手の点数がなくなるまで戦う（王の有無に関係なく勝敗判定）</label>
+      <p class="rule-note" style="margin:2px 0 6px;">上の2つは<b>終わり方</b>の設定です。どちらもOFFなら王を取った時点で決着します。
+      どちらかをONにすると王を取っても終わらず、ONにした条件を満たした時点で決着します（両方ONなら先に満たした方）。
+      点数は<b>盤上の駒価＋囲碁の領域点</b>で数えます（取った駒の点は減らないので数えません）。</p>
       <label class="rule-row"><input type="checkbox" id="rScoreOnly"> 点数だけで勝負する</label>
-      <p class="rule-note" style="margin:2px 0 6px;">勝ち負けを点数で決めます。数えるのは<b>盤上の駒価＋囲碁の領域点</b>だけです
-      （取った駒の点は減らないので数えません）。これだけONなら、終わり方は今までどおり王を取った時点ですが、
-      <b>どちらが王を取ったかに関係なく点数の多い方の勝ち</b>になります。
-      上の「相手の駒を全て取るまで戦う」と<b>両方ON</b>にすると、王を取っても終わらず、
-      <b>相手の点数が無くなった時点で決着</b>します。点数は持ち駒の欄にいつも出ます。</p>
+      <p class="rule-note" style="margin:2px 0 6px;">こちらは<b>勝ち負けの決め方</b>の設定です。終わり方は変えません。
+      決着したとき、<b>どちらが王を取ったかに関係なく点数の多い方の勝ち</b>になります（同点なら引き分け）。
+      数えるのは盤上の駒価＋囲碁の領域点だけです。点数は持ち駒の欄にいつも出ます。</p>
       <p class="rule-note" style="margin:6px 0 2px;">シャンチー（中国象棋）</p>
       <label class="rule-row"><input type="checkbox" id="rFlyingGeneral"> 王不見王（帥と将を同じ筋で相対させる手は指せない。全ての手が相対になる場合は負け）</label>
       <label class="rule-row"><input type="checkbox" id="rPalaceEscape"> 九宮の駒（帥・將／仕・士）が宮マスの外にも出られるようにする（九宮ONのときだけ効きます）</label>
@@ -2688,7 +2690,8 @@ const RULES={
   checkPoints:false,  // 王手をかけたら点数を足す（4人チェス式）
   capturedPoints:true,// 取った駒の駒価を点数に足す（王を取った分もここに入る）
   captureAll:false,  // 相手の駒を全て取り切るまで戦う（王の有無に関係なく勝敗判定）。囲碁/オセロ/はさみ向け
-  scoreOnly:false,   // 点数だけで勝負する。captureAll と両方ONのときだけ効く
+  endByScore:false,  // 相手の点数がなくなるまで戦う（王の有無では決着しない）
+  scoreOnly:false,   // 勝ち負けを点数で決める（終わり方は変えない）
   banSennichite:true,  // 千日手回避：同一局面が4回目になる手を禁じる（＝千日手が成立しない）
   flyingGeneral:false, // 王不見王：帥と将を同じ筋で相対させる手は指せない（シャンチー）
   pointMode:'auto',    // 駒の置き方：'auto'（囲碁・シャンチー・チャンギ駒があれば交点）|'point'|'cell'
@@ -2803,8 +2806,14 @@ function loadState(text){
   cellDiag=Array.from({length:NR},(_,r)=>Array.from({length:NC},(_,c)=>(d.diag&&d.diag[r]&&d.diag[r][c])||null));
   capYou=[...(d.capYou||[])]; capEnemy=[...(d.capEnemy||[])];
   if(d.RULES) Object.keys(RULES).forEach(k=>{ if(d.RULES[k]!==undefined) RULES[k]=d.RULES[k]; });
-  // 古い保存の jishogiMode:'zero'（持将棋の決め方に「点数だけで勝負する」があった版）を読み替える
-  if(RULES.jishogiMode==='zero'){ RULES.jishogiMode='points'; RULES.captureAll=true; RULES.scoreOnly=true; }
+  // 古い保存の読み替え
+  //   jishogiMode:'zero'（持将棋の決め方に「点数だけで勝負する」があった版）
+  //   captureAll + scoreOnly で点数0終局だった版（終わり方が endByScore に分かれる前）
+  if(RULES.jishogiMode==='zero'){
+    RULES.jishogiMode='points'; RULES.endByScore=true; RULES.scoreOnly=true;
+  } else if(d.RULES && d.RULES.endByScore===undefined && RULES.captureAll && RULES.scoreOnly){
+    RULES.endByScore=true;
+  }
   setSennichiteMode(RULES.sennichiteMode||'avoid');
   youAreSente = d.youAreSente!==undefined? !!d.youAreSente : true;
   turn = d.turn===-1? -1 : 1;
@@ -5719,7 +5728,7 @@ function applyMoveSilent(side,m,_legacySilent){
   if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo);
   // 勝敗の一般則：盤上から味方の royal が居なくなった側の負け。
   // 取られた・裏返された・囲まれた・焼かれた…どの理由でも同じ扱いにする。
-  // 「取り切るまで戦う」ルールのときだけ別（王の有無では決着しない）。
+  // 「全滅まで戦う」「相手の点数がなくなるまで戦う」のときだけ別（王の有無では決着しない）。
   if(royalDecides()){
     const meHas=hasRoyalOnBoard(side), foeHas=hasRoyalOnBoard(-side);
     if(!foeHas || !meHas){
@@ -5730,7 +5739,7 @@ function applyMoveSilent(side,m,_legacySilent){
       return;
     }
   }
-  // 取り切る＋点数だけで勝負する：相手の盤上の点数を0にしたら決着
+  // 「相手の点数がなくなるまで戦う」：相手の盤上の点数が0になったら決着
   if(scoreZeroEnds()){
     const pY=calcPositionScore(1), pE=calcPositionScore(-1);
     if(pY<=0 || pE<=0){
@@ -5854,18 +5863,18 @@ function jishogiPoints(side){
    終わり方（いつ終局するか）は変えない。終局したとき、誰が王を取ったかに関係なく
    点数の多い方の勝ちになる。 */
 function scoreDecides(){ return !!RULES.scoreOnly; }
-/* 「相手の駒を全て取るまで戦う」と両方ONのときは、終わり方も点数で決まる。
-   相手の盤上の点数（駒価＋囲碁の領域点）が0になったら決着。
+/* 「相手の点数がなくなるまで戦う」…相手の盤上の点数（駒価＋囲碁の領域点）が0で決着。
    取った駒の点は永久に減らないので、0にできる盤上の点だけを見る。 */
-function scoreZeroEnds(){ return !!(RULES.captureAll && RULES.scoreOnly); }
+function scoreZeroEnds(){ return !!RULES.endByScore; }
 /* いま画面に出す点数（勝敗を決めるのもこの数）。
      ふだん … 持将棋点（盤上＋領域＋取った駒＋王手）
      点数だけで勝負する … 盤上の点数（盤上の駒価＋領域点） */
 function currentScore(side){
   return scoreDecides() ? calcPositionScore(side) : jishogiPoints(side);
 }
-// 王の有無で終局するか（取り切るルールのときは終局しない）
-function royalDecides(){ return !RULES.captureAll; }
+/* 王の有無で終局するか。
+   「全滅まで戦う」「相手の点数がなくなるまで戦う」のどちらかがONなら終局しない。 */
+function royalDecides(){ return !RULES.captureAll && !RULES.endByScore; }
 /* 王が居なくなって終局するときの勝敗。
    「点数だけで勝負する」がONなら、誰が王を取ったかに関係なく点数の多い方の勝ち。 */
 function endByRoyal(defaultWinner){
@@ -7799,6 +7808,7 @@ function openRuleModal(){
   document.getElementById('rPromoLast').checked=RULES.promoOnLast;
   document.getElementById('rPromoCap').checked=RULES.promoOnCapture;
   document.getElementById('rCaptureAll').checked=RULES.captureAll;
+  document.getElementById('rEndByScore').checked=!!RULES.endByScore;
   document.getElementById('rScoreOnly').checked=!!RULES.scoreOnly;
   document.getElementById('rDrawNoMove').checked=RULES.drawNoMove;
   document.getElementById('rDrawBothEnter').checked=RULES.drawBothEnter;
@@ -7857,6 +7867,7 @@ document.getElementById('rPromoZone').onchange=e=>{ RULES.promoOnZone=e.target.c
 document.getElementById('rPromoLast').onchange=e=>{ RULES.promoOnLast=e.target.checked; };
 document.getElementById('rPromoCap').onchange=e=>{ RULES.promoOnCapture=e.target.checked; };
 document.getElementById('rCaptureAll').onchange=e=>{ RULES.captureAll=e.target.checked; render(); };
+document.getElementById('rEndByScore').onchange=e=>{ RULES.endByScore=e.target.checked; render(); };
 document.getElementById('rScoreOnly').onchange=e=>{ RULES.scoreOnly=e.target.checked; render(); };
 document.getElementById('rDrawNoMove').onchange=e=>{ RULES.drawNoMove=e.target.checked; };
 document.getElementById('rDrawBothEnter').onchange=e=>{ RULES.drawBothEnter=e.target.checked; };
