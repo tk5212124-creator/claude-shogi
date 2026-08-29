@@ -292,6 +292,9 @@ cellDiag[r][c]   … そのマスの斜め線属性   （NR × NC）
 取られた・オセロで裏返された・碁石に囲まれた・はさまれた・焼かれた…どの理由でも同じ扱いで、
 着手のたびに両者を確認する（`hasRoyalOnBoard`）。**数えるのは盤上だけ**なので、
 royal を取って持ち駒にしても、取られた側の盤上に別の royal が残っていれば対局は続く。
+**「王を取ったら終わり」＝「盤上から royal がぜんぶ消えたら終わり」**なので、
+王が複数居るゲーム（大局将棋の玉将＋太子など）では1枚取っただけでは終わらない。
+1枚目で終わらせたいときは下の `endOnRoyalCapture` を使う。
 「相手の駒を全て取る（取り切る）まで戦う」ルールのときだけ別で、王の有無では決着しない。
 
 ### 引き分け（持将棋）
@@ -330,6 +333,20 @@ royal を取って持ち駒にしても、取られた側の盤上に別の roya
 `royalDecides()`＝`!captureAll && !endByScore`、`scoreZeroEnds()`＝`endByScore`。
 点数は **盤上の駒価＋囲碁の領域点**（`calcPositionScore`）で数える。
 取った駒の点は減らないので0にできず、この数え方には入れない。
+
+### 王を1枚でも取った時点で終わる（`endOnRoyalCapture`・既定OFF）
+
+上の2つとは**独立した終わり方**で、王が複数居ても**1枚目を取った時点**で決着する。
+どれか1つでも先に満たした条件でそこで終わる（`captureAll` / `endByScore` がONでも効く）。
+
+判定は**盤上の royal の枚数**（`countRoyalsOnBoard`）を着手の前後で比べるだけなので、
+取り・囲み・オセロの裏返し・火鬼の焼き…どの理由で減っても同じ扱いになる。
+自分の royal が減ったときは相手の勝ち。勝ち負けは `endByRoyal()` を通すので、
+`scoreOnly` がONなら**どちらが王を取ったかに関係なく点数の多い方の勝ち**になる。
+
+CPUの読み（`simulate`）も同じ条件で、`king`（この手で勝ち）を
+「相手の royal がぜんぶ消えた」に加えて「1枚でも取った」でも立てる。
+`anyRoyalEnds()` がその切り替え。
 
 ### 点数だけで勝負する（`scoreOnly`・既定OFF）
 
@@ -687,7 +704,8 @@ GitHub Pages へは `.github/workflows` の `cp -r bgm _site/bgm` で一緒に�
 | `crossLayerMoves(...)` / `crossJumpPoints(...)` | 層をまたぐ移動／通り道で取れる相手レイヤーの点（飛び越え。`crossCap` では斜め1歩・走りも） |
 | `crossLayerOn(b,r,c)` / `atCrossCell(b,r,c)` / `stuckOnCross(b,r,c,t)` | 層を行き来できるか／×の中に居るか／×の中の交点の駒か |
 | `diagBlocked(b,r,c,dr,dc,p)` | 斜めの通り道が相手レイヤーの駒に塞がれるか（`crossCap` なら相手の駒は取って通る） |
-| `hasRoyalOnBoard(p)` | 勝敗判定用（盤上だけを見る） |
+| `hasRoyalOnBoard(p)` / `countRoyalsOnBoard(p)` | 勝敗判定用（盤上だけを見る）／盤上に残る royal の枚数 |
+| `royalDecides()` / `anyRoyalEnds()` | 王の有無で終局するか／王を1枚でも取った時点で終わるか |
 | `stateJSON()` / `loadState(text)` | 保存・復元 |
 
 ---

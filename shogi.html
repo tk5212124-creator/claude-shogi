@@ -1322,9 +1322,13 @@
       <label class="rule-row"><input type="checkbox" id="rRandomPromote"> 成り先のない駒は、成るとき全駒からランダムな駒に変化する（王将・玉将はroyalな駒へ）</label>
       <label class="rule-row"><input type="checkbox" id="rCaptureAll"> 相手の駒を全て取る（取り切る）まで戦う（王の有無に関係なく勝敗判定。囲碁・オセロ・はさみ将棋向け）</label>
       <label class="rule-row"><input type="checkbox" id="rEndByScore"> 相手の点数がなくなるまで戦う（王の有無に関係なく勝敗判定）</label>
-      <p class="rule-note" style="margin:2px 0 6px;">上の2つは<b>終わり方</b>の設定です。どちらもOFFなら王を取った時点で決着します。
-      どちらかをONにすると王を取っても終わらず、ONにした条件を満たした時点で決着します（両方ONなら先に満たした方）。
+      <p class="rule-note" style="margin:2px 0 6px;">上の2つは<b>終わり方</b>の設定です。どちらもOFFなら<b>盤上から相手の王がぜんぶ居なくなった時点</b>で決着します
+      （王が複数居るときは、1枚取っても残りが居るあいだは続きます）。
+      どちらかをONにすると王が居なくなっても終わらず、ONにした条件を満たした時点で決着します（両方ONなら先に満たした方）。
       点数は<b>盤上の駒価＋囲碁の領域点</b>で数えます（取った駒の点は減らないので数えません）。</p>
+      <label class="rule-row"><input type="checkbox" id="rEndOnRoyalCapture"> 王を1枚でも取った時点で終わる</label>
+      <p class="rule-note" style="margin:2px 0 6px;">王が複数居ても<b>1枚目を取った時点</b>で決着します。取り・囲み・裏返し・焼きなど、
+      盤上から王が減れば理由を問いません。上の2つとは別の条件なので、どれか1つでも先に満たせばそこで終わります。</p>
       <label class="rule-row"><input type="checkbox" id="rScoreOnly"> 点数だけで勝負する</label>
       <p class="rule-note" style="margin:2px 0 6px;">こちらは<b>勝ち負けの決め方</b>の設定です。終わり方は変えません。
       決着したとき、<b>どちらが王を取ったかに関係なく点数の多い方の勝ち</b>になります（同点なら引き分け）。
@@ -2693,6 +2697,7 @@ const RULES={
   capturedPoints:true,// 取った駒の駒価を点数に足す（王を取った分もここに入る）
   captureAll:false,  // 相手の駒を全て取り切るまで戦う（王の有無に関係なく勝敗判定）。囲碁/オセロ/はさみ向け
   endByScore:false,  // 相手の点数がなくなるまで戦う（王の有無では決着しない）
+  endOnRoyalCapture:false, // 王を1枚でも取った時点で終わる（王が複数居ても残りを待たない）
   scoreOnly:false,   // 勝ち負けを点数で決める（終わり方は変えない）
   banSennichite:true,  // 千日手回避：同一局面が4回目になる手を禁じる（＝千日手が成立しない）
   flyingGeneral:false, // 王不見王：帥と将を同じ筋で相対させる手は指せない（シャンチー）
@@ -3685,6 +3690,14 @@ function hasRoyalOnBoard(p){
   for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===p&&isRoyal(q.t)) return true; }
   return false;
 }
+// 盤上に残っている royal の枚数（「王を1枚でも取ったら終わり」の判定に使う）
+function countRoyalsOnBoard(p){
+  ensurePts();
+  let n=0;
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) n++; }
+  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===p&&isRoyal(q.t)) n++; }
+  return n;
+}
 function hasRoyal(p){
   ensurePts();
   for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) return true; }
@@ -4314,6 +4327,7 @@ function doMoveChessPromo(fr,fc,tr,tc,toCode,p){
   board[fr][fc]=null;
   history[history.length-1].to=[tr,tc];
   pendingFx=computeFx(_prev,p,{fr,fc,tr,tc},true);
+  if(anyRoyalEnds() && tookRoyal){ endByRoyal(p); return; }   // 王を1枚でも取ったら終わり
   if(royalDecides() && tookRoyal && !hasRoyalOnBoard(-p)){ endByRoyal(p); return; }
   checkSennichite();
 }
@@ -4927,7 +4941,8 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
 
   const myCap = p===-1? nce : ncy;
   const touch=[];                 // 新しく埋まった／持ち主が変わった場所（囲みの判定に使う）
-  let king=false;
+  let king=false;                 // この手で相手の royal を取った（取り・裏返し・焼き）
+  let enclRoyal=false;            // 囲みで相手の royal を取った
   // コピー盤nb上でオセロ裏返しを行う（8方向・全種類を自軍に裏返す。royalを裏返したらking扱い）
   function simOthelloFlip(r,c,side){
     const dirs=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
@@ -4980,7 +4995,10 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
   // 囲碁の囲み取り。碁石は「囲んだ領域の駒はマス・交点に関係なく取れる」ので2層を通して数える
   // 実盤とまったく同じ「群の呼吸点が0なら丸ごと取る」を使う
   function simCaptureSurrounded(moverSide){
-    const push=(side,q)=>{ if(RULES.drops) (side===1?ncy:nce).push(capturedCode(q)); };
+    const push=(side,q)=>{
+      if(isRoyal(q.t) && side===p) enclRoyal=true;   // 囲みで相手の royal を取った
+      if(RULES.drops) (side===1?ncy:nce).push(capturedCode(q));
+    };
     captureSurroundedNear(nb, npts, touch, moverSide, push);
   }
   // 碁石が囲んだ領域の駒を取る（層に関係なく）。囲碁石を打った直後に判定する。
@@ -5023,12 +5041,15 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     if(pc.t==='HASA') simHasamiCapture(m.tr,m.tc,p); // はさみ取りを読みに反映
     if(hasFire(pc.t)) simFireBurn(m.tr,m.tc,p);      // 火鬼の焼き取りを読みに反映
   }
+  const tookRoyal = king;    // 囲みの前に、この手そのもので royal を取ったかを控える
   simCaptureSurrounded(p);   // 囲みで取られる群を読みにも反映（駒の種類は問わない）
   // 実ゲームと同じ判定にする：royal を1枚取っただけでは勝ちにしない。
   // 相手の royal が盤上から全て消えたときだけ「勝ち」。取り切るルールでは royal では決着しない。
   // 取ったときだけでなく、囲みで消えた場合も同じ扱いにするため無条件に見る
   // （実ゲームも着手の最後に hasRoyalOnBoard を無条件で見ている）。
-  king = royalDecides() && !anyRoyalIn(nb, npts, -p);
+  // 「王を1枚でも取ったら終わり」のときだけ、1枚取った時点で勝ちにする。
+  king = (royalDecides() && !anyRoyalIn(nb, npts, -p))
+      || (anyRoyalEnds() && (tookRoyal || enclRoyal));
   return {nb,ncy,nce,king};
 }
 
@@ -5651,6 +5672,9 @@ function applyMoveSilent(side,m,_legacySilent){
   }
   passStreak=0;              // 通常の着手が入ったら連続パスは途切れる
   ensurePts();
+  // 「王を1枚でも取ったら終わり」用に、着手前の royal の枚数を控えておく。
+  // 取り・裏返し・囲み・焼き…どの理由で減っても同じ扱いにするため、枚数で見る。
+  const royals0 = anyRoyalEnds() ? {me:countRoyalsOnBoard(side), foe:countRoyalsOnBoard(-side)} : null;
   const LB = m.pt ? ptsBoard : board;   // この手が動くレイヤー
   const OB = m.pt ? board : ptsBoard;   // もう一方のレイヤー
   const DB = (m.toPt!==undefined) ? (m.toPt? ptsBoard : board) : LB;   // 着地するレイヤー
@@ -5770,6 +5794,18 @@ function applyMoveSilent(side,m,_legacySilent){
   }
   history[history.length-1].to=[m.tr,m.tc];
   if(_fxPrev) pendingFx=computeFx(_fxPrev,side,m,_fxPromo);
+  /* 「王を1枚でも取ったら終わり」：この手で royal が盤上から1枚でも減ったらその時点で決着。
+     ふつうの終わり方（royal がぜんぶ消えたら）とは別の条件で、先に満たした方で終わる。 */
+  if(royals0){
+    const meNow=countRoyalsOnBoard(side), foeNow=countRoyalsOnBoard(-side);
+    if(foeNow<royals0.foe || meNow<royals0.me){
+      render();
+      // 相手の王が減ったなら指した側の勝ち。自分の王が減ったなら相手の勝ち。
+      // 「点数だけで勝負する」なら、勝ち負けは点数で決める（endByRoyal の中で見る）。
+      endByRoyal(foeNow<royals0.foe ? side : -side);
+      return;
+    }
+  }
   // 勝敗の一般則：盤上から味方の royal が居なくなった側の負け。
   // 取られた・裏返された・囲まれた・焼かれた…どの理由でも同じ扱いにする。
   // 「全滅まで戦う」「相手の点数がなくなるまで戦う」のときだけ別（王の有無では決着しない）。
@@ -5919,6 +5955,11 @@ function currentScore(side){
 /* 王の有無で終局するか。
    「全滅まで戦う」「相手の点数がなくなるまで戦う」のどちらかがONなら終局しない。 */
 function royalDecides(){ return !RULES.captureAll && !RULES.endByScore; }
+/* 王を1枚でも取った時点で終わるか。
+   ふつうの「王を取ったら終わり」は盤上から royal がぜんぶ消えたときなので、
+   王が複数居るときは残りが居るあいだ続く。この設定はその1枚目で終わらせる。
+   他の終わり方の設定とは独立で、先に満たした条件で決着する。 */
+function anyRoyalEnds(){ return !!RULES.endOnRoyalCapture; }
 /* 王が居なくなって終局するときの勝敗。
    「点数だけで勝負する」がONなら、誰が王を取ったかに関係なく点数の多い方の勝ち。 */
 function endByRoyal(defaultWinner){
@@ -7853,6 +7894,7 @@ function openRuleModal(){
   document.getElementById('rPromoCap').checked=RULES.promoOnCapture;
   document.getElementById('rCaptureAll').checked=RULES.captureAll;
   document.getElementById('rEndByScore').checked=!!RULES.endByScore;
+  document.getElementById('rEndOnRoyalCapture').checked=!!RULES.endOnRoyalCapture;
   document.getElementById('rScoreOnly').checked=!!RULES.scoreOnly;
   document.getElementById('rDrawNoMove').checked=RULES.drawNoMove;
   document.getElementById('rDrawBothEnter').checked=RULES.drawBothEnter;
@@ -7913,6 +7955,7 @@ document.getElementById('rPromoLast').onchange=e=>{ RULES.promoOnLast=e.target.c
 document.getElementById('rPromoCap').onchange=e=>{ RULES.promoOnCapture=e.target.checked; };
 document.getElementById('rCaptureAll').onchange=e=>{ RULES.captureAll=e.target.checked; render(); };
 document.getElementById('rEndByScore').onchange=e=>{ RULES.endByScore=e.target.checked; render(); };
+document.getElementById('rEndOnRoyalCapture').onchange=e=>{ RULES.endOnRoyalCapture=e.target.checked; render(); };
 document.getElementById('rScoreOnly').onchange=e=>{ RULES.scoreOnly=e.target.checked; render(); };
 document.getElementById('rDrawNoMove').onchange=e=>{ RULES.drawNoMove=e.target.checked; };
 document.getElementById('rDrawBothEnter').onchange=e=>{ RULES.drawBothEnter=e.target.checked; };

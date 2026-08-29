@@ -19,6 +19,7 @@ node tests/fx-layout.mjs        [new|old]
 node tests/bgm.mjs
 node tests/board-text-fit.mjs  [new|old]
 node tests/score-modes.mjs
+node tests/royal-endgame.mjs
 node tests/theme.mjs
 node tests/check-points.mjs
 node tests/piece-value.mjs
@@ -309,6 +310,27 @@ iOS が画面を縮めて表示していた（見出しがステータスバー�
 | 古い保存 `jishogiMode:'zero'` | `points`＋`endByScore`＋`scoreOnly` に読み替わる |
 | 古い保存 `captureAll`＋`scoreOnly`（`endByScore` 無し） | `endByScore` もONになる |
 | 新しい保存（`endByScore` あり） | そのまま |
+
+## royal-endgame.mjs が見るもの
+
+「王を取ったら終わり」は**盤上から royal がぜんぶ消えたら終わり**なので、
+王が複数居るときは残りが居るあいだ続く。
+`endOnRoyalCapture`（王を1枚でも取った時点で終わる）はその1枚目で終わらせる設定。
+
+王が2枚（王将＋玉将）の相手の盤で、1枚目を取ったところを見る。
+
+| 見るもの | 期待 |
+|---|---|
+| 既定（OFF）で1枚目を取る | 終わらない（相手の王は1枚残る） |
+| 続けて2枚目を取る | 終局（相手の王を攻め取りました） |
+| ONで1枚目を取る | **その時点で終局**（相手の王はまだ1枚残っている） |
+| `captureAll` / `endByScore` がONでも | ONなら1枚目で終局（別の条件として効く） |
+| `scoreOnly` と併用 | 終局し、王を取った側が点数で負けることもある |
+| 囲みで王が減ったとき | 終局（取り以外の理由でも同じ） |
+| CPUの読み（`simulate`）の `king` | OFF=false／ON=true（1枚目を取る手） |
+| 王が1枚だけの盤 | ONでもOFFでも同じ（ふつうの本将棋に影響しない） |
+| UIのチェック → 保存 → 読み直し | 往復する |
+| 初期配置の王の数 | 本将棋・チェス・中将棋・シャンチー・チャンギ・どうぶつは各1枚、**大局将棋は各2枚**（玉将＋太子） |
 
 ## theme.mjs が見るもの
 
