@@ -28,7 +28,6 @@ jobs:
           mkdir -p _site
           cp shogi.html _site/index.html
           cp shogi.html _site/shogi.html
-          cp harness.html _site/harness.html
           cp -r bgm _site/bgm
       - uses: actions/configure-pages@v5
         with:
