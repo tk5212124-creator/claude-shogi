@@ -24,7 +24,12 @@ node tests/theme.mjs
 node tests/check-points.mjs
 node tests/piece-value.mjs
 node tests/score-and-territory.mjs
+node tests/harness-runtime.mjs
+node tests/harness-local-llm.mjs
 ```
+
+`harness-*.mjs` は `shogi.html` ではなく `harness.html`（AI Harness）のテスト。
+中身は `docs/harness.md` の「5. テスト」にまとめてある。
 
 `old` を指定する場合は、比較したい版のHTMLを `OLD_HTML` 環境変数で渡す
 （例：`OLD_HTML=/path/to/old.html node tests/repetition.mjs old 48 6`）。
