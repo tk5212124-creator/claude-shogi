@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Harness — Local Provider v0.4.0</title>
+<style>
+:root{--ink:#1a1c1f;--sub:#5c6167;--line:#d9dde2;--bg:#fbfcfd;--panel:#fff;--ok:#1f7a4d;--err:#b3401f;--accent:#2b5c8a;--code-bg:#f4f6f8;--warn:#8a6d1f}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.5}
+.wrap{max-width:1080px;margin:0 auto;padding:20px 16px 80px}h1{font-size:19px;margin:0 0 2px}.tag{font-size:12px;color:var(--sub);margin-bottom:18px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}.card h2{font-size:13px;margin:0 0 10px;color:var(--sub);font-weight:600}
+textarea{width:100%;min-height:270px;border:1px solid var(--line);border-radius:8px;padding:10px;font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.55;color:var(--ink);background:var(--code-bg);resize:vertical}
+input[type=text]{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:7px;padding:6px 8px;background:#fff;color:var(--ink);min-width:0}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--sub);flex:1 1 180px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;align-items:flex-end}
+button{font:inherit;font-size:13px;border:1px solid var(--line);background:#fff;color:var(--ink);padding:7px 13px;border-radius:7px;cursor:pointer}
+button:hover{border-color:var(--accent);color:var(--accent)}button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}button:disabled{opacity:.45;cursor:not-allowed}
+button.danger{border-color:#d8a08a;color:var(--err)}
+.seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex-wrap:wrap}.seg button{border:0;border-radius:0;border-right:1px solid var(--line)}.seg button.on{background:var(--accent);color:#fff}
+.log{font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.6;background:#12151a;color:#d5dae0;border-radius:8px;padding:12px;min-height:240px;max-height:520px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.l-node{color:#7fb2e6}.l-ok{color:#6cc48c}.l-err{color:#e8926f}.l-loop{color:#c4a0e0}.l-route{color:#e6c86c}.l-dim{color:#7a828c}.l-data{color:#9fd8cf}.l-cp{color:#6cc4bd}.l-prov{color:#d3b3f0}
+.state{font-size:12px;color:var(--sub);margin-top:8px;font-family:ui-monospace,monospace}.full{grid-column:1/-1}.mini{font-size:12px;color:var(--sub);margin:4px 0 0;line-height:1.7}
+code{background:var(--code-bg);padding:1px 4px;border-radius:4px;font-size:12px}
+.banner{font-size:12px;padding:8px 10px;border-radius:7px;margin-bottom:10px;display:none}.banner.show{display:block}.banner.warn{background:#fdf3e3;border:1px solid #e8c98a;color:var(--warn)}
+.tests{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#12151a;color:#d5dae0;border-radius:8px;padding:12px;margin-top:10px;white-space:pre-wrap;max-height:420px;overflow:auto}
+.pass{color:#6cc48c}.fail{color:#e8926f}
+.bar{height:6px;background:var(--code-bg);border-radius:4px;overflow:hidden;margin-top:6px}.bar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--sub);font-family:ui-monospace,monospace}
+.pill.ready{border-color:#9ccfb2;color:var(--ok)}.pill.loading{border-color:#e8c98a;color:var(--warn)}.pill.error{border-color:#d8a08a;color:var(--err)}
+.stream{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:10px;min-height:120px;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.stream .sh{color:var(--accent);font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:12px;font-family:ui-monospace,monospace}
+th,td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}th{color:var(--sub);font-weight:600}
+td.n{text-align:right}.s-success{color:var(--ok)}.s-error{color:var(--err)}.s-cancelled{color:var(--warn)}
+.tot{display:flex;gap:14px;flex-wrap:wrap;font-family:ui-monospace,monospace;font-size:12px;color:var(--sub)}.tot b{color:var(--ink);font-weight:600}
+</style></head><body><div class="wrap">
+<h1>AI Harness <span style="color:var(--sub);font-size:14px">v0.4.0 · Local Provider</span></h1>
+<div class="tag">Provider抽象（mock / OpenAI互換ローカル / WebLLM）· signal+onToken · ModelManager · JSON schema契約 · Runtimeは adapter 種別を知らない</div>
+<div id="resumeBanner" class="banner warn"></div>
+
+<div class="card" style="margin-bottom:16px"><h2>Provider（ローカルLLM）</h2>
+<div class="row"><div class="seg" id="adapterSeg">
+<button data-ad="mock" class="on">mock</button><button data-ad="openai_local">OpenAI互換ローカル</button><button data-ad="webllm">WebLLM（WebGPU）</button>
+</div></div>
+<div class="row">
+<label class="f" id="epWrap">endpoint<input type="text" id="endpoint" value="http://localhost:11434/v1" spellcheck="false"></label>
+<label class="f">model<input type="text" id="model" value="qwen2.5:3b" spellcheck="false" list="modelList"></label>
+<datalist id="modelList"></datalist>
+</div>
+<div class="row">
+<button id="probe">接続 / モデルロード</button><button id="writeSpec">Specのproviders.localに書き込む</button>
+<span id="provState" class="pill">unloaded</span>
+</div>
+<div class="bar"><i id="provBar"></i></div>
+<div class="mini" id="provHint"></div>
+</div>
+
+<div class="grid">
+<div class="card"><h2>HarnessSpec（JSON）</h2>
+<div class="row"><div class="seg" id="exSeg">
+<button data-ex="exL1">ローカル直列</button><button data-ex="exL2">ローカル並列+Join</button><button data-ex="exL3">JSON契約+文字数分岐</button><button data-ex="exL4">ローカル改稿ループ</button>
+</div></div>
+<div class="row"><div class="seg" id="exSeg2">
+<button data-ex="ex1" class="on">mock改稿ループ</button><button data-ex="ex5">mock並列</button><button data-ex="ex7">mock Loop×並列</button><button data-ex="ex2">mock分岐</button><button data-ex="ex8">mock template</button><button data-ex="ex9">mock fail_fast</button>
+</div></div>
+<textarea id="spec" spellcheck="false"></textarea>
+<div class="row"><button class="primary" id="run">実行</button><button id="step">1 Work Item</button><button id="cancel" disabled class="danger">Cancel</button><button id="resume" disabled>Resume</button><button id="retry" disabled>Retry</button><button id="reset">クリア</button></div>
+<div class="state" id="stateline">state: idle</div></div>
+
+<div class="card"><h2>実行ログ</h2><div class="log" id="log"></div>
+<div class="mini">Provider は「推論する / Usageを返す / cancelに応答する / 失敗理由を返す」だけ。失敗の波及（fail_fast）は Runtime だけが判断する。</div></div>
+
+<div class="card"><h2>ストリーミング（途中tokenはdata-flowに載せない）</h2><div class="stream" id="stream"></div>
+<div class="mini">onToken の出力は NodeAttempt.partialOutput とこの表示だけに入る。completed した Node の出力のみ EdgeDelivery になる。</div></div>
+
+<div class="card"><h2>使用量</h2>
+<div class="tot" id="totals"></div>
+<table id="nodeTable"><thead><tr><th>node</th><th>status</th><th class="n">回数</th><th class="n">in tok</th><th class="n">out tok</th><th class="n">文字数</th></tr></thead><tbody></tbody></table>
+<div class="mini">ローカル推論は料金0なので <code>cost=null / costSource=unavailable</code>。usage未報告のAPI呼び出しはトークン数を捏造せず <code>unreported</code> として数える。</div></div>
+</div>
+
+<div class="card full" style="margin-top:16px"><h2>自己テスト（memStore・本番CP非汚染）</h2>
+<div class="tests" id="tests">running…</div>
+<div class="mini">Runtime回帰15件 + Provider契約13件。Provider層は stub transport で決定論的に検証する（実ネットワーク不要）。</div></div>
+</div>
+<script>
+"use strict";
+const CP_KEY="harness_vslice_cp_v040";
+const ABSENT=Symbol("absent");
+/* ---- 式評価 ---- */
+const OPS2=["&&","||","==","!=","<=",">="],OPS1=["+","-","*","/","%","<",">"];
+const FNS=new Set(["len","has","regex","count","min","max","json_parse","json_stringify"]);
+function tokenize(s){const t=[];let i=0;const isId=c=>/[A-Za-z_$]/.test(c),isIdN=c=>/[A-Za-z0-9_$]/.test(c);
+  while(i<s.length){const c=s[i];if(/\s/.test(c)){i++;continue;}
+    if(c==='"'||c==="'"){let j=i+1,v="";while(j<s.length&&s[j]!==c)v+=s[j++];i=j+1;t.push({t:"str",v});continue;}
+    if(/[0-9]/.test(c)||(c==="."&&/[0-9]/.test(s[i+1]))){let j=i,v="";while(j<s.length&&/[0-9.]/.test(s[j]))v+=s[j++];i=j;t.push({t:"num",v:parseFloat(v)});continue;}
+    if(isId(c)){let j=i,v="";while(j<s.length&&isIdN(s[j]))v+=s[j++];i=j;if(v==="true"||v==="false")t.push({t:"bool",v:v==="true"});else if(v==="null")t.push({t:"null"});else t.push({t:"id",v});continue;}
+    const two=s.slice(i,i+2);if(OPS2.includes(two)){t.push({t:"op",v:two});i+=2;continue;}
+    if(OPS1.includes(c)||"()[].,!".includes(c)){t.push({t:"op",v:c});i++;continue;}throw{code:"EXPRESSION_PARSE_ERROR"};}return t;}
+function parseE(tk){let p=0;const pk=()=>tk[p],eat=()=>tk[p++];const ex=v=>{const x=eat();if(!x||x.v!==v)throw{code:"EXPRESSION_PARSE_ERROR"};};
+  function bin(sub,ops){let l=sub();while(pk()&&pk().t==="op"&&ops.includes(pk().v)){const op=eat().v;l={type:"Binary",op,l,r:sub()};}return l;}
+  const or=()=>bin(and,["||"]),and=()=>bin(cmp,["&&"]),cmp=()=>bin(add,["==","!=","<","<=",">",">="]),add=()=>bin(mul,["+","-"]),mul=()=>bin(un,["*","/","%"]);
+  function un(){if(pk()&&pk().t==="op"&&(pk().v==="!"||pk().v==="-")){const op=eat().v;return{type:"Unary",op,x:un()};}return po();}
+  function po(){let n=pr();while(pk()){if(pk().v==="."){eat();const id=eat();n={type:"Member",obj:n,prop:id.v,computed:false};}
+    else if(pk().v==="["){eat();const ix=or();ex("]");n={type:"Member",obj:n,prop:ix,computed:true};}
+    else if(pk().v==="("){if(n.type!=="Id")throw{code:"EXPRESSION_NOT_ALLOWED"};eat();const a=[];if(pk()&&pk().v!==")"){a.push(or());while(pk()&&pk().v===","){eat();a.push(or());}}ex(")");n={type:"Call",name:n.name,args:a};}else break;}return n;}
+  function pr(){const x=pk();if(!x)throw{code:"EXPRESSION_PARSE_ERROR"};if(x.t==="num"){eat();return{type:"Lit",v:x.v};}if(x.t==="str"){eat();return{type:"Lit",v:x.v};}if(x.t==="bool"){eat();return{type:"Lit",v:x.v};}if(x.t==="null"){eat();return{type:"Lit",v:null};}if(x.t==="id"){eat();return{type:"Id",name:x.v};}if(x.v==="("){eat();const e=or();ex(")");return e;}if(x.v==="["){eat();const els=[];if(pk()&&pk().v!=="]"){els.push(or());while(pk()&&pk().v===","){eat();els.push(or());}}ex("]");return{type:"Array",els};}throw{code:"EXPRESSION_PARSE_ERROR"};}
+  const ast=or();if(p<tk.length)throw{code:"EXPRESSION_PARSE_ERROR"};return ast;}
+function evalExpr(ast,ctx){const S=v=>{if(typeof v!=="string")throw{code:"EXPRESSION_EVALUATION_ERROR"};return v;};const N=v=>{if(typeof v!=="number")throw{code:"EXPRESSION_EVALUATION_ERROR"};return v;};const A=v=>{if(!Array.isArray(v))throw{code:"EXPRESSION_EVALUATION_ERROR"};return v;};const B=v=>{if(v!==true&&v!==false)throw{code:"EXPRESSION_EVALUATION_ERROR"};return v;};
+  const fns={len:a=>Array.isArray(a)?a.length:[...S(a)].length,has:a=>a!==ABSENT&&a!==null&&a!==undefined,regex:(t,p)=>new RegExp(S(p)).test(S(t)),count:(arr,v)=>A(arr).filter(x=>x===v).length,min:(...a)=>Math.min(...a.map(N)),max:(...a)=>Math.max(...a.map(N)),json_parse:t=>JSON.parse(S(t)),json_stringify:v=>JSON.stringify(v)};
+  const rid=name=>{if(name in ctx.root)return ctx.root[name];throw{code:"REFERENCE_ERROR"};};
+  function mem(o,pr){if(o===ABSENT||o===null||o===undefined)throw{code:"REFERENCE_ERROR"};if(typeof o==="object"){if(pr in o)return o[pr];throw{code:"REFERENCE_ERROR"};}throw{code:"REFERENCE_ERROR"};}
+  function ev(n){switch(n.type){case"Lit":return n.v;case"Array":return n.els.map(ev);case"Id":return rid(n.name);
+    case"Member":{const o=ev(n.obj);const p=n.computed?ev(n.prop):n.prop;const v=mem(o,p);return v===ABSENT?null:v;}
+    case"Unary":if(n.op==="!")return !B(ev(n.x));if(n.op==="-")return -N(ev(n.x));break;
+    case"Call":if(!FNS.has(n.name))throw{code:"EXPRESSION_NOT_ALLOWED"};return fns[n.name](...n.args.map(ev));case"Binary":return bo(n.op,n.l,n.r);}throw{code:"EXPRESSION_NOT_ALLOWED"};}
+  function bo(op,ln,rn){if(op==="&&")return B(ev(ln))?B(ev(rn)):false;if(op==="||")return B(ev(ln))?true:B(ev(rn));const a=ev(ln),b=ev(rn);
+    switch(op){case"==":return a===b;case"!=":return a!==b;case"<":return N(a)<N(b);case"<=":return N(a)<=N(b);case">":return N(a)>N(b);case">=":return N(a)>=N(b);case"+":if(typeof a==="number"&&typeof b==="number")return a+b;if(typeof a==="string"&&typeof b==="string")return a+b;throw{code:"EXPRESSION_EVALUATION_ERROR"};case"-":return N(a)-N(b);case"*":return N(a)*N(b);case"/":return N(a)/N(b);case"%":return N(a)%N(b);}throw{code:"EXPRESSION_NOT_ALLOWED"};}
+  return ev(ast);}
+const compileExpr=s=>parseE(tokenize(s));
+function evalBool(src,ctx){const v=evalExpr(compileExpr(src),ctx);if(v!==true&&v!==false)throw{code:"EXPRESSION_EVALUATION_ERROR"};return v;}
+
+/* ---- Mustache interpolation-only ---- */
+// escape=true: join等の合成用（HTMLエスケープ）。escape=false: prompt用（LLMに渡す生文字列）
+function mustacheRender(tpl,scope,opt){
+  const escape=!(opt&&opt.escape===false);
+  let out="",i=0;
+  while(i<tpl.length){
+    const open=tpl.indexOf("{{",i);
+    if(open<0){out+=tpl.slice(i);break;}
+    out+=tpl.slice(i,open);
+    if(tpl.startsWith("{{{",open)){
+      const close=tpl.indexOf("}}}",open+3);if(close<0)throw{code:"TEMPLATE_NOT_ALLOWED",message:"unterminated"};
+      const key=tpl.slice(open+3,close).trim();
+      if(!/^[A-Za-z0-9_.]+$/.test(key))throw{code:"TEMPLATE_NOT_ALLOWED",message:"invalid key: "+key};
+      const v=getPath(scope,key);out+=typeof v==="string"?v:JSON.stringify(v);i=close+3;
+    }else{
+      const close=tpl.indexOf("}}",open+2);if(close<0)throw{code:"TEMPLATE_NOT_ALLOWED",message:"unterminated"};
+      const inner=tpl.slice(open+2,close).trim();
+      if(/^[#^\/>&=!]/.test(inner)||!/^[A-Za-z0-9_.]+$/.test(inner))throw{code:"TEMPLATE_NOT_ALLOWED",message:"禁止タグ: {{"+inner+"}}"};
+      const v=getPath(scope,inner);const str=typeof v==="string"?v:JSON.stringify(v);
+      out+=escape?str.replace(/&/g,"&amp;").replace(/\\/g,"&#92;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"):str;i=close+2;
+    }
+  }
+  return out;
+}
+function getPath(scope,key){const parts=key.split(".");let cur=scope;for(const p of parts){if(cur==null)return "";cur=cur[p];}return cur==null?"":cur;}
+
+/* ---- Store ---- */
+function memStore(){return{value:null,save(r){this.value=JSON.parse(JSON.stringify(r,(k,v)=>v===ABSENT?"__A__":v));},load(){return this.value?JSON.parse(JSON.stringify(this.value),(k,v)=>v==="__A__"?ABSENT:v):null;}};}
+function canonSpec(spec){return JSON.stringify(spec);}
+const NN=v=>v==null?null:v;
+
+/* ==================================================================
+   Provider 層
+   Runtime は adapter 種別（mock/openai_local/webllm）を一切知らない。
+   契約: invoke({input,model,generation,schema,signal,onToken})
+        → {output:RuntimeValue, usage, raw?} | {cancelled:true, partial}
+   失敗は throw {code,stage,retryable,providerState}
+   ================================================================== */
+const TRANSPORTS={};                        // 試験用 fetch 差し替え（本番は未使用）
+function registerTransport(name,fn){TRANSPORTS[name]=fn;}
+function transportOf(def){const t=def&&def.transport;if(t){if(!TRANSPORTS[t])throw{code:"PROVIDER_ERROR",retryable:false,message:"未登録transport: "+t};return TRANSPORTS[t];}
+  if(typeof fetch!=="function")throw{code:"PROVIDER_ERROR",retryable:false,message:"fetch が使えない環境"};return (...a)=>fetch(...a);}
+const isAbort=e=>!!e&&(e.name==="AbortError"||e.code==="ABORT_ERR"||e.__abort===true);
+function abortError(){const e=new Error("aborted");e.name="AbortError";e.__abort=true;return e;}
+function oomLike(t){return /out of memory|oom|cudamalloc|insufficient memory|failed to allocate|device lost|allocation failed/i.test(String(t||""));}
+
+/* --- JSON schema（最小サブセット・プログラム側で答えを縛るための検査） --- */
+function checkSchema(v,sc,path){
+  path=path||"$";
+  const bad=m=>{throw{code:"SCHEMA_VALIDATION_ERROR",retryable:false,message:path+": "+m};};
+  if(!sc||typeof sc!=="object")return v;
+  if(sc.type){
+    const t=sc.type;
+    if(t==="object"&&(v===null||typeof v!=="object"||Array.isArray(v)))bad("objectでない");
+    if(t==="array"&&!Array.isArray(v))bad("arrayでない");
+    if(t==="string"&&typeof v!=="string")bad("stringでない");
+    if(t==="number"&&typeof v!=="number")bad("numberでない");
+    if(t==="integer"&&!Number.isInteger(v))bad("integerでない");
+    if(t==="boolean"&&typeof v!=="boolean")bad("booleanでない");
+  }
+  if(Array.isArray(sc.enum)&&!sc.enum.includes(v))bad("enum外: "+JSON.stringify(v));
+  if(typeof v==="string"){
+    if(sc.minLength!=null&&[...v].length<sc.minLength)bad(`minLength ${sc.minLength} 未満 (${[...v].length})`);
+    if(sc.maxLength!=null&&[...v].length>sc.maxLength)bad(`maxLength ${sc.maxLength} 超過 (${[...v].length})`);
+    if(sc.pattern&&!new RegExp(sc.pattern).test(v))bad("pattern不一致: "+sc.pattern);
+  }
+  if(typeof v==="number"){
+    if(sc.minimum!=null&&v<sc.minimum)bad(`minimum ${sc.minimum} 未満`);
+    if(sc.maximum!=null&&v>sc.maximum)bad(`maximum ${sc.maximum} 超過`);
+  }
+  if(sc.type==="object"&&v&&typeof v==="object"){
+    for(const k of sc.required||[])if(!(k in v))bad("required欠落: "+k);
+    for(const [k,s] of Object.entries(sc.properties||{}))if(k in v)checkSchema(v[k],s,path+"."+k);
+  }
+  if(sc.type==="array"&&Array.isArray(v)){
+    if(sc.minItems!=null&&v.length<sc.minItems)bad(`minItems ${sc.minItems} 未満`);
+    if(sc.maxItems!=null&&v.length>sc.maxItems)bad(`maxItems ${sc.maxItems} 超過`);
+    if(sc.items)v.forEach((x,i)=>checkSchema(x,sc.items,path+"["+i+"]"));
+  }
+  return v;
+}
+
+/* --- ModelManager: unloaded / loading / ready / error --- */
+const ModelManager={
+  states:{},
+  key(def){return (def.adapter||"?")+"|"+(def.endpoint||"")+"|"+(def.model||"")+"|"+(def.transport||"");},
+  get(def){return this.states[this.key(def)]||{status:"unloaded",progress:0,text:"",loadCount:0};},
+  reset(){this.states={};},
+  async ensureLoaded(def,adapter,signal,onProgress){
+    const k=this.key(def);let st=this.states[k];
+    if(st&&st.status==="ready")return st.handle;
+    if(st&&st.status==="loading")return st.promise;
+    if(!adapter.ensureLoaded){this.states[k]={status:"ready",progress:1,text:"(ロード不要)",handle:null,loadCount:((st&&st.loadCount)||0)+1};onProgress&&onProgress(this.states[k]);return null;}
+    st=this.states[k]={status:"loading",progress:0,text:"開始",handle:null,loadCount:((st&&st.loadCount)||0)+1};
+    onProgress&&onProgress(st);
+    const p=(async()=>{
+      try{
+        const handle=await adapter.ensureLoaded(def,pr=>{const s=this.states[k];if(s&&s.status==="loading"){s.progress=pr.progress!=null?pr.progress:s.progress;s.text=pr.text||s.text;onProgress&&onProgress(s);}},signal);
+        this.states[k]={status:"ready",progress:1,text:"ready",handle,loadCount:st.loadCount};onProgress&&onProgress(this.states[k]);return handle;
+      }catch(e){
+        if(isAbort(e)){this.states[k]={status:"unloaded",progress:0,text:"cancelled",handle:null,loadCount:st.loadCount};onProgress&&onProgress(this.states[k]);throw e;}
+        this.states[k]={status:"error",progress:0,text:e.message||String(e),handle:null,error:e,loadCount:st.loadCount};onProgress&&onProgress(this.states[k]);throw e;
+      }
+    })();
+    st.promise=p;return p;
+  }
+};
+
+/* --- adapter: mock（既存挙動を保持。node.mock が mock adapter の宣言） --- */
+const MockProvider={
+  id:"mock",label:"mock（内蔵・課金なし）",models:[],
+  async invoke(req){
+    const node=req.node,ex=req.ex,inputs=req.inputs,it=(ex&&ex.iteration)||1,m=node.mock||{};
+    if(m.fail){
+      if(m.fail==="oom")throw{code:"RESOURCE_EXHAUSTED",stage:"decode",retryable:true,providerState:"needs_reset",message:"OOM"};
+      if(m.fail==="model_load")throw{code:"MODEL_LOAD_FAILED",stage:"model_load",retryable:true,message:"model load failed"};
+      if(m.fail==="generic")throw{code:"PROVIDER_ERROR",retryable:false,message:"generic failure"};
+    }
+    if(Array.isArray(m.stream)){ // streaming + 協調cancel の決定論テスト用
+      let partial="";
+      for(const t of m.stream){
+        if(req.signal&&req.signal.aborted)return{cancelled:true,partial};
+        if(m.delayMs)await new Promise(r=>setTimeout(r,m.delayMs));
+        if(req.signal&&req.signal.aborted)return{cancelled:true,partial};
+        partial+=t;req.onToken&&req.onToken(t);
+      }
+      return{output:{type:"text",value:partial},usage:{apiCalls:1,inputTokens:5,outputTokens:m.stream.length,cost:null}};
+    }
+    if(m.echoInput)return{output:{type:"json",value:{received:inputs.in!==undefined?inputs.in:null}},usage:{apiCalls:1,inputTokens:5,outputTokens:5,cost:null}};
+    if(m.scoreByIteration){const arr=m.scoreByIteration;const score=arr[Math.min(it-1,arr.length-1)];return{output:{type:"json",value:{text:`${node.id} v${it}`,score}},usage:{apiCalls:1,inputTokens:20,outputTokens:10,cost:null}};}
+    if(m.tag)return{output:{type:"text",value:`${m.tag}${it}`},usage:{apiCalls:1,inputTokens:5,outputTokens:5,cost:null}};
+    if(m.fixed!==undefined)return{output:{type:"json",value:m.fixed},usage:{apiCalls:1,inputTokens:5,outputTokens:5,cost:null}};
+    return{output:{type:"text",value:m.text||"(mock)"},usage:{apiCalls:1,inputTokens:5,outputTokens:3,cost:null}};
+  }
+};
+
+/* --- adapter: openai_local（Ollama / LM Studio / llama.cpp server / vLLM） --- */
+const OPENAI_LOCAL_MODELS=["qwen2.5:3b","qwen2.5:7b","llama3.2:3b","gemma2:2b","phi3.5:3.8b"];
+function mapHttpError(status,body){
+  if(oomLike(body))return{code:"RESOURCE_EXHAUSTED",stage:"prefill",retryable:true,providerState:"needs_reset",message:`HTTP ${status}: ${body}`.slice(0,300)};
+  if(status===404)return{code:"MODEL_LOAD_FAILED",stage:"model_load",retryable:true,message:`HTTP 404（モデル未取得の可能性）: ${body}`.slice(0,300)};
+  if(status===400||status===422)return{code:"MODEL_INFERENCE_FAILED",retryable:false,message:`HTTP ${status}: ${body}`.slice(0,300)};
+  return{code:"PROVIDER_ERROR",retryable:status>=500,message:`HTTP ${status}: ${body}`.slice(0,300)};
+}
+async function readSSE(resp,onEvent,signal){
+  const reader=resp.body&&resp.body.getReader?resp.body.getReader():null;
+  if(!reader){const t=await resp.text();for(const line of t.split("\n"))if(line.startsWith("data: "))onEvent(line.slice(6).trim());return;}
+  const dec=new TextDecoder();let buf="";
+  for(;;){
+    if(signal&&signal.aborted)throw abortError();
+    const {done,value}=await reader.read();
+    if(done)break;
+    buf+=dec.decode(value,{stream:true});
+    let ix;
+    while((ix=buf.indexOf("\n\n"))>=0){
+      const block=buf.slice(0,ix);buf=buf.slice(ix+2);
+      for(const line of block.split("\n")){const s=line.trim();if(s.startsWith("data:"))onEvent(s.slice(5).trim());}
+    }
+  }
+  for(const line of buf.split("\n")){const s=line.trim();if(s.startsWith("data:"))onEvent(s.slice(5).trim());}
+}
+const OpenAILocalProvider={
+  id:"openai_local",label:"OpenAI互換ローカル（Ollama / LM Studio / llama.cpp server）",models:OPENAI_LOCAL_MODELS,
+  base(def){return String(def.endpoint||"").replace(/\/+$/,"");},
+  async ensureLoaded(def,onProgress,signal){
+    const f=transportOf(def);onProgress&&onProgress({progress:0.2,text:"エンドポイント確認中"});
+    let resp;
+    try{resp=await f(this.base(def)+"/models",{method:"GET",signal});}
+    catch(e){if(isAbort(e))throw e;throw{code:"MODEL_LOAD_FAILED",stage:"model_load",retryable:true,message:"接続できない: "+this.base(def)+" ("+(e.message||e)+")"};}
+    if(!resp.ok)throw{code:"MODEL_LOAD_FAILED",stage:"model_load",retryable:true,message:"モデル一覧が取れない HTTP "+resp.status};
+    let names=[];
+    try{const j=await resp.json();names=(j.data||j.models||[]).map(x=>x.id||x.name).filter(Boolean);}catch(_){}
+    if(def.model&&names.length&&!names.includes(def.model))
+      throw{code:"MODEL_LOAD_FAILED",stage:"model_load",retryable:true,message:`モデル ${def.model} が見つからない（利用可能: ${names.slice(0,8).join(", ")}）`};
+    onProgress&&onProgress({progress:1,text:"接続OK"+(names.length?` / ${names.length}モデル`:"")});
+    return{endpoint:this.base(def),models:names};
+  },
+  async invoke(req){
+    const def=req.providerDef,f=transportOf(def),signal=req.signal;
+    const body={model:req.model,messages:req.input.messages,
+      stream:def.stream!==false,
+      max_tokens:req.generation.maxTokens!=null?req.generation.maxTokens:256,
+      temperature:req.generation.temperature!=null?req.generation.temperature:0.7};
+    if(req.generation.topP!=null)body.top_p=req.generation.topP;
+    if(req.generation.stop)body.stop=req.generation.stop;
+    if(body.stream)body.stream_options={include_usage:true};
+    if(req.schema)body.response_format={type:"json_object"};
+    let resp;
+    try{resp=await f(this.base(def)+"/chat/completions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal});}
+    catch(e){if(isAbort(e))return{cancelled:true,partial:""};throw{code:"PROVIDER_ERROR",stage:"prefill",retryable:true,message:"リクエスト失敗: "+(e.message||e)};}
+    if(!resp.ok){let t="";try{t=await resp.text();}catch(_){}throw mapHttpError(resp.status,t);}
+    let text="",usage=null,partial="";
+    if(!body.stream){
+      let j;try{j=await resp.json();}catch(e){throw{code:"PROVIDER_ERROR",retryable:false,message:"JSON応答が壊れている"};}
+      text=((j.choices||[{}])[0].message||{}).content||"";usage=j.usage||null;
+      return this.finish(text,usage,req,j);
+    }
+    try{
+      await readSSE(resp,ev=>{
+        if(ev==="[DONE]")return;
+        let j;try{j=JSON.parse(ev);}catch(_){return;}
+        if(j.usage)usage=j.usage;
+        const d=((j.choices||[])[0]||{}).delta||{};
+        if(typeof d.content==="string"&&d.content){partial+=d.content;text+=d.content;req.onToken&&req.onToken(d.content);}
+        const err=j.error;if(err)throw mapHttpError(500,err.message||JSON.stringify(err));
+      },signal);
+    }catch(e){
+      if(isAbort(e)||(signal&&signal.aborted))return{cancelled:true,partial};
+      if(e&&e.code)throw e;
+      if(oomLike(e&&e.message))throw{code:"RESOURCE_EXHAUSTED",stage:"decode",retryable:true,providerState:"needs_reset",message:String(e.message||e)};
+      throw{code:"MODEL_INFERENCE_FAILED",stage:"decode",retryable:false,message:"decode中断: "+(e.message||e)};
+    }
+    if(signal&&signal.aborted)return{cancelled:true,partial};
+    return this.finish(text,usage,req,null);
+  },
+  finish(text,usage,req,raw){
+    const u={apiCalls:1,inputTokens:usage&&usage.prompt_tokens!=null?usage.prompt_tokens:null,
+      outputTokens:usage&&usage.completion_tokens!=null?usage.completion_tokens:null,cost:null};
+    if(req.schema){
+      let v;try{v=JSON.parse(stripFence(text));}catch(e){throw{code:"SCHEMA_VALIDATION_ERROR",retryable:false,message:"JSONとして読めない: "+text.slice(0,120)};}
+      checkSchema(v,req.schema);return{output:{type:"json",value:v},usage:u,raw:raw||text};
+    }
+    return{output:{type:"text",value:text},usage:u,raw:raw||text};
+  }
+};
+function stripFence(t){const s=String(t).trim();const m=s.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);return m?m[1]:s;}
+
+/* --- adapter: webllm（ブラウザ内WebGPU推論・CDN読み込み・ビルド不要） --- */
+const WEBLLM_CDN="https://esm.run/@mlc-ai/web-llm";
+const WEBLLM_MODELS=["Qwen2.5-0.5B-Instruct-q4f16_1-MLC","Qwen2.5-1.5B-Instruct-q4f16_1-MLC","Llama-3.2-1B-Instruct-q4f16_1-MLC","gemma-2-2b-it-q4f16_1-MLC"];
+const _webllmMods={};
+const WebLLMProvider={
+  id:"webllm",label:"WebLLM（ブラウザ内・WebGPU）",models:WEBLLM_MODELS,
+  async ensureLoaded(def,onProgress,signal){
+    if(typeof navigator==="undefined"||!navigator.gpu)
+      throw{code:"MODEL_LOAD_FAILED",stage:"model_load",retryable:false,message:"WebGPUが使えない（Chrome/Edge系の対応版が必要）"};
+    onProgress&&onProgress({progress:0.02,text:"WebLLM読み込み中"});
+    const url=def.cdn||WEBLLM_CDN;
+    if(!_webllmMods[url]){
+      try{_webllmMods[url]=await import(url);}
+      catch(e){throw{code:"MODEL_LOAD_FAILED",stage:"model_load",retryable:true,message:"WebLLMのCDN読み込み失敗: "+(e.message||e)};}
+    }
+    try{
+      const engine=await _webllmMods[url].CreateMLCEngine(def.model,{initProgressCallback:r=>onProgress&&onProgress({progress:r.progress,text:r.text})});
+      if(signal&&signal.aborted)throw abortError();
+      return engine;
+    }catch(e){
+      if(isAbort(e))throw e;
+      if(oomLike(e.message))throw{code:"RESOURCE_EXHAUSTED",stage:"model_load",retryable:true,providerState:"needs_reset",message:String(e.message||e)};
+      throw{code:"MODEL_LOAD_FAILED",stage:"model_load",retryable:true,message:String(e.message||e)};
+    }
+  },
+  async invoke(req){
+    const engine=req.handle;
+    if(!engine)throw{code:"MODEL_LOAD_FAILED",stage:"model_load",retryable:true,message:"engine未ロード"};
+    const opt={messages:req.input.messages,stream:true,stream_options:{include_usage:true},
+      max_tokens:req.generation.maxTokens!=null?req.generation.maxTokens:256,
+      temperature:req.generation.temperature!=null?req.generation.temperature:0.7};
+    if(req.generation.topP!=null)opt.top_p=req.generation.topP;
+    if(req.schema)opt.response_format={type:"json_object"};
+    let partial="",text="",usage=null,onAbort=null;
+    // decode 中の停止は待たずに engine へ伝える（in-flight cooperative cancellation）
+    if(req.signal){onAbort=()=>{try{engine.interruptGenerate();}catch(_){}};req.signal.addEventListener("abort",onAbort,{once:true});
+      if(req.signal.aborted)onAbort();}
+    try{
+      const stream=await engine.chat.completions.create(opt);
+      for await(const chunk of stream){
+        if(req.signal&&req.signal.aborted)return{cancelled:true,partial};
+        if(chunk.usage)usage=chunk.usage;
+        const d=((chunk.choices||[])[0]||{}).delta||{};
+        if(typeof d.content==="string"&&d.content){partial+=d.content;text+=d.content;req.onToken&&req.onToken(d.content);}
+      }
+    }catch(e){
+      if(isAbort(e)||(req.signal&&req.signal.aborted))return{cancelled:true,partial};
+      if(oomLike(e&&e.message))throw{code:"RESOURCE_EXHAUSTED",stage:"decode",retryable:true,providerState:"needs_reset",message:String(e.message||e)};
+      throw{code:"MODEL_INFERENCE_FAILED",stage:"decode",retryable:false,message:String(e&&e.message||e)};
+    }finally{if(onAbort&&req.signal)req.signal.removeEventListener("abort",onAbort);}
+    if(req.signal&&req.signal.aborted)return{cancelled:true,partial};
+    return OpenAILocalProvider.finish(text,usage,req,null);
+  }
+};
+const PROVIDERS={mock:MockProvider,openai_local:OpenAILocalProvider,webllm:WebLLMProvider};
+
+/* --- Provider解決とprompt組立 --- */
+function resolveProvider(spec,node){
+  if(node.provider){
+    const def=(spec.providers||{})[node.provider];
+    if(!def)throw{code:"REFERENCE_ERROR",retryable:false,message:"provider未定義: "+node.provider};
+    const ad=PROVIDERS[def.adapter];
+    if(!ad)throw{code:"PROVIDER_ERROR",retryable:false,message:"未知のadapter: "+def.adapter};
+    return{adapter:ad,def:Object.assign({},def)};
+  }
+  if(node.mock)return{adapter:MockProvider,def:{adapter:"mock"}};   // mock:{...} が mock adapter の宣言
+  throw{code:"REFERENCE_ERROR",retryable:false,message:"provider未指定: "+node.id};
+}
+const rvToText=rv=>rv==null?"":(rv.type==="text"?String(rv.value):JSON.stringify(rv.value));
+function buildMessages(node,inputs,ex,run){
+  const p=node.prompt||{};
+  const first=Object.keys(inputs).map(k=>inputs[k]).find(v=>v!==undefined);
+  const inText=Array.isArray(first)?first.map(rvToText).join("\n"):rvToText(first);
+  const scope={in:inText,inputs:{},iteration:(ex&&ex.iteration)||1,vars:run.vars||{},run_input:run.input};
+  for(const [k,v] of Object.entries(inputs))scope.inputs[k]=Array.isArray(v)?v.map(rvToText).join("\n"):rvToText(v);
+  let user;
+  if(p.template){
+    if(p.template.syntax!=="mustache"||p.template.mode!=="interpolation_only")throw{code:"TEMPLATE_NOT_ALLOWED",retryable:false,message:"prompt.templateは syntax=mustache / mode=interpolation_only 必須"};
+    user=mustacheRender(p.template.value||"",scope,{escape:false});
+  }else user=inText;
+  if(p.prefix)user=p.prefix+"\n\n"+user;     // 「命令時に必ず付ける文言」
+  if(p.suffix)user=user+"\n\n"+p.suffix;
+  const messages=[];
+  if(p.system)messages.push({role:"system",content:p.system});
+  messages.push({role:"user",content:user});
+  return messages;
+}
+async function invokeNode(spec,run,node,inputs,ex,ctl,log){
+  const {adapter,def}=resolveProvider(spec,node);
+  def.adapter=def.adapter||adapter.id;
+  const model=node.model||def.model||null;
+  const generation=Object.assign({},def.generation||{},node.generation||{});
+  const schema=node.schema||def.schema||null;
+  const signal=ctl?ctl.signal:undefined;
+  const attempt=ex.attempts[ex.attempts.length-1];
+  let handle=null;
+  if(adapter.ensureLoaded){
+    log&&log("prov",`⚙ ${adapter.id}: ${model} をロード確認`);
+    handle=await ModelManager.ensureLoaded(Object.assign({},def,{adapter:adapter.id,model}),adapter,signal,ctl&&ctl.onProgress);
+  }
+  const res=await adapter.invoke({
+    input:{messages:buildMessages(node,inputs,ex,run)},
+    model,generation,schema,signal,handle,providerDef:def,node,inputs,ex,
+    onToken:t=>{attempt.partialOutput=(attempt.partialOutput||"")+t;ctl&&ctl.onToken&&ctl.onToken(node.id,t);}
+  });
+  if(res&&res.cancelled){attempt.partialOutput=res.partial!=null?res.partial:attempt.partialOutput;return res;}
+  if(!res||!res.output)throw{code:"PROVIDER_ERROR",retryable:false,message:"Providerがoutputを返さない"};
+  return res;
+}
+
+/* ---- validation ---- */
+function validate(spec){const errs=[];if(!spec.nodes||!Array.isArray(spec.nodes)){errs.push("nodes無し");return errs;}
+  const ids=new Set();spec.nodes.forEach(n=>{if(!n.id)errs.push("id無し");if(ids.has(n.id))errs.push("id重複: "+n.id);ids.add(n.id);});
+  const nodeIds=new Set(spec.nodes.map(n=>n.id));
+  // providers定義
+  for(const [pid,def] of Object.entries(spec.providers||{})){
+    if(!def||!def.adapter){errs.push("provider.adapter無し: "+pid);continue;}
+    if(!PROVIDERS[def.adapter]){errs.push("未知のadapter: "+def.adapter+" @ "+pid);continue;}
+    if(def.adapter==="openai_local"&&!def.endpoint)errs.push("openai_localはendpoint必須: "+pid);
+    if(def.adapter!=="mock"&&!def.model)errs.push("providerにmodel必須: "+pid);
+  }
+  spec.nodes.forEach(n=>{
+    if(n.type!=="llm"&&n.type!=="tool")return;
+    if(n.provider){if(!(spec.providers||{})[n.provider])errs.push("provider未定義: "+n.provider+" @ "+n.id);}
+    else if(!n.mock)errs.push("provider未指定（mock宣言も無い）: "+n.id);
+    if(n.prompt&&n.prompt.template){
+      if(n.prompt.template.syntax!=="mustache")errs.push("prompt.template.syntax=mustache必須: "+n.id);
+      if(n.prompt.template.mode!=="interpolation_only")errs.push("prompt.template.mode=interpolation_only必須: "+n.id);
+      try{mustacheRender(n.prompt.template.value||"",{},{escape:false});}catch(e){errs.push("prompt.template不正: "+n.id+" "+(e.message||""));}
+    }
+    if(n.schema&&typeof n.schema!=="object")errs.push("schemaはobject必須: "+n.id);
+  });
+  const loopIds=new Set();(spec.edges||[]).forEach(e=>{
+    if(!nodeIds.has(e.from.node))errs.push("from node不明: "+e.from.node);
+    if(!nodeIds.has(e.to.node))errs.push("to node不明: "+e.to.node);
+    if(e.loop){if(loopIds.has(e.loop.id))errs.push("loop id重複: "+e.loop.id);loopIds.add(e.loop.id);
+      if(!(e.loop.max>=1))errs.push("loop.max>=1でない: "+e.loop.id);
+      if(e.loop.until){try{compileExpr(e.loop.until);}catch(_){errs.push("loop.until parse不可: "+e.loop.until);}}}
+    if(e.routing&&e.routing.mode&&!["parallel","first_match"].includes(e.routing.mode))errs.push("routing.mode不正");});
+  spec.nodes.forEach(n=>{if(n.routing&&n.routing.mode&&!["parallel","first_match"].includes(n.routing.mode))errs.push("routing.mode不正: "+n.id);});
+  const bySrc={},byToPort={};
+  (spec.edges||[]).forEach(e=>{(bySrc[e.from.node]=bySrc[e.from.node]||[]).push(e);const key=e.to.node+"."+(e.to.port||"in");(byToPort[key]=byToPort[key]||[]).push(e);});
+  Object.entries(bySrc).forEach(([src,es])=>{const hasCond=es.some(e=>e.if||e.else),hasPlain=es.some(e=>!e.if&&!e.else&&!e.loop);
+    if(hasCond&&hasPlain)errs.push("routing混在: "+src);es.forEach(e=>{if(e.if&&e.loop)errs.push("if+loop併記: "+src);if(e.if){try{compileExpr(e.if);}catch(_){errs.push("if parse不可: "+e.if);}}});
+    if(es.filter(e=>e.else).length>1)errs.push("else複数: "+src);const pr=es.filter(e=>e.if).map(e=>e.priority||0);if(new Set(pr).size!==pr.length)errs.push("priority重複: "+src);});
+  Object.entries(byToPort).forEach(([key,es])=>{const [nid,port]=key.split(".");const node=spec.nodes.find(n=>n.id===nid);const nonLoop=es.filter(e=>!e.loop);
+    const card=node&&node.inputs&&node.inputs[port]&&node.inputs[port].cardinality;
+    const allCond=nonLoop.every(e=>e.if||e.else);
+    if(nonLoop.length>1&&card!=="many"&&!allCond)errs.push("many以外への複数incoming: "+key);
+    if(card==="many"&&nonLoop.length>1){const pos=nonLoop.map(e=>e.position);if(pos.some(p=>p==null))errs.push("position未指定: "+key);
+      else{if(new Set(pos).size!==pos.length)errs.push("position重複: "+key);const sorted=[...pos].sort((a,b)=>a-b);for(let i=0;i<sorted.length;i++)if(sorted[i]!==i){errs.push("position gap: "+key);break;}}}});
+  spec.nodes.forEach(n=>{if(n.type==="join"&&n.op==="template"){
+    if(!n.template||n.template.syntax!=="mustache")errs.push("template.syntax=mustache必須: "+n.id);
+    if(!n.template||n.template.mode!=="interpolation_only")errs.push("template.mode=interpolation_only必須: "+n.id);}});
+  Object.entries(bySrc).forEach(([src,es])=>{const node=spec.nodes.find(n=>n.id===src);const mode=node&&node.routing&&node.routing.mode;
+    const hasCond=es.some(e=>e.if||e.else);const hasPlainFanout=es.filter(e=>!e.if&&!e.else&&!e.loop).length>0;
+    if(mode==="parallel"&&hasCond)errs.push("routing.mode=parallelなのに条件Edge(if/else)がある: "+src);
+    const fp=node&&node.routing&&node.routing.failurePolicy;
+    if(mode==="parallel"&&es.filter(e=>!e.loop).length>1&&!fp)errs.push("parallelではfailurePolicy明示必須: "+src);
+    if(fp&&!["fail_fast","wait_all","isolate"].includes(fp))errs.push("failurePolicy不正値: "+src);
+    if(fp&&["wait_all","isolate"].includes(fp))errs.push("UNSUPPORTED_FAILURE_POLICY(予約済み・未実装): "+fp+" @ "+src);
+    if(mode==="first_match"&&hasPlainFanout&&es.some(e=>!e.loop))errs.push("routing.mode=first_matchなのに無条件fan-out Edgeがある: "+src);});
+  return errs;}
+
+/* ---- Run ---- */
+function edgeIdOf(spec,edge){const i=(spec.edges||[]).indexOf(edge);return i>=0?"e"+i:null;}
+function makeRun(spec,input){return{runId:"run_"+Date.now(),status:"running",resumable:true,
+  nodeRuns:{},deliveries:[],executions:{},workQueue:[],branchGroups:{},cancelRequested:false,
+  loopInstances:{},loopSeq:0,execSeq:0,actSeq:0,delivSeq:0,
+  totals:{cost:0,apiCalls:0,inputTokens:0,outputTokens:0,unreportedUsageCalls:0},iterationTotal:0,
+  startedAt:new Date().toISOString(),errors:[],result:null,input:input||{},vars:spec.vars||{},
+  harnessVersion:(spec.metadata&&spec.metadata.version)||"0",specCanon:canonSpec(spec),specSnapshot:spec};}
+function metaOf(rv,usage){const m={len:null,tokens:(usage&&usage.outputTokens!=null)?usage.outputTokens:null,bytes:null};
+  if(rv&&rv.type==="text")m.len=[...String(rv.value)].length;else if(rv&&rv.type==="json")m.len=[...JSON.stringify(rv.value)].length;return m;}
+function emptyView(){return{out:ABSENT,type:null,raw:null,valid:false,status:"pending",meta:{len:null,tokens:null,bytes:null},usage:{inputTokens:null,outputTokens:null,cost:null},prev:ABSENT};}
+function nodeView(run,id){const hist=run.nodeRuns[id]||[];const succ=hist.filter(h=>h.status==="success");const last=succ[succ.length-1];
+  const lastAny=hist[hist.length-1];
+  if(!last){if(lastAny&&lastAny.status==="error"){const v=emptyView();v.status="error";return v;}
+    if(lastAny&&lastAny.status==="cancelled"){const v=emptyView();v.status="cancelled";return v;}return emptyView();}
+  let prev=ABSENT;if(last.loopInstanceId){const same=succ.filter(h=>h.loopInstanceId===last.loopInstanceId);const p=same[same.length-2];if(p)prev={out:p.out.value,type:p.out.type,meta:p.meta,usage:p.usage};}
+  return{out:last.out?last.out.value:ABSENT,type:last.out?last.out.type:null,raw:last.raw,valid:true,status:"success",meta:last.meta,usage:last.usage,prev};}
+function findLoopMax(spec,loopId){for(const e of spec.edges||[])if(e.loop&&e.loop.id===loopId)return e.loop.max;return null;}
+function buildCtx(run,spec,activeLoopInstance){
+  const root={run:{totalCost:run.totals.cost,currency:"JPY",costSource:"unavailable",apiCalls:run.totals.apiCalls,
+    inputTokens:run.totals.inputTokens,outputTokens:run.totals.outputTokens,iterationTotal:run.iterationTotal,
+    startedAt:run.startedAt,elapsedMs:Date.now()-Date.parse(run.startedAt),errors:run.errors,
+    harnessVersion:run.harnessVersion,runId:run.runId},input:run.input,vars:run.vars};
+  const inst=activeLoopInstance?run.loopInstances[activeLoopInstance]:null;
+  root.loop=inst?{id:inst.loopId,iteration:inst.iteration,max:findLoopMax(spec,inst.loopId)}:{id:null,iteration:null,max:null};
+  for(const n of spec.nodes)root[n.id]=nodeView(run,n.id);return{root};}
+
+/* ---- EdgeDelivery matching ---- */
+function deliveryMatchesExec(d,ex){return NN(d.activationId)===NN(ex.activationId)&&NN(d.loopInstanceId)===NN(ex.loopInstanceId)&&NN(d.iteration)===NN(ex.iteration);}
+function applyEdgeAndValidate(rv,edge,toNode,toPort){
+  if(rv===undefined)return undefined;
+  let v=rv;
+  if(edge.transform==="json_stringify"){if(v.type!=="json"&&v.type!=="text")throw{code:"TYPE_MISMATCH",message:"json_stringify対象がjson/textでない"};v={type:"text",value:typeof v.value==="string"?v.value:JSON.stringify(v.value)};}
+  else if(edge.transform==="json_parse"){if(v.type!=="text")throw{code:"TYPE_MISMATCH",message:"json_parse対象がtextでない"};v={type:"json",value:JSON.parse(v.value)};}
+  const portDef=toNode&&toNode.inputs&&toNode.inputs[toPort];
+  const want=portDef&&portDef.type;
+  const bypass=edge.validation&&edge.validation.typeCheck==="bypass";
+  if(want&&want!==v.type&&!bypass&&want!=="any"){throw{code:"TYPE_MISMATCH",message:`型不一致: ${v.type} → ${want} (transform/bypass未指定)`};}
+  return v;
+}
+function resolveInputsForExec(run,spec,ex){const node=spec.nodes.find(n=>n.id===ex.nodeId);
+  const inE=(spec.edges||[]).filter(e=>e.to.node===ex.nodeId&&!e.loop);const byPort={};for(const e of inE)(byPort[e.to.port||"in"]=byPort[e.to.port||"in"]||[]).push(e);
+  const loopInE=(spec.edges||[]).filter(e=>e.to.node===ex.nodeId&&e.loop);for(const e of loopInE)(byPort[e.to.port||"in"]=byPort[e.to.port||"in"]||[]).push(e);
+  const inputs={};
+  for(const[port,es]of Object.entries(byPort)){es.sort((a,b)=>(a.position||0)-(b.position||0));const card=node&&node.inputs&&node.inputs[port]&&node.inputs[port].cardinality;
+    const ds=run.deliveries.filter(d=>d.toNodeId===ex.nodeId&&d.toPort===port&&deliveryMatchesExec(d,ex));
+    if(card==="many"){
+      const perEdge={};for(const d of ds){perEdge[d.edgeId]=d;}
+      const picked=Object.values(perEdge).sort((a,b)=>a.position-b.position);
+      inputs[port]=picked.map(d=>{const e=(spec.edges||[])[parseInt(String(d.edgeId).slice(1))];return applyEdgeAndValidate(d.runtimeValue,e||{},node,port);});}
+    else{const first=ds[0];if(first){const e=(spec.edges||[])[parseInt(String(first.edgeId).slice(1))];inputs[port]=applyEdgeAndValidate(first.runtimeValue,e||{},node,port);}else inputs[port]=undefined;}}
+  return inputs;}
+function execInputsReady(run,spec,ex){const node=spec.nodes.find(n=>n.id===ex.nodeId);
+  const inE=(spec.edges||[]).filter(e=>e.to.node===ex.nodeId);if(inE.length===0)return true;
+  const byPort={};for(const e of inE)(byPort[e.to.port||"in"]=byPort[e.to.port||"in"]||[]).push(e);
+  for(const[port,es]of Object.entries(byPort)){const card=node&&node.inputs&&node.inputs[port]&&node.inputs[port].cardinality;
+    const nonLoopEdges=es.filter(e=>!e.loop);
+    if(card==="many"){
+      const ok=nonLoopEdges.every(e=>{const eid=edgeIdOf(spec,e);return run.deliveries.some(d=>d.edgeId===eid&&d.toNodeId===ex.nodeId&&d.toPort===port&&deliveryMatchesExec(d,ex));});
+      if(!ok)return false;
+    }else{
+      const ds=run.deliveries.filter(d=>d.toNodeId===ex.nodeId&&d.toPort===port&&deliveryMatchesExec(d,ex));
+      if(ds.length<1)return false;
+    }}
+  return true;}
+
+/* ---- exec/delivery生成 ---- */
+function makeDelivery(run,spec,edge,rv,fromExecId,ctx){run.deliveries.push({deliveryId:"d"+(++run.delivSeq),
+  edgeId:edgeIdOf(spec,edge),
+  fromExecId:fromExecId||null,fromNodeId:edge.from.node,toNodeId:edge.to.node,toPort:edge.to.port||"in",
+  position:edge.position!=null?edge.position:0,runtimeValue:rv,
+  activationId:NN(ctx.activationId),loopInstanceId:NN(ctx.loopInstanceId),iteration:NN(ctx.iteration)});}
+function makeExec(run,nodeId,ctx){const execId=`${nodeId}@${ctx.loopInstanceId||"root"}:${ctx.iteration||1}#${++run.execSeq}`;
+  const ex={execId,nodeId,status:"ready",activationId:NN(ctx.activationId),loopInstanceId:NN(ctx.loopInstanceId),iteration:NN(ctx.iteration)};
+  run.executions[execId]=ex;run.workQueue.push({execId,phase:"execute"});return ex;}
+function resolveTargetContext(run,spec,fromExec,edge,loopEntries){
+  const toNode=edge.to.node;const entry=loopEntries[toNode];
+  if(edge.loop){const inst=fromExec.loopInstanceId;return{activationId:fromExec.activationId,loopInstanceId:inst,iteration:run.loopInstances[inst].iteration};}
+  if(entry){
+    const act=NN(fromExec.activationId);
+    let iid=Object.keys(run.loopInstances).find(k=>{const x=run.loopInstances[k];return x.loopId===entry.loopId&&NN(x.activationId)===act&&x.active;});
+    if(!iid){iid=entry.loopId+"#"+(++run.loopSeq);run.loopInstances[iid]={loopId:entry.loopId,activationId:act,iteration:1,active:true};run.iterationTotal++;}
+    return{activationId:fromExec.activationId,loopInstanceId:iid,iteration:run.loopInstances[iid].iteration};}
+  return{activationId:fromExec.activationId,loopInstanceId:fromExec.loopInstanceId,iteration:fromExec.iteration};}
+function enqueueTo(run,spec,edge,ctx){const dup=Object.values(run.executions).find(x=>x.nodeId===edge.to.node&&x.status==="ready"&&NN(x.activationId)===NN(ctx.activationId)&&NN(x.loopInstanceId)===NN(ctx.loopInstanceId)&&NN(x.iteration)===NN(ctx.iteration));
+  if(dup)return dup;return makeExec(run,edge.to.node,ctx);}
+
+function runJoin(node,inputs){const items=(inputs.items||[]).map(rv=>rv?rv.value:null);
+  if(node.op==="json_array")return{type:"json",value:items};
+  if(node.op==="concat"){for(const x of items)if(typeof x!=="string")throw{code:"JOIN_TYPE_ERROR"};return{type:"text",value:items.join(node.sep||"\n")};}
+  if(node.op==="json_object"){const o={};(node.keys||[]).forEach(k=>o[k.key]=items[k.position]);return{type:"json",value:o};}
+  if(node.op==="template")return{type:"text",value:mustacheRender(node.template&&node.template.value||"",{items})};
+  throw{code:"JOIN_OP_ERROR"};}
+
+function failRun(run,nodeId,err,store,recordNodeFailure){run.status="failed";run.resumable=true;run.errors.push({node:nodeId,kind:err.code||"ERROR",message:err.message||String(err)});
+  if(recordNodeFailure&&nodeId)(run.nodeRuns[nodeId]=run.nodeRuns[nodeId]||[]).push({out:null,raw:null,usage:null,meta:{len:null,tokens:null,bytes:null},status:"error",errorKind:err.code||"ERROR"});
+  if(store)store.save(run);}
+
+function handleExecutionFailure(run,spec,ex,err,store,log){
+  ex.status="failed";ex.errorKind=err.code||"ERROR";
+  if(ex.attempts&&ex.attempts.length){const at=ex.attempts[ex.attempts.length-1];at.status="failed";at.error={code:err.code||"ERROR",stage:err.stage};at.endedAt=Date.now();}
+  (run.nodeRuns[ex.nodeId]=run.nodeRuns[ex.nodeId]||[]).push({execId:ex.execId,loopInstanceId:ex.loopInstanceId,iteration:ex.iteration,out:null,raw:null,usage:null,meta:{len:null,tokens:null,bytes:null},status:"error",errorKind:err.code||"ERROR",stage:err.stage,retryable:!!err.retryable});
+  run.errors.push({node:ex.nodeId,execId:ex.execId,kind:err.code||"ERROR",stage:err.stage,retryable:!!err.retryable,message:err.message||String(err)});
+  log&&log("err",`✗ ${ex.nodeId}: ${err.code||"ERROR"}${err.stage?"("+err.stage+")":""} ${err.message||""}`);
+  const gid=findBranchGroupId(run,ex);
+  if(gid){const g=run.branchGroups[gid];g.failures.push({execId:ex.execId,nodeId:ex.nodeId,kind:err.code||"ERROR"});
+    if(!g.primaryFailure)g.primaryFailure={execId:ex.execId,nodeId:ex.nodeId,code:err.code||"ERROR"};
+    if(g.branches[ex.execId])g.branches[ex.execId].status="failed";
+    applyBranchFailurePolicy(run,spec,g,ex,err,store,log);}
+  run.status="failed";run.resumable=true;run.workQueue.shift();
+  if(store)store.save(run);}
+
+// in-flight cancel: failed ではなく cancelled。部分出力は data-flow に載せない
+function handleExecutionCancelled(run,ex,reason,partial,store,log){
+  ex.status="cancelled";ex.cancelReason=reason;
+  if(ex.attempts&&ex.attempts.length){const at=ex.attempts[ex.attempts.length-1];at.status="cancelled";at.partialOutput=partial!=null?partial:at.partialOutput;at.endedAt=Date.now();}
+  (run.nodeRuns[ex.nodeId]=run.nodeRuns[ex.nodeId]||[]).push({execId:ex.execId,loopInstanceId:ex.loopInstanceId,iteration:ex.iteration,out:null,raw:null,usage:null,meta:{len:null,tokens:null,bytes:null},status:"cancelled",cancelReason:reason,partialOutput:partial!=null?partial:null});
+  run.workQueue.shift();
+  log&&log("err",`■ ${ex.nodeId}: cancelled(${reason})${partial?` 部分出力${[...partial].length}字は破棄`:""}`);
+  if(store)store.save(run);}
+
+function findBranchGroupId(run,ex){
+  if(ex.branchGroupId&&run.branchGroups[ex.branchGroupId])return ex.branchGroupId;
+  if(ex.activationId&&run.branchGroups[ex.activationId])return ex.activationId;
+  return null;}
+
+function applyBranchFailurePolicy(run,spec,group,failedEx,err,store,log){
+  const policy=group.failurePolicy;
+  if(policy==="fail_fast"){
+    group.status="failed";
+    for(const wi of run.workQueue.slice()){const e=run.executions[wi.execId];
+      if(e&&findBranchGroupId(run,e)===group.activationId&&e.status!=="completed"&&e.status!=="failed"){
+        e.status="cancelled";e.cancelReason="sibling_failed";
+        (run.nodeRuns[e.nodeId]=run.nodeRuns[e.nodeId]||[]).push({execId:e.execId,out:null,raw:null,usage:null,meta:{len:null,tokens:null,bytes:null},status:"cancelled",cancelReason:"sibling_failed"});
+        if(group.branches[e.execId])group.branches[e.execId].status="cancelled";}}
+    run.workQueue=run.workQueue.filter(wi=>{const e=run.executions[wi.execId];return !(e&&findBranchGroupId(run,e)===group.activationId&&e.status==="cancelled");});
+    log&&log("err",`✗ fail_fast: group ${group.activationId} の兄弟をキャンセル（主因 ${failedEx.nodeId}:${err.code}）`);
+  } else if(policy==="wait_all"){
+    group.status="failing";log&&log("err",`✗ wait_all: group ${group.activationId} 兄弟継続（主因 ${failedEx.nodeId}:${err.code}）`);
+  } else if(policy==="isolate"){
+    group.status="degraded";log&&log("err",`✗ isolate: branch ${failedEx.nodeId} のみ閉じる（主因 ${err.code}）`);
+  }}
+
+/* ---- Run制御（cancelはRunController経由。storeに入れない） ---- */
+function makeController(hooks){
+  const ac=typeof AbortController!=="undefined"?new AbortController():{signal:{aborted:false},abort(){this.signal.aborted=true;}};
+  return{signal:ac.signal,abort:()=>ac.abort(),onToken:(hooks&&hooks.onToken)||null,onProgress:(hooks&&hooks.onProgress)||null};
+}
+function requestCancel(run,store,ctl){run.cancelRequested=true;run.status="cancelling";if(ctl)ctl.abort();if(store)store.save(run);}
+
+/* ---- processOneWorkItem（1 Work Item・async） ---- */
+async function processOneWorkItem(spec,run,store,log,ctl){
+  if(run.cancelRequested&&run.status==="cancelling"){
+    for(const wi of run.workQueue.slice()){const e=run.executions[wi.execId];
+      if(e&&e.status!=="completed"&&e.status!=="failed"&&e.status!=="cancelled"){e.status="cancelled";e.cancelReason="user_requested";
+        (run.nodeRuns[e.nodeId]=run.nodeRuns[e.nodeId]||[]).push({execId:e.execId,out:null,raw:null,usage:null,meta:{len:null,tokens:null,bytes:null},status:"cancelled",cancelReason:"user_requested"});}}
+    run.workQueue=[];run.status="cancelled";run.resumable=false;if(store)store.save(run);return{kind:"cancelled"};}
+  if(run.status!=="running")return{kind:"idle"};
+  if(run.workQueue.length===0)return{kind:"idle"};
+  const byId={};spec.nodes.forEach(n=>byId[n.id]=n);
+  const loopEntries={};for(const e of spec.edges||[])if(e.loop)loopEntries[e.to.node]={loopId:e.loop.id,edge:e};
+  const wi=run.workQueue[0];const ex=run.executions[wi.execId];
+  if(!ex){run.workQueue.shift();return{kind:"skip"};}
+  const node=byId[ex.nodeId];if(!node){failRun(run,ex.nodeId,{code:"REFERENCE_ERROR",message:"no node"},store,false);return{kind:"failed"};}
+
+  if(wi.phase==="execute"){
+    if(!execInputsReady(run,spec,ex)){
+      run.workQueue.push(run.workQueue.shift());
+      const allWaiting=run.workQueue.every(w=>{const e=run.executions[w.execId];return w.phase==="execute"&&!execInputsReady(run,spec,e);});
+      if(allWaiting){failRun(run,ex.nodeId,{code:"DEADLOCK",message:"barrier未成立で全待機"},store,false);return{kind:"failed"};}
+      return{kind:"waiting"};
+    }
+    ex.status="running";
+    ex.attempts=ex.attempts||[];const attempt={attempt:ex.attempts.length+1,status:"running",error:null,partialOutput:null,startedAt:Date.now(),endedAt:null};ex.attempts.push(attempt);
+    let rv,usage;
+    try{const inputs=resolveInputsForExec(run,spec,ex);
+      if(node.type==="output"){const k=Object.keys(inputs)[0];const rvOut=(k!==undefined&&inputs[k]!==undefined)?inputs[k]:null;run.result=rvOut;
+        (run.nodeRuns[node.id]=run.nodeRuns[node.id]||[]).push({execId:ex.execId,loopInstanceId:ex.loopInstanceId,iteration:ex.iteration,out:rvOut,raw:JSON.stringify(rvOut),usage:{apiCalls:0,inputTokens:0,outputTokens:0,cost:null},meta:metaOf(rvOut,null),status:"success"});
+        ex.status="completed";run.workQueue.shift();log&&log("data",`● OUTPUT(${node.id}) ← ${JSON.stringify(rvOut)}`);if(store)store.save(run);return{kind:"completed"};}
+      if(node.type==="input"){rv={type:"json",value:run.input};usage={apiCalls:0,inputTokens:0,outputTokens:0,cost:null};log&&log("node",`◇ INPUT(${node.id})`);}
+      else if(node.type==="join"){rv=runJoin(node,inputs);usage={apiCalls:0,inputTokens:0,outputTokens:0,cost:null};log&&log("node",`⋈ JOIN(${node.id}) → ${JSON.stringify(rv.value)}`);}
+      else{
+        const res=await invokeNode(spec,run,node,inputs,ex,ctl,log);
+        if(res.cancelled){handleExecutionCancelled(run,ex,run.cancelRequested?"user_requested":"provider_cancelled",res.partial,store,log);return{kind:"cancelled_exec"};}
+        rv=res.output;usage=res.usage;
+        log&&log("node",`▸ ${node.id} iter=${ex.iteration||1} → ${JSON.stringify(rv.value).slice(0,200)}`);}
+    }catch(err){
+      handleExecutionFailure(run,spec,ex,err,store,log);return{kind:"failed"};}
+    const useUsage=(node.type==="llm"||node.type==="tool")?usage:null;
+    (run.nodeRuns[node.id]=run.nodeRuns[node.id]||[]).push({execId:ex.execId,loopInstanceId:ex.loopInstanceId,iteration:ex.iteration,out:rv,raw:JSON.stringify(rv.value),usage,meta:metaOf(rv,useUsage),status:"success"});
+    if(node.type==="llm"||node.type==="tool"){run.totals.apiCalls+=usage.apiCalls||0;
+      if(usage.inputTokens==null&&usage.outputTokens==null)run.totals.unreportedUsageCalls++;}
+    run.totals.inputTokens+=usage.inputTokens||0;run.totals.outputTokens+=usage.outputTokens||0;ex._rv=rv;
+    {const at=ex.attempts[ex.attempts.length-1];at.status="completed";at.endedAt=Date.now();}
+    run.workQueue[0]={execId:ex.execId,phase:"route"};if(store)store.save(run);return{kind:"executed"};
+  }
+  let outcome;
+  try{outcome=routeExec(spec,run,ex,byId,loopEntries,log);}catch(err){
+    failRun(run,ex.nodeId,err,store,false);return{kind:"failed"};}
+  if(outcome.kind==="paused"){run.status="paused";if(store)store.save(run);return{kind:"paused"};}
+  run.workQueue.shift();ex.status="completed";if(store)store.save(run);return{kind:"routed"};
+}
+function routeExec(spec,run,ex,byId,loopEntries,log){
+  const node=byId[ex.nodeId];const outEdges=(spec.edges||[]).filter(e=>e.from.node===node.id);
+  if(outEdges.length===0)return{kind:"completed"};
+  const loopEdge=outEdges.find(e=>e.loop);
+  if(loopEdge){const lid=loopEdge.loop.id;const inst=ex.loopInstanceId;const iter=run.loopInstances[inst].iteration;const max=loopEdge.loop.max;
+    const ctx=buildCtx(run,spec,inst);let untilTrue=false;if(loopEdge.loop.until)untilTrue=evalBool(loopEdge.loop.until,ctx);
+    log&&log("loop",`↻ loop[${lid}] iter=${iter}/${max} until=${untilTrue}`);
+    if(untilTrue||iter>=max){run.loopInstances[inst].active=false;
+      const elseE=outEdges.find(e=>e.else)||outEdges.find(e=>!e.loop&&!e.if);
+      if(elseE){const tctx={activationId:ex.activationId,loopInstanceId:null,iteration:null};makeDelivery(run,spec,elseE,ex._rv,ex.execId,tctx);enqueueTo(run,spec,elseE,tctx);}
+    }else{run.loopInstances[inst].iteration=iter+1;run.iterationTotal++;
+      const tctx=resolveTargetContext(run,spec,ex,loopEdge,loopEntries);makeDelivery(run,spec,loopEdge,ex._rv,ex.execId,tctx);enqueueTo(run,spec,loopEdge,tctx);}
+    return{kind:"completed"};}
+  const condEdges=outEdges.filter(e=>e.if||e.else);const routing=node.routing&&node.routing.mode?node.routing:null;
+  const isFM=condEdges.length>0||(routing&&routing.mode==="first_match");
+  if(isFM){const ifEdges=condEdges.filter(e=>e.if&&!e.else).sort((a,b)=>(a.priority||0)-(b.priority||0));const elseEdge=condEdges.find(e=>e.else);
+    const ctx=buildCtx(run,spec,ex.loopInstanceId);let chosen=null;
+    for(const e of ifEdges){if(evalBool(e.if,ctx)){chosen=e;break;}}
+    if(!chosen&&elseEdge)chosen=elseEdge;
+    if(!chosen){const mode=(routing&&routing.onNoMatch)||"error";if(mode==="error")throw{code:"NO_MATCH"};return{kind:"paused"};}
+    const tctx=resolveTargetContext(run,spec,ex,chosen,loopEntries);makeDelivery(run,spec,chosen,ex._rv,ex.execId,tctx);enqueueTo(run,spec,chosen,tctx);
+    log&&log("route",`↳ first_match → ${chosen.to.node}`);return{kind:"completed"};}
+  const act=outEdges.length>1?`fork#${++run.actSeq}`:ex.activationId;
+  if(outEdges.length>1){
+    const policy=node.routing.failurePolicy;
+    run.branchGroups[act]={activationId:act,sourceExecId:ex.execId,failurePolicy:policy,status:"running",branches:{},failures:[]};
+  }
+  for(const e of outEdges){const tctx=resolveTargetContext(run,spec,{...ex,activationId:act},e,loopEntries);makeDelivery(run,spec,e,ex._rv,ex.execId,tctx);
+    const nx=enqueueTo(run,spec,e,tctx);
+    if(outEdges.length>1&&nx){nx.branchGroupId=act;run.branchGroups[act].branches[nx.execId]={rootExecId:nx.execId,nodeId:e.to.node,status:"running"};}}
+  if(outEdges.length>1)log&&log("route",`↳ fan-out(${act},${run.branchGroups[act].failurePolicy}): ${outEdges.map(e=>e.to.node).join(", ")}`);
+  return{kind:"completed"};}
+
+/* ---- runUntilIdle ---- */
+async function runUntilIdle(spec,run,store,log,ctl){let guard=0;
+  while((run.status==="running"||run.status==="cancelling")&&guard++<5000){const r=await processOneWorkItem(spec,run,store,log,ctl);if(r.kind==="idle"||r.kind==="cancelled")break;if(run.status==="running"&&run.workQueue.length===0)break;}
+  if(run.status==="running"){
+    const anyWork=run.workQueue.length>0;const anyReady=Object.values(run.executions).some(e=>e.status==="ready");
+    if(!anyWork&&!anyReady){
+      const outputNodes=spec.nodes.filter(n=>n.type==="output");
+      const anyOutputDone=outputNodes.length===0||outputNodes.some(n=>(run.nodeRuns[n.id]||[]).some(h=>h.status==="success"));
+      if(anyOutputDone){run.status="success";run.resumable=false;if(store)store.save(run);}
+      else{failRun(run,outputNodes[0]&&outputNodes[0].id,{code:"UNSATISFIED_INPUT",message:"Outputに到達せず終了"},store,false);}
+    }
+  }
+  return run;}
+function startRun(spec,run){const start=(spec.nodes.find(n=>n.type==="input")||spec.nodes[0]);const act=`act#${++run.actSeq}`;
+  makeExec(run,start.id,{activationId:act,loopInstanceId:null,iteration:null});}
+async function fullRun(spec,input,store,ctl){store=store||memStore();const errs=validate(spec);if(errs.length){const run=makeRun(spec,input);run.status="failed";run.errors=errs.map(e=>({kind:"VALIDATION",message:e}));return run;}
+  const run=makeRun(spec,input);startRun(spec,run);await runUntilIdle(spec,run,store,null,ctl);return run;}
+async function resumeRun(spec,cp,store,log,ctl){cp.status="running";await runUntilIdle(spec,cp,store,log,ctl);return cp;}
+async function retryExecution(spec,run,execId,store,log,ctl){
+  const ex=run.executions[execId];if(!ex||ex.status!=="failed")return{kind:"not_retryable"};
+  const gid=findBranchGroupId(run,ex);
+  if(gid&&run.branchGroups[gid]&&run.branchGroups[gid].failurePolicy==="fail_fast")return retryBranchGroup(spec,run,gid,store,log,ctl);
+  ex.status="ready";delete ex.errorKind;
+  run.workQueue.unshift({execId,phase:"execute"});run.status="running";run.resumable=true;
+  if(store)store.save(run);await runUntilIdle(spec,run,store,log,ctl);return run;}
+async function retryBranchGroup(spec,run,branchGroupId,store,log,ctl){
+  const g=run.branchGroups[branchGroupId];if(!g)return{kind:"no_group"};
+  for(const [eid,b] of Object.entries(g.branches)){const ex=run.executions[eid];if(!ex)continue;
+    if(b.status==="failed"||b.status==="cancelled"){
+      ex.status="ready";delete ex.errorKind;delete ex.cancelReason;b.status="running";
+      run.workQueue.push({execId:eid,phase:"execute"});}
+  }
+  g.status="running";g.primaryFailure=null;g.failures=[];
+  run.status="running";run.resumable=true;if(store)store.save(run);
+  await runUntilIdle(spec,run,store,log,ctl);return run;}
+
+if(typeof module!=="undefined"&&module.exports){module.exports={fullRun,runUntilIdle,processOneWorkItem,startRun,makeRun,memStore,validate,canonSpec,resumeRun,requestCancel,retryExecution,retryBranchGroup,deliveryMatchesExec,buildCtx,evalBool,evalExpr,compileExpr,mustacheRender,makeController,registerTransport,checkSchema,buildMessages,PROVIDERS,ModelManager,ABSENT};}
+
+/* ==================================================================
+   UI
+   ================================================================== */
+if(typeof document!=="undefined"){
+function localStore(){return{save(r){try{localStorage.setItem(CP_KEY,JSON.stringify(r,(k,v)=>v===ABSENT?"__A__":v));}catch(e){}},load(){try{const s=localStorage.getItem(CP_KEY);return s?JSON.parse(s,(k,v)=>v==="__A__"?ABSENT:v):null;}catch(e){return null;}},clear(){try{localStorage.removeItem(CP_KEY);}catch(e){}}};}
+const $=s=>document.querySelector(s);const logEl=$("#log");const store=localStore();
+function log(cls,msg){const sp=document.createElement("span");sp.className="l-"+({node:"node",ok:"ok",err:"err",loop:"loop",route:"route",dim:"dim",data:"data",cp:"cp",prov:"prov"}[cls]||"dim");sp.textContent=msg+"\n";logEl.appendChild(sp);logEl.scrollTop=logEl.scrollHeight;}
+const clearLog=()=>logEl.innerHTML="";
+const streamEl=$("#stream");let streamNode=null;
+function clearStream(){streamEl.innerHTML="";streamNode=null;}
+function onToken(nodeId,t){
+  if(streamNode!==nodeId){const h=document.createElement("div");h.className="sh";h.textContent=`— ${nodeId} —`;streamEl.appendChild(h);
+    const b=document.createElement("span");b.dataset.n=nodeId;streamEl.appendChild(b);streamNode=nodeId;}
+  const spans=streamEl.querySelectorAll('span[data-n="'+nodeId+'"]');const tgt=spans[spans.length-1];tgt.textContent+=t;streamEl.scrollTop=streamEl.scrollHeight;
+}
+
+/* --- Provider フォーム --- */
+let adapterId="mock";
+function providerDefFromForm(){
+  const def={adapter:adapterId};
+  if(adapterId!=="mock"){def.model=$("#model").value.trim();}
+  if(adapterId==="openai_local")def.endpoint=$("#endpoint").value.trim();
+  return def;
+}
+function fillModels(){
+  const dl=$("#modelList");dl.innerHTML="";
+  (PROVIDERS[adapterId].models||[]).forEach(m=>{const o=document.createElement("option");o.value=m;dl.appendChild(o);});
+  if(adapterId==="webllm"&&!WEBLLM_MODELS.includes($("#model").value))$("#model").value=WEBLLM_MODELS[0];
+  if(adapterId==="openai_local"&&WEBLLM_MODELS.includes($("#model").value))$("#model").value=OPENAI_LOCAL_MODELS[0];
+}
+function setAdapter(id){
+  adapterId=id;
+  document.querySelectorAll("#adapterSeg button").forEach(b=>b.classList.toggle("on",b.dataset.ad===id));
+  $("#epWrap").style.display=id==="openai_local"?"":"none";
+  $("#model").closest("label").style.display=id==="mock"?"none":"";
+  fillModels();renderProvState();
+  $("#provHint").textContent={
+    mock:"内蔵の決定論モック。Provider抽象の回帰確認用（推論しない・課金なし）。",
+    openai_local:"Ollama なら `ollama serve` のうえ `OLLAMA_ORIGINS=* ollama serve` でこのページからのアクセスを許可。LM Studio / llama.cpp server / vLLM も同じ OpenAI互換API で繋がる。",
+    webllm:"ブラウザ内でWebGPU推論。初回はモデルDL（数百MB〜）。APIキー不要・料金0。iOS Safariは小型モデルのみ。"
+  }[id];
+}
+function renderProvState(){
+  const def=providerDefFromForm();const st=ModelManager.get(Object.assign({},def,{adapter:adapterId}));
+  const p=$("#provState");p.textContent=st.status+(st.status==="loading"?` ${Math.round((st.progress||0)*100)}%`:"");
+  p.className="pill "+(st.status==="ready"?"ready":st.status==="loading"?"loading":st.status==="error"?"error":"");
+  $("#provBar").style.width=Math.round((st.progress||0)*100)+"%";
+  if(st.text&&st.status!=="unloaded")$("#provHint").textContent=st.text;
+}
+$("#adapterSeg").onclick=e=>{const b=e.target.closest("button");if(b)setAdapter(b.dataset.ad);};
+$("#probe").onclick=async()=>{
+  const def=providerDefFromForm();const ad=PROVIDERS[adapterId];
+  if(!ad.ensureLoaded){log("prov","mock adapter はロード不要");renderProvState();return;}
+  $("#probe").disabled=true;
+  try{await ModelManager.ensureLoaded(Object.assign({},def,{adapter:adapterId}),ad,undefined,()=>renderProvState());
+    log("ok",`✔ ${adapterId} ready: ${def.model||""}`);}
+  catch(e){log("err",`✗ ${e.code||"ERROR"}: ${e.message||e}`);}
+  finally{$("#probe").disabled=false;renderProvState();}
+};
+$("#writeSpec").onclick=()=>{
+  let spec;try{spec=JSON.parse($("#spec").value);}catch(e){log("err","JSON: "+e.message);return;}
+  spec.providers=spec.providers||{};
+  spec.providers.local=Object.assign({},spec.providers.local||{},providerDefFromForm());
+  $("#spec").value=JSON.stringify(spec,null,2);
+  log("prov","providers.local = "+JSON.stringify(spec.providers.local));
+};
+
+/* --- examples --- */
+const LOCAL_PROV={local:{adapter:"openai_local",endpoint:"http://localhost:11434/v1",model:"qwen2.5:3b",generation:{maxTokens:256,temperature:0.7}}};
+const EX={
+ exL1:{metadata:{name:"ローカル直列",version:"1"},providers:LOCAL_PROV,
+  vars:{tone:"やさしい日本語で"},
+  nodes:[{id:"in",type:"input"},
+   {id:"write",type:"llm",provider:"local",
+    prompt:{system:"あなたは簡潔な日本語で答えるアシスタントです。",
+      template:{syntax:"mustache",mode:"interpolation_only",value:"次の質問に3文で答えて。\n\n質問: {{{run_input.question}}}"},
+      prefix:"【必ず守る】箇条書きにしない。",suffix:"（専門用語は使わず、そのまま文章で）"},
+    generation:{maxTokens:200,temperature:0.6}},
+   {id:"out",type:"output"}],
+  edges:[{from:{node:"in",port:"out"},to:{node:"write",port:"in"}},{from:{node:"write",port:"out"},to:{node:"out",port:"in"}}]},
+ exL2:{metadata:{name:"ローカル並列+Join",version:"1"},providers:LOCAL_PROV,
+  nodes:[{id:"in",type:"input",routing:{mode:"parallel",failurePolicy:"fail_fast"}},
+   {id:"A",type:"llm",provider:"local",prompt:{template:{syntax:"mustache",mode:"interpolation_only",value:"利点を1つだけ挙げて: {{{run_input.question}}}"}},generation:{maxTokens:120}},
+   {id:"B",type:"llm",provider:"local",prompt:{template:{syntax:"mustache",mode:"interpolation_only",value:"欠点を1つだけ挙げて: {{{run_input.question}}}"}},generation:{maxTokens:120}},
+   {id:"jn",type:"join",op:"template",template:{syntax:"mustache",mode:"interpolation_only",value:"利点: {{{items.0}}}\n欠点: {{{items.1}}}"},inputs:{items:{type:"text",cardinality:"many"}}},
+   {id:"out",type:"output"}],
+  edges:[{from:{node:"in",port:"out"},to:{node:"A",port:"in"}},{from:{node:"in",port:"out"},to:{node:"B",port:"in"}},
+   {from:{node:"A",port:"out"},to:{node:"jn",port:"items"},position:0},{from:{node:"B",port:"out"},to:{node:"jn",port:"items"},position:1},
+   {from:{node:"jn",port:"out"},to:{node:"out",port:"in"}}]},
+ exL3:{metadata:{name:"JSON契約+文字数分岐",version:"1"},providers:LOCAL_PROV,
+  nodes:[{id:"in",type:"input"},
+   {id:"ans",type:"llm",provider:"local",
+    prompt:{system:'JSONのみを返す。形式: {"text":"回答","score":0-10の整数}',
+      template:{syntax:"mustache",mode:"interpolation_only",value:"{{{run_input.question}}}"},
+      suffix:"JSONだけを出力し、前後に説明を付けない。"},
+    schema:{type:"object",required:["text","score"],properties:{text:{type:"string",maxLength:300},score:{type:"integer",minimum:0,maximum:10}}},
+    generation:{maxTokens:200,temperature:0.2},
+    routing:{mode:"first_match",onNoMatch:"error"}},
+   {id:"good",type:"output"},{id:"short",type:"output"},{id:"bad",type:"output"}],
+  edges:[{from:{node:"in",port:"out"},to:{node:"ans",port:"in"}},
+   {from:{node:"ans",port:"out"},to:{node:"good",port:"in"},priority:0,if:"ans.out.score >= 8 && ans.meta.len <= 300"},
+   {from:{node:"ans",port:"out"},to:{node:"short",port:"in"},priority:1,if:"ans.meta.len <= 80"},
+   {from:{node:"ans",port:"out"},to:{node:"bad",port:"in"},priority:2,else:true}]},
+ exL4:{metadata:{name:"ローカル改稿ループ",version:"1"},providers:LOCAL_PROV,
+  nodes:[{id:"in",type:"input"},
+   {id:"draft",type:"llm",provider:"local",
+    prompt:{system:"日本語の編集者。",template:{syntax:"mustache",mode:"interpolation_only",value:"これを改善して1段落で書き直して（{{iteration}}回目）。\n\n{{{in}}}"}},generation:{maxTokens:220}},
+   {id:"critic",type:"llm",provider:"local",
+    prompt:{system:'採点者。JSONのみ: {"score":0-10の整数,"reason":"短い理由"}',template:{syntax:"mustache",mode:"interpolation_only",value:"次の文章を10点満点で採点:\n\n{{{in}}}"},suffix:"JSONだけ出力。"},
+    schema:{type:"object",required:["score"],properties:{score:{type:"integer",minimum:0,maximum:10}}},
+    generation:{maxTokens:120,temperature:0.1},
+    routing:{mode:"first_match",onNoMatch:"error"}},
+   {id:"out",type:"output"}],
+  edges:[{from:{node:"in",port:"out"},to:{node:"draft",port:"in"}},
+   {from:{node:"draft",port:"out"},to:{node:"critic",port:"in"}},
+   {from:{node:"critic",port:"out"},to:{node:"draft",port:"in"},priority:0,loop:{id:"revise",max:3,until:"critic.out.score >= 8"},transform:"json_stringify"},
+   {from:{node:"critic",port:"out"},to:{node:"out",port:"in"},priority:1,else:true}]},
+ ex1:{metadata:{name:"改稿ループ",version:"1"},nodes:[{id:"in",type:"input"},{id:"draft",type:"llm",mock:{scoreByIteration:[5,7,9]}},{id:"critic",type:"llm",mock:{scoreByIteration:[5,7,9]},routing:{mode:"first_match",onNoMatch:"error"}},{id:"result",type:"output"}],
+  edges:[{from:{node:"in",port:"out"},to:{node:"draft",port:"in"}},{from:{node:"draft",port:"out"},to:{node:"critic",port:"in"}},{from:{node:"critic",port:"out"},to:{node:"draft",port:"in"},priority:0,loop:{id:"revise",max:3,until:"critic.out.score >= 8"}},{from:{node:"critic",port:"out"},to:{node:"result",port:"in"},priority:1,else:true}]},
+ ex5:{metadata:{name:"並列+Join",version:"1"},nodes:[{id:"in",type:"input",routing:{mode:"parallel",failurePolicy:"fail_fast"}},{id:"A",type:"llm",mock:{tag:"研究A"}},{id:"B",type:"llm",mock:{tag:"研究B"}},{id:"jn",type:"join",op:"json_array",inputs:{items:{type:"text",cardinality:"many"}}},{id:"out",type:"output"}],
+  edges:[{from:{node:"in",port:"out"},to:{node:"A",port:"in"}},{from:{node:"in",port:"out"},to:{node:"B",port:"in"}},{from:{node:"A",port:"out"},to:{node:"jn",port:"items"},position:0},{from:{node:"B",port:"out"},to:{node:"jn",port:"items"},position:1},{from:{node:"jn",port:"out"},to:{node:"out",port:"in"}}]},
+ ex7:{metadata:{name:"Loop×並列",version:"1"},nodes:[{id:"seed",type:"input"},{id:"gate",type:"llm",mock:{tag:"g"},routing:{mode:"parallel",failurePolicy:"fail_fast"}},{id:"A",type:"llm",mock:{tag:"A"}},{id:"B",type:"llm",mock:{tag:"B"}},{id:"jn",type:"join",op:"json_array",inputs:{items:{type:"text",cardinality:"many"}}},{id:"critic",type:"llm",mock:{scoreByIteration:[5,7,9]},routing:{mode:"first_match",onNoMatch:"error"}},{id:"out",type:"output"}],
+  edges:[{from:{node:"seed",port:"out"},to:{node:"gate",port:"in"}},{from:{node:"gate",port:"out"},to:{node:"A",port:"in"}},{from:{node:"gate",port:"out"},to:{node:"B",port:"in"}},{from:{node:"A",port:"out"},to:{node:"jn",port:"items"},position:0},{from:{node:"B",port:"out"},to:{node:"jn",port:"items"},position:1},{from:{node:"jn",port:"out"},to:{node:"critic",port:"in"}},{from:{node:"critic",port:"out"},to:{node:"gate",port:"in"},priority:0,loop:{id:"rev",max:3,until:"critic.out.score>=8"}},{from:{node:"critic",port:"out"},to:{node:"out",port:"in"},priority:1,else:true}]},
+ ex2:{metadata:{name:"分岐",version:"1"},nodes:[{id:"in",type:"input"},{id:"ans",type:"llm",mock:{fixed:{text:"回答",score:6}},routing:{mode:"first_match",onNoMatch:"error"}},{id:"good",type:"output"},{id:"bad",type:"output"}],
+  edges:[{from:{node:"in",port:"out"},to:{node:"ans",port:"in"}},{from:{node:"ans",port:"out"},to:{node:"good",port:"in"},priority:0,if:"ans.out.score >= 8"},{from:{node:"ans",port:"out"},to:{node:"bad",port:"in"},priority:1,else:true}]},
+ ex8:{metadata:{name:"template",version:"1"},nodes:[{id:"in",type:"input",routing:{mode:"parallel",failurePolicy:"fail_fast"}},{id:"A",type:"llm",mock:{tag:"研究A"}},{id:"B",type:"llm",mock:{tag:"研究B"}},{id:"jn",type:"join",op:"template",template:{syntax:"mustache",mode:"interpolation_only",value:"A: {{{items.0}}}\nB: {{{items.1}}}"},inputs:{items:{type:"text",cardinality:"many"}}},{id:"out",type:"output"}],
+  edges:[{from:{node:"in",port:"out"},to:{node:"A",port:"in"}},{from:{node:"in",port:"out"},to:{node:"B",port:"in"}},{from:{node:"A",port:"out"},to:{node:"jn",port:"items"},position:0},{from:{node:"B",port:"out"},to:{node:"jn",port:"items"},position:1},{from:{node:"jn",port:"out"},to:{node:"out",port:"in"}}]},
+ ex9:{metadata:{name:"fail_fast(OOM)",version:"1"},nodes:[{id:"in",type:"input",routing:{mode:"parallel",failurePolicy:"fail_fast"}},{id:"A",type:"llm",mock:{fail:"oom"}},{id:"B",type:"llm",mock:{tag:"B"}},{id:"C",type:"llm",mock:{tag:"C"}},{id:"jn",type:"join",op:"json_array",inputs:{items:{type:"text",cardinality:"many"}}},{id:"out",type:"output"}],
+  edges:[{from:{node:"in",port:"out"},to:{node:"A",port:"in"}},{from:{node:"in",port:"out"},to:{node:"B",port:"in"}},{from:{node:"in",port:"out"},to:{node:"C",port:"in"}},{from:{node:"A",port:"out"},to:{node:"jn",port:"items"},position:0},{from:{node:"B",port:"out"},to:{node:"jn",port:"items"},position:1},{from:{node:"C",port:"out"},to:{node:"jn",port:"items"},position:2},{from:{node:"jn",port:"out"},to:{node:"out",port:"in"}}]}
+};
+function loadEx(k){$("#spec").value=JSON.stringify(EX[k],null,2);
+  document.querySelectorAll("#exSeg button,#exSeg2 button").forEach(b=>b.classList.toggle("on",b.dataset.ex===k));
+  if(String(k).startsWith("exL")&&adapterId==="mock")setAdapter("openai_local");}
+document.querySelectorAll("#exSeg button,#exSeg2 button").forEach(b=>b.onclick=()=>loadEx(b.dataset.ex));
+
+const setState=t=>$("#stateline").textContent="state: "+t;
+let cur=null,ctl=null;
+function parseSpec(){let spec;try{spec=JSON.parse($("#spec").value);}catch(e){log("err","JSON: "+e.message);return null;}const errs=validate(spec);if(errs.length){errs.forEach(e=>log("err","VALIDATE: "+e));return null;}return spec;}
+function updateResume(){const cp=store.load();$("#resume").disabled=!(cp&&cp.status!=="success"&&cp.resumable);
+  $("#retry").disabled=!(cur&&Object.values(cur.executions||{}).some(e=>e.status==="failed"));}
+function renderTotals(){
+  const t=cur?cur.totals:{cost:0,apiCalls:0,inputTokens:0,outputTokens:0,unreportedUsageCalls:0};
+  $("#totals").innerHTML=[
+    `apiCalls <b>${t.apiCalls}</b>`,`in tokens <b>${t.inputTokens}</b>`,`out tokens <b>${t.outputTokens}</b>`,
+    `usage未報告 <b>${t.unreportedUsageCalls||0}</b>`,`cost <b>${t.cost===0?"0":t.cost}</b> JPY`,`costSource <b>unavailable</b>`,
+    `iterTotal <b>${cur?cur.iterationTotal:0}</b>`].map(x=>"<span>"+x+"</span>").join("");
+  const tb=$("#nodeTable tbody");tb.innerHTML="";
+  if(!cur)return;
+  for(const [nid,hist] of Object.entries(cur.nodeRuns)){
+    const last=hist[hist.length-1];const succ=hist.filter(h=>h.status==="success");
+    const inTok=succ.reduce((a,h)=>a+((h.usage&&h.usage.inputTokens)||0),0);
+    const outTok=succ.reduce((a,h)=>a+((h.usage&&h.usage.outputTokens)||0),0);
+    const len=succ.length?succ[succ.length-1].meta.len:null;
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${nid}</td><td class="s-${last.status}">${last.status}${last.cancelReason?"("+last.cancelReason+")":""}${last.errorKind?" "+last.errorKind:""}</td>`
+      +`<td class="n">${hist.length}</td><td class="n">${inTok||""}</td><td class="n">${outTok||""}</td><td class="n">${len==null?"":len}</td>`;
+    tb.appendChild(tr);
+  }
+}
+function report(){setState(`${cur.status} | calls=${cur.totals.apiCalls} iterTotal=${cur.iterationTotal}`+(cur.result!==null?` | result=${JSON.stringify(cur.result).slice(0,160)}`:""));
+  if(cur.status==="success")log("ok","── success ──");
+  if(cur.status==="failed")log("err","── failed ── "+JSON.stringify(cur.errors));
+  if(cur.status==="cancelled")log("cp","── cancelled（部分出力は破棄）──");
+  if(cur.status==="paused")log("cp","── paused（Resume可）──");
+  renderTotals();updateResume();$("#cancel").disabled=true;$("#run").disabled=false;}
+function newCtl(){return makeController({onToken,onProgress:()=>renderProvState()});}
+function inputForRun(){return{question:"ローカルLLMで動くか、1つだけ確かめたい。"};}
+async function runAll(){clearLog();clearStream();const spec=parseSpec();if(!spec)return;
+  store.clear();cur=makeRun(spec,inputForRun());startRun(spec,cur);ctl=newCtl();
+  $("#cancel").disabled=false;$("#run").disabled=true;setState("running");
+  try{await runUntilIdle(spec,cur,store,log,ctl);}catch(e){log("err","例外: "+(e.message||e));}
+  report();}
+async function stepOne(){const spec=parseSpec();if(!spec)return;
+  if(!cur||cur.status!=="running"){clearLog();clearStream();store.clear();cur=makeRun(spec,inputForRun());startRun(spec,cur);ctl=newCtl();}
+  const r=await processOneWorkItem(spec,cur,store,log,ctl);log("cp",`  ▸ work: ${r.kind}`);report();}
+async function doResume(){clearLog();const cp=store.load();if(!cp){log("err","Checkpointなし");return;}if(cp.status==="success"){log("err","terminal success はResume不可");return;}
+  const spec=parseSpec();if(!spec)return;if(canonSpec(spec)!==cp.specCanon){log("err","Spec変更のためResume拒否（自動移行しない）");return;}
+  cur=cp;ctl=newCtl();log("cp",`▣ Resume: status=${cp.status} queue先頭=${JSON.stringify(cp.workQueue[0])}`);
+  $("#cancel").disabled=false;try{await resumeRun(spec,cur,store,log,ctl);}catch(e){log("err","例外: "+(e.message||e));}report();}
+async function doRetry(){const spec=parseSpec();if(!spec||!cur)return;
+  const failed=Object.values(cur.executions).find(e=>e.status==="failed");if(!failed){log("err","failedなExecutionが無い");return;}
+  log("cp",`▣ Retry: ${failed.execId}（iteration不変・attempt+1）`);ctl=newCtl();$("#cancel").disabled=false;
+  try{await retryExecution(spec,cur,failed.execId,store,log,ctl);}catch(e){log("err","例外: "+(e.message||e));}report();}
+$("#run").onclick=runAll;$("#step").onclick=stepOne;$("#resume").onclick=doResume;$("#retry").onclick=doRetry;
+$("#cancel").onclick=()=>{if(cur){requestCancel(cur,store,ctl);log("cp","■ Cancel要求（decodeへ協調停止を伝えた）");}};
+$("#reset").onclick=()=>{cur=null;store.clear();clearLog();clearStream();setState("idle");$("#resume").disabled=true;$("#retry").disabled=true;$("#resumeBanner").classList.remove("show");renderTotals();};
+
+setAdapter("mock");loadEx("ex1");renderTotals();
+
+/* ---- 自己テスト ---- */
+const enc=s=>new TextEncoder().encode(s);
+function sseStub(chunks,opt){opt=opt||{};
+  return async(url,init)=>{
+    const signal=init&&init.signal;
+    if(/\/models$/.test(url))return new Response(JSON.stringify({data:[{id:opt.model||"m1"}]}),{status:200,headers:{"Content-Type":"application/json"}});
+    if(opt.status&&opt.status>=400)return new Response(opt.body||"error",{status:opt.status});
+    if(opt.captureBody)opt.captureBody(JSON.parse(init.body));
+    if(opt.nonStream)return new Response(JSON.stringify({choices:[{message:{content:chunks.join("")}}],usage:opt.usage||undefined}),{status:200,headers:{"Content-Type":"application/json"}});
+    const body=new ReadableStream({async start(c){
+      try{
+        for(const t of chunks){
+          if(signal&&signal.aborted){c.error(abortError());return;}
+          if(opt.delay)await new Promise((res,rej)=>{const id=setTimeout(res,opt.delay);
+            if(signal)signal.addEventListener("abort",()=>{clearTimeout(id);rej(abortError());},{once:true});});
+          c.enqueue(enc("data: "+JSON.stringify({choices:[{delta:{content:t}}]})+"\n\n"));
+        }
+        if(opt.usage)c.enqueue(enc("data: "+JSON.stringify({choices:[],usage:opt.usage})+"\n\n"));
+        c.enqueue(enc("data: [DONE]\n\n"));c.close();
+      }catch(e){c.error(e);}
+    }});
+    return new Response(body,{status:200,headers:{"Content-Type":"text/event-stream"}});
+  };
+}
+const localSpec=(over,nodeOver)=>({metadata:{version:"1"},
+  providers:{local:Object.assign({adapter:"openai_local",endpoint:"http://stub/v1",model:"m1",transport:"t"},over||{})},
+  nodes:[{id:"in",type:"input"},Object.assign({id:"a",type:"llm",provider:"local"},nodeOver||{}),{id:"out",type:"output"}],
+  edges:[{from:{node:"in",port:"out"},to:{node:"a",port:"in"}},{from:{node:"a",port:"out"},to:{node:"out",port:"in"}}]});
+
+(async function selfTests(){
+ const out=[];const ok=(n,c)=>out.push(`<span class="${c?'pass':'fail'}">${c?'PASS':'FAIL'}</span>  ${n}`);
+ const skip=(n,why)=>out.push(`<span style="color:#7a828c">SKIP</span>  ${n} — ${why}`);
+ const render=()=>{const passN=out.filter(x=>x.includes(">PASS<")).length;const skipN=out.filter(x=>x.includes(">SKIP<")).length;
+   $("#tests").innerHTML=`<b>${passN}/${out.length} PASS${skipN?` (${skipN} SKIP)`:""}</b>\n`+out.join("\n");};
+ try{
+ // 1 loop entry入力
+ {const sp={metadata:{version:"1"},nodes:[{id:"in",type:"input"},{id:"draft",type:"llm",mock:{echoInput:true}},{id:"critic",type:"llm",mock:{scoreByIteration:[9]},routing:{mode:"first_match",onNoMatch:"error"}},{id:"out",type:"output"}],edges:[{from:{node:"in",port:"out"},to:{node:"draft",port:"in"}},{from:{node:"draft",port:"out"},to:{node:"critic",port:"in"}},{from:{node:"critic",port:"out"},to:{node:"draft",port:"in"},priority:0,loop:{id:"rev",max:1,until:"critic.out.score>=8"}},{from:{node:"critic",port:"out"},to:{node:"out",port:"in"},priority:1,else:true}]};
+  const r=await fullRun(sp,{question:"Q"});const rec=r.nodeRuns.draft&&r.nodeRuns.draft.find(h=>h.status==="success").out.value.received;ok("1 loop entry入力 iteration1がRuntimeValue受領",!!rec&&rec.type==="json"&&rec.value.question==="Q");}
+ // 2 Loop×Parallel
+ {const r=await fullRun(EX.ex7,{});const jns=(r.nodeRuns.jn||[]).filter(h=>h.status==="success").map(h=>h.out.value);let mixed=false;jns.forEach((v,i)=>{if(v[0]!=="A"+(i+1)||v[1]!=="B"+(i+1))mixed=true;});ok("2 Loop×Parallel 混合ゼロ[Ai,Bi]",jns.length===3&&!mixed&&r.status==="success");}
+ // 3 異activation衝突分離
+ {const run=makeRun({metadata:{version:"1"},nodes:[{id:"jn",type:"join",op:"json_array",inputs:{items:{type:"text",cardinality:"many"}}}],edges:[]},{});
+  run.deliveries.push({deliveryId:"d1",edgeId:"e0",toNodeId:"jn",toPort:"items",position:0,runtimeValue:{type:"text",value:"f1a"},activationId:"fork#1",loopInstanceId:null,iteration:null});
+  run.deliveries.push({deliveryId:"d2",edgeId:"e1",toNodeId:"jn",toPort:"items",position:1,runtimeValue:{type:"text",value:"f2b"},activationId:"fork#2",loopInstanceId:null,iteration:null});
+  const exF1={execId:"x",nodeId:"jn",activationId:"fork#1",loopInstanceId:null,iteration:null};
+  const matched=run.deliveries.filter(d=>d.toNodeId==="jn"&&deliveryMatchesExec(d,exF1));
+  ok("3 異activation衝突分離: fork#1はfork#2 Deliveryを読まない",matched.length===1&&matched[0].activationId==="fork#1");}
+ // 4 execute→route Resume
+ {const sp={metadata:{version:"1"},nodes:[{id:"in",type:"input"},{id:"a",type:"llm",mock:{fixed:{v:1}}},{id:"out",type:"output"}],edges:[{from:{node:"in",port:"out"},to:{node:"a",port:"in"}},{from:{node:"a",port:"out"},to:{node:"out",port:"in"}}]};
+  const st=memStore();const run=makeRun(sp,{});startRun(sp,run);let g=0;while(run.status==="running"&&g++<20){await processOneWorkItem(sp,run,st,null);if(run.workQueue[0]&&run.workQueue[0].phase==="route"&&run.workQueue[0].execId.startsWith("a@"))break;}
+  const a1=(run.nodeRuns.a||[]).filter(x=>x.status==="success").length;const snap=JSON.parse(JSON.stringify(st.value));const st2=memStore();st2.value=snap;const rs=st2.load();await resumeRun(sp,rs,st2,null);ok("4 execute→route Resume Provider再実行なし",a1===1&&(rs.nodeRuns.a||[]).filter(x=>x.status==="success").length===1&&rs.status==="success");}
+ // 5 pause Resume
+ {const sp={metadata:{version:"1"},nodes:[{id:"in",type:"input"},{id:"ans",type:"llm",mock:{fixed:{score:3}},routing:{mode:"first_match",onNoMatch:"stop"}},{id:"good",type:"output"}],edges:[{from:{node:"in",port:"out"},to:{node:"ans",port:"in"}},{from:{node:"ans",port:"out"},to:{node:"good",port:"in"},priority:0,if:"ans.out.score >= 8"}]};
+  const st=memStore();const run=makeRun(sp,{});startRun(sp,run);await runUntilIdle(sp,run,st,null);const a1=(run.nodeRuns.ans||[]).filter(x=>x.status==="success").length;const snap=JSON.parse(JSON.stringify(st.value));const st2=memStore();st2.value=snap;const rs=st2.load();await resumeRun(sp,rs,st2,null);ok("5 pause Resume source再実行なし",run.status==="paused"&&a1===1&&(rs.nodeRuns.ans||[]).filter(x=>x.status==="success").length===1);}
+ // 6 route式失敗でも成功出力保持
+ {const sp={metadata:{version:"1"},nodes:[{id:"in",type:"input"},{id:"critic",type:"llm",mock:{fixed:{score:5}},routing:{mode:"first_match",onNoMatch:"error"}},{id:"out",type:"output"}],edges:[{from:{node:"in",port:"out"},to:{node:"critic",port:"in"}},{from:{node:"critic",port:"out"},to:{node:"out",port:"in"},priority:0,if:"critci.out.score >= 8"},{from:{node:"critic",port:"out"},to:{node:"out",port:"in"},priority:1,else:true}]};
+  const r=await fullRun(sp,{});const criticSucc=(r.nodeRuns.critic||[]).filter(x=>x.status==="success");ok("6 route式失敗でもcritic成功出力保持・Work Item保持",r.status==="failed"&&criticSucc.length===1&&criticSucc[0].out.value.score===5&&!!r.workQueue[0]&&r.workQueue[0].phase==="route");}
+ // 7 deadlock
+ {const sp={metadata:{version:"1"},nodes:[{id:"in",type:"input",routing:{mode:"first_match",onNoMatch:"error"}},{id:"A",type:"llm",mock:{tag:"a"}},{id:"B",type:"llm",mock:{tag:"b"}},{id:"jn",type:"join",op:"json_array",inputs:{items:{type:"text",cardinality:"many"}}},{id:"out",type:"output"}],edges:[{from:{node:"in",port:"out"},to:{node:"A",port:"in"},priority:0,if:"true==true"},{from:{node:"in",port:"out"},to:{node:"B",port:"in"},priority:1,else:true},{from:{node:"A",port:"out"},to:{node:"jn",port:"items"},position:0},{from:{node:"B",port:"out"},to:{node:"jn",port:"items"},position:1},{from:{node:"jn",port:"out"},to:{node:"out",port:"in"}}]};
+  const r=await fullRun(sp,{});ok("7 deadlock→DEADLOCK/failed",r.status==="failed"&&r.errors.some(e=>e.kind==="DEADLOCK"));}
+ // 8 型契約
+ {const bad={metadata:{version:"1"},nodes:[{id:"in",type:"input",routing:{mode:"parallel",failurePolicy:"fail_fast"}},{id:"A",type:"llm",mock:{fixed:{o:1}}},{id:"B",type:"llm",mock:{fixed:{o:2}}},{id:"jn",type:"join",op:"json_array",inputs:{items:{type:"text",cardinality:"many"}}},{id:"out",type:"output"}],edges:[{from:{node:"in",port:"out"},to:{node:"A",port:"in"}},{from:{node:"in",port:"out"},to:{node:"B",port:"in"}},{from:{node:"A",port:"out"},to:{node:"jn",port:"items"},position:0},{from:{node:"B",port:"out"},to:{node:"jn",port:"items"},position:1},{from:{node:"jn",port:"out"},to:{node:"out",port:"in"}}]};
+  const r1=await fullRun(bad,{});const good=JSON.parse(JSON.stringify(bad));good.edges[2].transform="json_stringify";good.edges[3].transform="json_stringify";const r2=await fullRun(good,{});
+  ok("8 型契約 json→text拒否/transform許可",r1.status==="failed"&&r1.errors.some(e=>e.kind==="TYPE_MISMATCH")&&r2.status==="success");}
+ // 9 position
+ {const sp=JSON.parse(JSON.stringify(EX.ex5));sp.edges[2].position=1;sp.edges[3].position=0;const r=await fullRun(sp,{});ok("9 position A=1,B=0→[研究B1,研究A1]",JSON.stringify(r.result.value)===JSON.stringify(["研究B1","研究A1"]));}
+ // 10 template
+ {let okT=mustacheRender("x:{{{items.0}}}",{items:["v"]})==="x:v";const bad=["{{#x}}y{{/x}}","{{>p}}","{{=<% %>=}}","{{&x}}"];let allRej=true;for(const b of bad){let rej=false;try{mustacheRender(b,{});}catch(e){rej=e.code==="TEMPLATE_NOT_ALLOWED";}if(!rej)allRej=false;}ok("10 template 許可/禁止",okT&&allRej);}
+ // 11 buildCtx shape
+ {const sp={metadata:{version:"1"},nodes:[{id:"in",type:"input"},{id:"a",type:"llm",mock:{fixed:{score:9}}},{id:"out",type:"output"}],edges:[{from:{node:"in",port:"out"},to:{node:"a",port:"in"}},{from:{node:"a",port:"out"},to:{node:"out",port:"in"}}]};
+  const run=makeRun(sp,{});startRun(sp,run);await runUntilIdle(sp,run,memStore(),null);const ctx=buildCtx(run,sp,null);
+  const flds=["totalCost","currency","costSource","apiCalls","inputTokens","outputTokens","iterationTotal","startedAt","elapsedMs","harnessVersion","runId"];
+  ok("11 実buildCtx run.* 11フィールド",flds.every(f=>f in ctx.root.run));}
+ // 12 直列回帰
+ {const r=await fullRun(EX.ex1,{question:"Q"});const dh=r.nodeRuns.draft.filter(h=>h.status==="success");ok("12 直列回帰 iter=[1,2,3]/iterTotal=3/success",JSON.stringify(dh.map(h=>h.iteration))==="[1,2,3]"&&r.iterationTotal===3&&r.status==="success");}
+ // 13 validation
+ {ok("13 validation(id重複/mode矛盾)",validate({nodes:[{id:"a"},{id:"a"}],edges:[]}).some(e=>e.includes("id重複"))&&validate({metadata:{version:"1"},nodes:[{id:"a",routing:{mode:"parallel",failurePolicy:"fail_fast"}},{id:"b"},{id:"c"}],edges:[{from:{node:"a",port:"o"},to:{node:"b",port:"in"},if:"x==1"},{from:{node:"a",port:"o"},to:{node:"c",port:"in"},else:true}]}).some(e=>e.includes("parallelなのに条件Edge")));}
+ // 14 Spec不変
+ {const sp={metadata:{version:"1"},nodes:[{id:"in",type:"input"},{id:"a",type:"llm",mock:{tag:"x"}},{id:"out",type:"output"}],edges:[{from:{node:"in",port:"out"},to:{node:"a",port:"in"}},{from:{node:"a",port:"out"},to:{node:"out",port:"in"}}]};
+  const before=JSON.stringify(sp);const run=makeRun(sp,{});startRun(sp,run);await runUntilIdle(sp,run,memStore(),null);const after=JSON.stringify(sp);
+  ok("14 Spec不変(__eidでmutateしない)",before===after&&run.deliveries[0].edgeId==="e0");}
+ // 15 fail_fast
+ {const r=await fullRun(EX.ex9,{});const aErr=(r.nodeRuns.A||[]).some(x=>x.status==="error");
+  const bC=(r.nodeRuns.B||[]).some(x=>x.status==="cancelled"&&x.cancelReason==="sibling_failed");const cC=(r.nodeRuns.C||[]).some(x=>x.status==="cancelled"&&x.cancelReason==="sibling_failed");const grp=Object.values(r.branchGroups)[0];
+  ok("15 fail_fast強化: A=OOM/B,C=cancelled(sibling)/failed/errors1/primaryFailure",r.status==="failed"&&aErr&&bC&&cC&&r.errors.length===1&&!!grp&&!!grp.primaryFailure&&grp.primaryFailure.code==="RESOURCE_EXHAUSTED");}
+
+ /* ---- Provider層 ---- */
+ // 16 Provider抽象: 同一SpecをadapterだけmockにしてRuntime不変で動く
+ {const sp={metadata:{version:"1"},providers:{p:{adapter:"mock"}},nodes:[{id:"in",type:"input"},{id:"a",type:"llm",provider:"p",mock:{text:"hi"}},{id:"out",type:"output"}],
+   edges:[{from:{node:"in",port:"out"},to:{node:"a",port:"in"}},{from:{node:"a",port:"out"},to:{node:"out",port:"in"}}]};
+  const r=await fullRun(sp,{});
+  ok("16 Provider抽象: providers宣言経由でmock adapter解決・直列success",r.status==="success"&&r.result.value==="hi");}
+ // 17 openai_local: streaming/usage/output
+ {let toks=[];registerTransport("t",sseStub(["こん","にち","は"],{usage:{prompt_tokens:11,completion_tokens:3}}));
+  const sp=localSpec();const run=makeRun(sp,{});startRun(sp,run);
+  await runUntilIdle(sp,run,null,null,makeController({onToken:(n,t)=>toks.push(t)}));
+  ok("17 openai_local: SSE streaming 3token / 出力連結 / usage反映",
+    run.status==="success"&&toks.join("")==="こんにちは"&&run.result.value==="こんにちは"&&run.totals.inputTokens===11&&run.totals.outputTokens===3&&run.totals.apiCalls===1);}
+ // 18 非stream
+ {registerTransport("t",sseStub(["ok!"],{nonStream:true,usage:{prompt_tokens:2,completion_tokens:1}}));
+  const sp=localSpec({stream:false});const r=await fullRun(sp,{});
+  ok("18 openai_local: stream=false でも完走",r.status==="success"&&r.result.value==="ok!"&&r.totals.outputTokens===1);}
+ // 19 in-flight cancel
+ {registerTransport("t",sseStub(["a","b","c","d","e"],{delay:25}));
+  const sp=localSpec();const run=makeRun(sp,{});startRun(sp,run);
+  let fired=false;const c=makeController({onToken:()=>{if(!fired){fired=true;setTimeout(()=>requestCancel(run,null,c),0);}}});
+  await runUntilIdle(sp,run,null,null,c);
+  const rec=(run.nodeRuns.a||[])[0];const attempt=Object.values(run.executions).find(e=>e.nodeId==="a").attempts[0];
+  ok("19 decode中cancel→cancelled(≠failed)/部分出力はdata-flowに載らない",
+    run.status==="cancelled"&&!!rec&&rec.status==="cancelled"&&run.errors.length===0
+    &&!!attempt.partialOutput&&attempt.partialOutput.length<5
+    &&run.deliveries.filter(d=>d.fromNodeId==="a").length===0&&!run.nodeRuns.out);}
+ // 20 schema: JSON強制と検査
+ {registerTransport("t",sseStub(['{"score":9,','"text":"よい"}'],{usage:{prompt_tokens:3,completion_tokens:4}}));
+  const okSp=localSpec({},{schema:{type:"object",required:["score","text"],properties:{score:{type:"integer",minimum:0,maximum:10}}}});
+  const r1=await fullRun(okSp,{});
+  registerTransport("t",sseStub(["JSONじゃない文章です"]));
+  const r2=await fullRun(okSp,{});
+  ok("20 schema: 正しいJSON→json出力 / 壊れた応答→SCHEMA_VALIDATION_ERROR",
+    r1.status==="success"&&r1.result.type==="json"&&r1.result.value.score===9
+    &&r2.status==="failed"&&r2.errors.some(e=>e.kind==="SCHEMA_VALIDATION_ERROR"));}
+ // 21 schema制約の検出
+ {const sc={type:"object",required:["score","text"],properties:{score:{type:"integer",minimum:0,maximum:10},text:{type:"string",maxLength:5}}};
+  const caught=v=>{try{checkSchema(v,sc);return null;}catch(e){return e.code;}};
+  ok("21 schema制約: required欠落/型/範囲/文字数を検出",
+    caught({score:5,text:"ok"})===null&&caught({text:"ok"})==="SCHEMA_VALIDATION_ERROR"
+    &&caught({score:1.5,text:"ok"})==="SCHEMA_VALIDATION_ERROR"&&caught({score:99,text:"ok"})==="SCHEMA_VALIDATION_ERROR"
+    &&caught({score:5,text:"ながすぎる文字列"})==="SCHEMA_VALIDATION_ERROR");}
+ // 22 失敗種別マッピング
+ {const codes=[];
+  for(const o of [{status:404,body:"model not found"},{status:500,body:"CUDA out of memory"},{status:400,body:"bad request"}]){
+    registerTransport("t",sseStub(["x"],o));const r=await fullRun(localSpec(),{});codes.push(r.errors[0]&&r.errors[0].kind);}
+  ok("22 失敗種別: 404→MODEL_LOAD_FAILED / OOM→RESOURCE_EXHAUSTED / 400→MODEL_INFERENCE_FAILED",
+    JSON.stringify(codes)===JSON.stringify(["MODEL_LOAD_FAILED","RESOURCE_EXHAUSTED","MODEL_INFERENCE_FAILED"]));}
+ // 23 ModelManager: ロードは1回だけ・キャッシュ
+ {let probes=0;const base=sseStub(["y"]);
+  registerTransport("t",async(url,init)=>{if(/\/models$/.test(url))probes++;return base(url,init);});
+  ModelManager.reset();
+  const sp={metadata:{version:"1"},providers:{local:{adapter:"openai_local",endpoint:"http://stub/v1",model:"m1",transport:"t"}},
+   nodes:[{id:"in",type:"input"},{id:"a",type:"llm",provider:"local"},{id:"b",type:"llm",provider:"local"},{id:"out",type:"output"}],
+   edges:[{from:{node:"in",port:"out"},to:{node:"a",port:"in"}},{from:{node:"a",port:"out"},to:{node:"b",port:"in"}},{from:{node:"b",port:"out"},to:{node:"out",port:"in"}}]};
+  const r=await fullRun(sp,{});
+  const st=ModelManager.get({adapter:"openai_local",endpoint:"http://stub/v1",model:"m1",transport:"t"});
+  ok("23 ModelManager: 2ノード実行でもロード1回・状態ready",r.status==="success"&&probes===1&&st.status==="ready"&&st.loadCount===1);}
+ // 24 ローカルProviderでも fail_fast は Runtime だけが判断
+ {registerTransport("t",sseStub(["ok"]));
+  registerTransport("oom",sseStub(["x"],{status:500,body:"cudaMalloc failed: out of memory"}));
+  const sp={metadata:{version:"1"},
+   providers:{good:{adapter:"openai_local",endpoint:"http://stub/v1",model:"m1",transport:"t"},oom:{adapter:"openai_local",endpoint:"http://stub/v1",model:"m1",transport:"oom"}},
+   nodes:[{id:"in",type:"input",routing:{mode:"parallel",failurePolicy:"fail_fast"}},
+    {id:"A",type:"llm",provider:"oom"},{id:"B",type:"llm",provider:"good"},{id:"C",type:"llm",provider:"good"},
+    {id:"jn",type:"join",op:"json_array",inputs:{items:{type:"text",cardinality:"many"}}},{id:"out",type:"output"}],
+   edges:[{from:{node:"in",port:"out"},to:{node:"A",port:"in"}},{from:{node:"in",port:"out"},to:{node:"B",port:"in"}},{from:{node:"in",port:"out"},to:{node:"C",port:"in"}},
+    {from:{node:"A",port:"out"},to:{node:"jn",port:"items"},position:0},{from:{node:"B",port:"out"},to:{node:"jn",port:"items"},position:1},{from:{node:"C",port:"out"},to:{node:"jn",port:"items"},position:2},
+    {from:{node:"jn",port:"out"},to:{node:"out",port:"in"}}]};
+  ModelManager.reset();const r=await fullRun(sp,{});const g=Object.values(r.branchGroups)[0];
+  ok("24 ローカルProviderのOOM→fail_fastで兄弟cancelled・主因1件",
+    r.status==="failed"&&r.errors.length===1&&r.errors[0].kind==="RESOURCE_EXHAUSTED"
+    &&(r.nodeRuns.B||[]).some(x=>x.status==="cancelled"&&x.cancelReason==="sibling_failed")
+    &&!!g&&g.primaryFailure.code==="RESOURCE_EXHAUSTED");}
+ // 25 usage未報告はトークンを捏造しない
+ {registerTransport("t",sseStub(["a","b"]));ModelManager.reset();
+  const r=await fullRun(localSpec(),{});
+  ok("25 usage未報告: tokensを捏造せず unreported として数える",
+    r.status==="success"&&r.totals.inputTokens===0&&r.totals.outputTokens===0&&r.totals.unreportedUsageCalls===1);}
+ // 26 prompt組立: system/prefix/suffix/template（エスケープしない）
+ {let body=null;registerTransport("t",sseStub(["ok"],{captureBody:b=>body=b}));ModelManager.reset();
+  const sp=localSpec({},{prompt:{system:"SYS",prefix:"PRE",suffix:"SUF",
+    template:{syntax:"mustache",mode:"interpolation_only",value:'Q={{{run_input.question}}} / V={{vars.style}}'}}});
+  sp.vars={style:"<b>太字</b>"};
+  const r=await fullRun(sp,{question:'5 > 3 & "引用"'});
+  const u=body&&body.messages[1].content;
+  ok("26 prompt組立: system/prefix/suffix順・生文字列（HTMLエスケープしない）",
+    r.status==="success"&&body.messages[0].role==="system"&&body.messages[0].content==="SYS"
+    &&u.startsWith("PRE\n\n")&&u.endsWith("\n\nSUF")&&u.includes('5 > 3 & "引用"')&&u.includes("<b>太字</b>"));}
+ // 27/28 webllm adapter（engineを差し替えてAPI形だけ検証。実WebGPU推論はGPUのある実機で確認する）
+ {const src=`
+export async function CreateMLCEngine(model,opt){
+  if(opt&&opt.initProgressCallback)opt.initProgressCallback({progress:0.5,text:"stub 50%"});
+  return {interruptGenerate(){globalThis.__wllmInterrupt=(globalThis.__wllmInterrupt||0)+1;},
+    chat:{completions:{async create(o){
+      const toks=globalThis.__wllmTokens||["A","B","C"];const delay=globalThis.__wllmDelay||0;
+      return (async function*(){
+        for(const t of toks){if(delay)await new Promise(r=>setTimeout(r,delay));yield{choices:[{delta:{content:t}}]};}
+        yield{choices:[],usage:{prompt_tokens:7,completion_tokens:toks.length}};
+      })();}}}};
+}`;
+  let url=null;
+  if(typeof navigator!=="undefined"&&navigator.gpu){
+    for(const mk of [()=>URL.createObjectURL(new Blob([src],{type:"text/javascript"})),()=>"data:text/javascript;charset=utf-8,"+encodeURIComponent(src)]){
+      try{const u=mk();await import(u);url=u;break;}catch(e){}
+    }
+  }
+  const wspec=cdn=>({metadata:{version:"1"},providers:{w:{adapter:"webllm",model:"stub-model",cdn}},
+    nodes:[{id:"in",type:"input"},{id:"a",type:"llm",provider:"w"},{id:"out",type:"output"}],
+    edges:[{from:{node:"in",port:"out"},to:{node:"a",port:"in"}},{from:{node:"a",port:"out"},to:{node:"out",port:"in"}}]});
+  if(!url){
+    const why=(typeof navigator!=="undefined"&&navigator.gpu)?"stubモジュールをimportできない環境":"navigator.gpu が無い環境";
+    skip("27 webllm: streaming/usage",why);skip("28 webllm: decode中cancel→interruptGenerate",why);
+  }else{
+    globalThis.__wllmTokens=["ブ","ラ","ウ","ザ"];globalThis.__wllmDelay=0;globalThis.__wllmInterrupt=0;
+    ModelManager.reset();
+    let toks=[];const r=await fullRun(wspec(url),{},null,makeController({onToken:(n,t)=>toks.push(t)}));
+    ok("27 webllm: engineロード→streaming 4token→usage反映",
+      r.status==="success"&&r.result.value==="ブラウザ"&&toks.length===4&&r.totals.inputTokens===7&&r.totals.outputTokens===4);
+    globalThis.__wllmDelay=25;globalThis.__wllmInterrupt=0;ModelManager.reset();
+    const sp=wspec(url);const run=makeRun(sp,{});startRun(sp,run);
+    let fired=false;const c=makeController({onToken:()=>{if(!fired){fired=true;setTimeout(()=>requestCancel(run,null,c),0);}}});
+    await runUntilIdle(sp,run,null,null,c);
+    const rec=(run.nodeRuns.a||[])[0];
+    ok("28 webllm: decode中cancel→interruptGenerate呼出・cancelled・出力は配送しない",
+      run.status==="cancelled"&&globalThis.__wllmInterrupt>=1&&!!rec&&rec.status==="cancelled"
+      &&run.errors.length===0&&run.deliveries.filter(d=>d.fromNodeId==="a").length===0);
+  }}
+ }catch(e){out.push(`<span class="fail">FAIL</span>  自己テストが例外で停止: ${(e&&e.message)||JSON.stringify(e)}`);}
+ render();
+ window.__selfTest={total:out.length,pass:out.filter(x=>x.includes(">PASS<")).length,skip:out.filter(x=>x.includes(">SKIP<")).length,lines:out.map(x=>x.replace(/<[^>]+>/g,""))};
+})();
+
+(function onload(){const cp=store.load();if(cp){if(cp.specSnapshot){try{$("#spec").value=JSON.stringify(cp.specSnapshot,null,2);document.querySelectorAll("#exSeg button,#exSeg2 button").forEach(b=>b.classList.remove("on"));}catch(e){}}
+  const b=$("#resumeBanner");b.classList.add("show");$("#resume").disabled=!(cp.status!=="success"&&cp.resumable);
+  b.textContent=`Checkpoint検出（status=${cp.status} queue先頭=${cp.workQueue&&cp.workQueue[0]?cp.workQueue[0].phase:"—"}）。textareaに実行中Specを復元。`+(cp.status==="success"?"terminalのためResume不可。":"「Resume」で継続できます。");}})();
+}
+</script>
+</body></html>
