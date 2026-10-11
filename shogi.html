@@ -6125,32 +6125,42 @@ const SFX = (function(){
   const SE_FILES=[
     {f:'slash-long.mp3',  n:'斬撃（長い）'},
     {f:'slash-mid.mp3',   n:'斬撃（中くらい）'},
+    {f:'slash-sharp.mp3', n:'斬撃（鋭い）'},
     {f:'hit-sharp.mp3',   n:'鋭い当たり'},
     {f:'hit-short.mp3',   n:'短い打撃'},
     {f:'hit-dry.mp3',     n:'乾いた打撃'},
+    {f:'hit-mid.mp3',     n:'打撃（中くらい）'},
     {f:'impact-dark.mp3', n:'低い衝撃'},
     {f:'impact-low.mp3',  n:'重い衝撃'},
+    {f:'drum-low.mp3',    n:'ドン（太鼓）'},
     {f:'boom-1.mp3',      n:'轟音1'},
     {f:'boom-2.mp3',      n:'轟音2'},
+    {f:'riser.mp3',       n:'盛り上がり（12秒）'},
     {f:'chime-1.mp3',     n:'澄んだ音1'},
     {f:'chime-2.mp3',     n:'澄んだ音2'},
     {f:'chime-3.mp3',     n:'澄んだ音3'},
+    {f:'sparkle.mp3',     n:'キラキラ'},
+    {f:'jingle-short.mp3',n:'ジングル（1秒）'},
+    {f:'jingle-1.mp3',    n:'ジングル（2秒）'},
+    {f:'jingle-long.mp3', n:'ジングル（3秒）'},
+    {f:'jingle-grand.mp3',n:'ジングル（5秒）'},
     {f:'fanfare.mp3',     n:'ファンファーレ'}
   ];
   // どの場面でどのファイルを鳴らすか。null なら合成音のまま
+  // 駒を置く「パチ」は 0.05秒より短い音で、もらったファイルには無いので合成で作る
   let SE_MAP={
     shakeen:'slash-long.mp3',   // 倒す（シャッキーン）
     zashu:'slash-mid.mp3',      // 倒す（ザシュッ）
     dukushi:'hit-sharp.mp3',    // 倒す（デュクシ）
-    move:'hit-short.mp3',       // 駒を動かす
-    drop:'hit-dry.mp3',         // 持ち駒を打つ
+    move:null,                  // 駒を動かす … パチ（合成）
+    drop:null,                  // 持ち駒を打つ … パチ（合成・少し低い）
     crit:'boom-1.mp3',          // 会心の一撃
     check:'impact-dark.mp3',    // 王手
     promote:'chime-1.mp3',      // 成る
     flip:'chime-3.mp3',         // オセロの裏返し
     win:'fanfare.mp3',          // 勝ち
     lose:'boom-2.mp3',          // 負け
-    draw:'chime-2.mp3'          // 引き分け
+    draw:'jingle-short.mp3'     // 引き分け
   };
   const SE_VOL={ move:0.5, drop:0.6, flip:0.5, win:0.9, lose:0.8, draw:0.7 };
   const pool={};                                  // ファイルごとの <audio> の使い回し
@@ -6242,10 +6252,20 @@ const SFX = (function(){
       if(SE_MAP[name] && playFile(SE_MAP[name], SE_VOL[name])) return;
       if(!ensure()) return; const t=ctx.currentTime;
       switch(name){
-        case 'move': /* パチッと乾いた駒音 */
-          tone(310,t,0.06,'triangle',0.3); tone(620,t,0.03,'sine',0.14); noise(t,0.045,0.2,1400); break;
-        case 'drop': /* トンッと重めの打ち込み */
-          tone(220,t,0.1,'triangle',0.34); tone(110,t,0.12,'sine',0.24,70); noise(t,0.06,0.22,900); break;
+        case 'move': /* パチッ：駒を盤に打ちつける木の音。短く・固く・澄ませる */
+          noise(t,0.012,0.9,7000);                      /* 当たりの頭（カッ） */
+          noiseRing(t,0.055,1.8,2400,5);                /* 盤と駒の木の鳴り */
+          noiseRing(t+0.002,0.075,1.1,1100,4);
+          tone(240,t,0.05,'triangle',0.45,150);         /* 木の胴 */
+          tone(90,t,0.06,'sine',0.32,55);               /* 低い手応え */
+          break;
+        case 'drop': /* 持ち駒を打つ音。パチより少し低く重い */
+          noise(t,0.014,0.85,5000);
+          noiseRing(t,0.075,1.8,1500,5);
+          noiseRing(t+0.002,0.095,1.1,700,4);
+          tone(180,t,0.07,'triangle',0.5,110);
+          tone(70,t,0.09,'sine',0.42,45);
+          break;
         case 'shakeen': /* シャッキーン！：抜刀の「シャッ」＋金属の非整数倍音が長く鳴る「キーン」 */
           noiseSweep(t,0.10,1.1,14000,2200);            /* 抜き打ちのシャッ */
           noise(t+0.002,0.035,0.9,12000);               /* 当たりの芯（チッ） */

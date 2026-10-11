@@ -16,8 +16,10 @@ await p.goto('file://'+HTML); await p.waitForTimeout(800);
 const out=await p.evaluate(async()=>{
   /* 音の「らしさ」を3つの数で見る。
        体感の大きさ … 最初の0.3秒の実効値。小さすぎると「ポッ」に聞こえる
-       ノイズらしさ … ゼロ交差の間隔のばらつき。0に近いほど純音＝鐘（ピロン）
+       平坦さ       … 鳴っている最中のスペクトルの平たさ。純音が数本立っているだけなら
+                      0に近く、広帯域（金属のざらつき）なら大きい
        最大         … 1.0を超えると割れる
+       ノイズらしさ … ゼロ交差の間隔のばらつき。低音を敷くと下がるので参考値
      倒す音を正弦波の倍音で作ると鐘になるので、ノイズで作らなければならない。 */
   const R={};
   const SRC=[...document.querySelectorAll('script')].map(s=>s.textContent).join('\n');
@@ -36,6 +38,18 @@ const out=await p.evaluate(async()=>{
     let last=0; for(let i=0;i<d.length;i++) if(Math.abs(d[i])>peak*0.01) last=i;
     let sq=0; const nn=Math.min(d.length,(sr*0.3)|0);
     for(let i=0;i<nn;i++) sq+=d[i]*d[i];
+    // 鳴っている最中（0.06秒あたり）のスペクトルの平たさ
+    const N=1024, st=Math.min(d.length-N-1,(sr*0.06)|0);
+    let flat=0;
+    if(st>0){
+      const w=new Float64Array(N);
+      for(let i=0;i<N;i++) w[i]=d[st+i]*(0.5-0.5*Math.cos(2*Math.PI*i/(N-1)));
+      let lg=0, am=0, cnt=0;
+      for(let k=1;k<N/2;k++){ let a=0,b=0;
+        for(let i=0;i<N;i++){ const th=-2*Math.PI*k*i/N; a+=w[i]*Math.cos(th); b+=w[i]*Math.sin(th); }
+        const m=a*a+b*b; lg+=Math.log(m+1e-20); am+=m; cnt++; }
+      flat=Math.exp(lg/cnt)/((am/cnt)||1);
+    }
     const zc=[]; let prev=0;
     for(let i=1;i<last;i++){ if((d[i-1]<0)!==(d[i]<0)){ if(prev) zc.push(i-prev); prev=i; } }
     let noisy=0;
@@ -44,10 +58,10 @@ const out=await p.evaluate(async()=>{
       noisy=Math.sqrt(zc.reduce((a,x)=>a+(x-mu)*(x-mu),0)/zc.length)/mu;
     }
     return {最大:+peak.toFixed(2), 体感の大きさ:+Math.sqrt(sq/nn).toFixed(3),
-            長さ秒:+(last/sr).toFixed(2), ノイズらしさ:+noisy.toFixed(2)};
+            平坦さ:+flat.toFixed(3), 長さ秒:+(last/sr).toFixed(2), ノイズらしさ:+noisy.toFixed(2)};
   };
   const kinds=['shakeen','zashu','dukushi'];
-  for(const n of kinds.concat(['move','drop','crit'])) R['①'+n]=await measure(n);
+  for(const n of kinds.concat(['move','drop','crit','promote'])) R['①'+n]=await measure(n);
   const M=Object.fromEntries(kinds.map(n=>[n,R['①'+n]]));
   const mv=R['①move'];
   // ② 倒す音は割れない
@@ -57,15 +71,20 @@ const out=await p.evaluate(async()=>{
   const ld=kinds.map(n=>M[n].体感の大きさ);
   R['③3種の大きさ']=(Math.max(...ld)/Math.min(...ld))<=1.6
     ? '揃っている（'+ld.join(' / ')+'）' : '★ばらつきが大きい（'+ld.join(' / ')+'）';
-  // ④ 駒を動かす音（ポッ）より、はっきり大きい。小さいと「ポッ」に紛れる
-  R['④moveよりどれだけ大きいか']=ld.every(x=>x>=mv.体感の大きさ*5)
-    ? '5倍以上（move '+mv.体感の大きさ+' / 倒す音 '+ld.join(' / ')+'）'
-    : '★小さすぎる（move '+mv.体感の大きさ+' / 倒す音 '+ld.join(' / ')+'）';
-  // ⑤ 鐘（ピロン）になっていない。純音を重ねて作ると、move と同じくらい「ノイズらしさ」が低くなる
-  const nz=kinds.map(n=>M[n].ノイズらしさ);
-  R['⑤鐘になっていないか']=nz.every(x=>x>mv.ノイズらしさ)
-    ? 'ノイズで作れている（move '+mv.ノイズらしさ+' / 倒す音 '+nz.join(' / ')+'）'
-    : '★純音に寄っている（move '+mv.ノイズらしさ+' / 倒す音 '+nz.join(' / ')+'）';
+  // ④ 駒音に紛れない大きさがあること。小さいと「ポッ」としか聞こえない
+  //    直す前は 0.025〜0.056 しかなく、駒音の2倍ほどだった
+  R['④大きさは足りているか']=(ld.every(x=>x>=0.08) && ld.every(x=>x>=mv.体感の大きさ*2.5))
+    ? '足りている（駒音 '+mv.体感の大きさ+' / 倒す音 '+ld.join(' / ')+'）'
+    : '★小さすぎる（駒音 '+mv.体感の大きさ+' / 倒す音 '+ld.join(' / ')+'）';
+  /* ⑤ シャッキーンが鐘（ピロン）になっていないか。
+        正弦波の倍音を重ねて作ると、スペクトルに純音が数本立つだけになって平坦さが下がる。
+        わざと鐘にしてある「成る」の音より平たいことを見る。
+        （直す前は 0.008 で、成るの 0.010 より下だった＝鐘そのもの） */
+  const fl=M.shakeen.平坦さ, pr=R['①promote'].平坦さ;
+  R['⑤シャッキーンが鐘になっていないか']= fl>pr
+    ? 'ノイズで作れている（成る '+pr+' / シャッキーン '+fl+'）'
+    : '★鐘に寄っている（成る '+pr+' / シャッキーン '+fl+'）';
+  R['⑤ざらつきの参考値']=kinds.map(n=>n+' '+M[n].ノイズらしさ).join(' / ')+'（低音を敷くと下がるので目安）';
   // ⑥ 消した名前は無音
   R['⑥slash（削除済み）']=await measure('slash');
   return R;

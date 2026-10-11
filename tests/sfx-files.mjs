@@ -19,6 +19,7 @@ const out=await p.evaluate(async()=>{
   R['①場面の数']=document.getElementById('seScene').options.length;
   R['①音の選択肢']=[...document.getElementById('seFile').options].map(o=>o.textContent);
   R['①はじめの割り当て']=SFX.seMap;
+  R['①パチは合成音のまま']=(SFX.seMap.move===null && SFX.seMap.drop===null)?'そのとおり':'★ファイルが割り当たっている';
   // ② 鳴らすまでファイルを取りに行かない（起動しただけで13本読み込まない）
   SFX.on=true; SFX.resume();
   R['②倒す音を6回']=SFX.defeatKinds.slice();
