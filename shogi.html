@@ -6063,32 +6063,53 @@ const SFX = (function(){
     g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
     n.connect(f); f.connect(g); g.connect(master); n.start(t0); n.stop(t0+dur+0.02);
   }
+  /* 倒す音は3種から1つ選ぶ（同じ音が続かないようにする）。
+     シャッキーン＝居合の金属音／ザシュッ＝短く斬る音／デュクシ！＝コメディのパンチ。 */
+  const DEFEAT=['shakeen','zashu','dukushi'];
+  let lastDefeat=-1;
+  function pickDefeat(){
+    let i=(Math.random()*DEFEAT.length)|0;
+    if(i===lastDefeat) i=(i+1)%DEFEAT.length;   // 2回続けて同じにはしない
+    lastDefeat=i; return DEFEAT[i];
+  }
   return {
     get on(){return on;}, set on(v){on=!!v;},
+    get defeatKinds(){ return DEFEAT.slice(); },
     resume(){ ensure(); },
     play(name){
       if(!on || !ensure()) return; const t=ctx.currentTime;
+      // 'capture'（旧名）と 'defeat' は、倒す音3種のどれかになる
+      if(name==='defeat'||name==='capture') name=pickDefeat();
       switch(name){
         case 'move': /* パチッと乾いた駒音 */
           tone(310,t,0.06,'triangle',0.3); tone(620,t,0.03,'sine',0.14); noise(t,0.045,0.2,1400); break;
         case 'drop': /* トンッと重めの打ち込み */
           tone(220,t,0.1,'triangle',0.34); tone(110,t,0.12,'sine',0.24,70); noise(t,0.06,0.22,900); break;
-        case 'capture': /* ドォンッ！：サブベース＋轟音＋破片＋残響の唸り */
-          tone(52,t,0.45,'sine',0.75,24);
-          tone(88,t,0.3,'sine',0.45,38);
-          tone(150,t,0.22,'sawtooth',0.46,50);
-          noise(t,0.26,0.9,600);
-          noise(t+0.08,0.16,0.4,2600);   /* 破片のカラカラ */
-          noise(t+0.2,0.22,0.16,300);    /* 低い残響 */
+        case 'shakeen': /* シャッキーン！：鋭い抜刀の芯＋高い倍音が長く伸びる金属リング */
+          noiseSweep(t,0.05,0.5,12000,3000);            /* 抜き打ちのシュッ */
+          noise(t+0.004,0.022,0.5,9000);                /* 当たりの芯（チッ） */
+          tone(2637,t+0.008,0.55,'triangle',0.22);      /* 刃鳴り（不整合な倍音を重ねる） */
+          tone(3951,t+0.010,0.50,'sine',0.16);
+          tone(5274,t+0.012,0.42,'sine',0.10);
+          tone(7902,t+0.014,0.30,'sine',0.055);
+          tone(1318,t+0.020,0.60,'triangle',0.10);      /* 胴鳴り */
+          noiseSweep(t+0.03,0.5,0.12,5000,9000);        /* キーンと上へ伸びる層 */
+          tone(120,t,0.10,'sine',0.30,60);              /* 手応えの低音（軽め） */
           break;
-        case 'slash': /* シャキィィン！：三重スイープ＋長い金属リング */
-          noiseSweep(t,0.2,0.85,9000,900);
-          noiseSweep(t+0.02,0.16,0.55,6000,800);
-          noiseSweep(t+0.05,0.13,0.35,4200,700);
-          tone(3600,t+0.012,0.18,'sine',0.26,600);
-          tone(5200,t+0.03,0.13,'sine',0.17,1500);
-          tone(7000,t+0.045,0.09,'sine',0.1,2400);
-          tone(2400,t+0.06,0.22,'triangle',0.12,900);  /* 刃鳴りの尾 */
+        case 'zashu': /* ザシュッ！：ざらついた一閃。残響を残さず切り上げる */
+          noiseSweep(t,0.03,0.6,9000,4000);             /* 振りの頭 */
+          noise(t+0.006,0.09,0.58,3000);                /* ザッ（ざらつき） */
+          noiseSweep(t+0.010,0.13,0.48,5000,500);       /* シュッと抜ける */
+          noise(t+0.10,0.07,0.18,900);                  /* 小さな後味 */
+          tone(160,t+0.008,0.10,'triangle',0.30,70);    /* ドスッ */
+          break;
+        case 'dukushi': /* デュクシ！：「デュ」＝落ちるピッチ、「クシ」＝短いノイズ */
+          tone(420,t,0.10,'square',0.26,90);
+          tone(210,t,0.12,'triangle',0.30,60);
+          tone(70,t+0.02,0.18,'sine',0.60,40);          /* 当たりの手応え */
+          noise(t+0.10,0.05,0.58,5000);                 /* クシ */
+          noiseSweep(t+0.10,0.12,0.45,8000,2000);
+          noise(t+0.14,0.08,0.2,2000);
           break;
         case 'crit': /* 会心の一撃：溜め上昇→大爆発＋鐘＋地鳴り */
           tone(260,t,0.12,'sawtooth',0.32,1800);
@@ -6422,11 +6443,11 @@ function applyFx(d){
   if(!bd||!fx) return;
   const fxRect=fx.getBoundingClientRect();
   const cellAt=(r,c)=>bd.querySelector('.cell[data-r="'+r+'"][data-c="'+c+'"]');
-  // 音：取りは「シャキン！→ドスン」、会心はさらに轟音。それ以外は従来どおり
+  // 音：倒したときは「シャッキーン／ザシュッ／デュクシ！」のどれか（同じ音は続かない）。
+  // 会心のときはそこに轟音を重ねる。それ以外は従来どおり
   if(d.caps.length){
-    SFX.play('slash');
-    if(d.crit){ setTimeout(()=>SFX.play('crit'),90); }
-    else setTimeout(()=>SFX.play('capture'),110);
+    SFX.play('defeat');
+    if(d.crit) setTimeout(()=>SFX.play('crit'),90);
   }
   else if(d.drop) SFX.play('drop'); else SFX.play('move');
   if(d.flips.length) setTimeout(()=>SFX.play('flip'),40);

@@ -17,6 +17,7 @@ node tests/cross-cell-rules.mjs [new|old]
 node tests/check-layer.mjs      [new|old]
 node tests/fx-layout.mjs        [new|old]
 node tests/bgm.mjs
+node tests/defeat-sound.mjs    [new|old]
 node tests/board-text-fit.mjs  [new|old]
 node tests/score-modes.mjs
 node tests/royal-endgame.mjs
@@ -264,6 +265,25 @@ iOS が画面を縮めて表示していた（見出しがステータスバー�
 | 3秒より後で ⏮ | 曲は変わらず頭出し（20秒→0秒） |
 | 「1曲くり返し」中に ⏭ | 押せば曲が変わる |
 | ランダム中に ⏭→⏮ | 聴いた順に1つ戻り、元の曲に戻る |
+| pageerror | 0 |
+
+## defeat-sound.mjs が見るもの
+
+倒したときの音は **シャッキーン／ザシュッ／デュクシ！** の3種から1つを選ぶ。
+headless では音そのものを聴けないので、`AudioContext` が**何をいくつ鳴らそうとしたか**を
+数えて中身を確かめる（`createOscillator` / `createBufferSource` と、音量カーブを記録する）。
+3種は鳴らす数が違う（音程6＋ノイズ3／音程1＋ノイズ4／音程3＋ノイズ3）ので、
+その数からどれが鳴ったか見分けられる。
+
+| 見るもの | 期待 |
+|---|---|
+| 3種それぞれ単体 | 音が組まれる（数が0なら名前が無い＝無音） |
+| 旧 `slash`・知らない名前 | 無音（`slash` は `shakeen` に置き換えて削除済み） |
+| `'defeat'` を60回 | 3種がほぼ均等に出て、**同じ音が続いた回数0** |
+| 旧名 `'capture'` | 同じ3種に振り分かれる |
+| 「音・演出」OFF | 1つも鳴らさない |
+| 実際に駒を取る（`applyMoveSilent`→`render`→`applyFx`） | 3種のどれかが鳴る。OFFなら鳴らない |
+| 倒す音の大きさ | 3種とも重なりの最大が**1.0以下**（割れない）で、**差は0.25以内**（どれも同じくらい） |
 | pageerror | 0 |
 
 ## board-text-fit.mjs が見るもの
