@@ -34,7 +34,7 @@ await until(H.p,()=>!!Online.code && document.getElementById('onlineCodeRow').st
 const url=await H.p.evaluate(()=>document.getElementById('onlineUrl').value);
 const G=await mk(url);
 const R={招待URL:url.replace(/room=.*/,'room=…')};
-R['つながった']=await until(H.p,()=>Online.connected) && await until(G.p,()=>Online.connected && Online.ply===0 && turn===-1);
+R['つながった']=await until(H.p,()=>Online.connected) && await until(G.p,()=>Online.connected && !Online.hold && turn===-1);
 // 両方の盤を「ホストの向き」にそろえて比べる
 const snap=pg=>pg.evaluate(()=>{ const s=stateJSON(); return {NR:s.NR,NC:s.NC,turn:s.turn,board:s.board,pts:s.pts,diag:s.diag,capYou:s.capYou,capEnemy:s.capEnemy,gameOver:gameOver}; });
 const flipBack=(g)=>{ const R_=g.NR,C=g.NC, mc=t=>t==='GOB'?'GOW':t==='GOW'?'GOB':t;
@@ -141,6 +141,32 @@ await tap(H.p,3,0); await tap(H.p,2,0);
 await H.p.evaluate(()=>{ if(document.getElementById('promoModal').classList.contains('show')) document.getElementById('promoYes').click(); });
 await until(G.p,()=>turn===1);
 R['⑬ランダムに成った駒']={ホスト:await H.p.evaluate(()=>board[2][0]&&board[2][0].t), ゲスト:await G.p.evaluate(()=>board[6][8]&&board[6][8].t), 盤:await same()};
+// ⑮ 相手が入ったあとでも、ホストは盤の編集・ルール設定・盤の大きさを変えられ、そのまま相手に届く
+// ゲストの番にしてからホストが編集を始める → ゲストは指せない
+await H.p.evaluate(()=>{ turn=-1; onlineSendState(); });
+await until(G.p,()=>Online.ply===0 && turn===1);
+await H.p.evaluate(()=>setEditing(true));
+await until(G.p,()=>!!Online.hold);
+const gB=await G.p.evaluate(()=>JSON.stringify(board));
+await tap(G.p,6,0); await tap(G.p,5,0);
+R['⑮編集中はゲストが指せない']={状態:await G.p.evaluate(()=>document.getElementById('status').textContent),
+  盤:(await G.p.evaluate(()=>JSON.stringify(board)))===gB?'動かない':'★動いた'};
+await H.p.evaluate(()=>{ board[4][4]={t:'hR',p:1}; board[4][5]={t:'hB',p:-1}; setEditing(false); });
+await until(G.p,()=>Online.ply===0 && board[4][4] && board[4][4].t==='hR');
+R['⑮盤を編集したあと']=await same();
+R['⑮編集が終わると指せる']=await G.p.evaluate(()=>Online.hold===null && !Online.remoteTurn());
+await H.p.evaluate(()=>{ turn=-1; onlineSendState(); });
+await until(G.p,()=>Online.ply===0 && turn===1);
+await H.p.evaluate(()=>document.getElementById('ruleBtn').click());
+await until(G.p,()=>!!Online.hold);
+R['⑮ルール画面を開いている間']=await G.p.evaluate(()=>document.getElementById('status').textContent);
+await H.p.evaluate(()=>{ const cb=document.getElementById('rNifu'); cb.checked=!cb.checked; cb.dispatchEvent(new Event('change')); document.getElementById('ruleClose').click(); });
+await new Promise(r=>setTimeout(r,600));
+R['⑮ルール設定（二歩）がそろう']={ホスト:await H.p.evaluate(()=>RULES.nifu), ゲスト:await G.p.evaluate(()=>RULES.nifu),
+  閉じたら指せる:await G.p.evaluate(()=>Online.hold===null)};
+await H.p.evaluate(()=>{ document.getElementById('presetSel').value='mini'; document.getElementById('applyPresetBtn').click(); SFX.on=false; });
+await until(G.p,()=>NR===5 && Online.ply===0);
+R['⑮盤の大きさを変えたあと']=await same();
 // ⑨ 投了
 await G.p.evaluate(()=>{ document.getElementById('presetSel').value='hon'; });
 await G.p.evaluate(()=>document.getElementById('onlineResign').click());
@@ -152,7 +178,9 @@ R['⑩切れたと気づくまで']=(await until(H.p,()=>!Online.connected,8000)
 R['⑩相手が閉じたあと']=await H.p.evaluate(()=>document.getElementById('onlineState').textContent);
 // ⑭ 同じ招待URLを開き直すと再開できる
 const G2=await mk(url);
-R['⑭開き直してつながる']=await until(G2.p,()=>Online.connected && Online.ply===0, 10000);
+// つながってからホストの盤が届くまでは Online.hold が立っていて指せない
+// （手元では一瞬で届くので観測できない。待ち状態で指せないことは ⑮ で確かめている）
+R['⑭開き直してつながる']=await until(G2.p,()=>Online.connected && !Online.hold, 10000);
 const h2=norm(await snap(H.p)), g2=flipBack(await snap(G2.p));
 R['⑭開き直したあとの盤']=JSON.stringify(h2.board)===JSON.stringify(g2.board)?'一致':'★食い違い';
 R['⑭ゲストのエラー']=G2.errs;

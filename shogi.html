@@ -4862,7 +4862,9 @@ function nextTurn(){
   // 手番側が動けない・打てない → 持将棋 or 詰み
   if(!hasAnyLegalMove(turn)){ resolveNoMove(turn); return; }
   if(typeof Online!=='undefined' && Online.remoteTurn()){
-    setStatus('相手の番です（相手が指すのを待っています）','think'); lastRibbonTurn=turn; return;
+    setStatus(Online.hold ? '部屋を作った人が'+Online.hold+'です。終わるまで待ってください'
+                          : '相手の番です（相手が指すのを待っています）','think');
+    lastRibbonTurn=turn; return;
   }
   if(isAuto(turn) && paused){
     setStatus('一時停止中　▶開始 か ▶❘1手進める で進みます','think');
@@ -7595,7 +7597,10 @@ function setEditing(on){
   if(on===editing){ updateEditBar(); return; }
   if(on && typeof Online!=='undefined' && Online.connected && Online.role!=='host'){
     setStatus('部屋を作った人だけが盤を編集できます','think'); updateEditBar(); return; }
-  if(!on && typeof Online!=='undefined' && Online.connected && Online.role==='host') setTimeout(onlineSendState,0);
+  if(typeof Online!=='undefined' && Online.connected && Online.role==='host'){
+    if(on) onlineSend({t:'hold', why:'盤を編集中'});   // 編集中は相手に指させない
+    else setTimeout(onlineSendState,0);               // 終わったら盤ごと送り直す（待ってね状態も解ける）
+  }
   if(replaying) exitReplay();
   editing=on; sel=null; multiSel=[]; updateMultiBar(); stopAutoLoop(); updateEditBar();
   if(editing){ render(); setStatus('編集中：盤のマスをタップ（説明／変更／プリセット配置）');
@@ -8438,9 +8443,10 @@ const ONLINE_PREFIX='claude-shogi-';
 var Online={   // var：起動中（定義より前）に nextTurn から参照されても落ちないように
   peer:null, conn:null, role:null,   // role: 'host' | 'guest' | null
   code:null, ply:0, connected:false,
+  hold:null,   // ゲスト側：ホストが盤の編集・ルール設定をしている間の理由（その間は指せない）
   get active(){ return !!this.role; },
-  // 相手の番か（このときは盤を触っても動かせない）
-  remoteTurn(){ return this.active && this.connected && turn===-1 && !gameOver; },
+  // 相手の番か、ホストが設定中か（このときは盤を触っても動かせない）
+  remoteTurn(){ return this.active && this.connected && !gameOver && (turn===-1 || !!this.hold); },
   isGuest(){ return this.role==='guest'; }
 };
 function onlineLoadLib(){
@@ -8554,7 +8560,11 @@ function onlineDesync(why){
 }
 function onlineOnData(msg){
   if(!msg||typeof msg!=='object') return;
+  if(msg.t==='hold' && Online.role==='guest'){
+    Online.hold=msg.why||'設定中'; sel=null; render(); nextTurn(); return;
+  }
   if(msg.t==='state' && Online.role==='guest'){
+    Online.hold=null;
     loadState(JSON.stringify(mirrorStateObj(msg.s)));
     autoYou=false; autoEnemy=false; refreshAutoLabels();
     Online.ply=0; paused=true;
@@ -8579,7 +8589,11 @@ function onlineAttach(conn){
     Online.connected=true;
     autoYou=false; autoEnemy=false; refreshAutoLabels(); stopAutoLoop();
     if(Online.role==='host'){ onlineSendState(); nextTurn(); }
-    else onlineUi('つながりました。盤を受け取っています…','ok');
+    else {
+      // ホストの盤が届くまでは、こちらの盤は古いまま。届くまで指させない
+      Online.hold='盤を送っているところ'; sel=null; nextTurn();
+      onlineUi('つながりました。盤を受け取っています…','ok');
+    }
   });
   conn.on('data', onlineOnData);
   conn.on('close',()=>{
@@ -8625,7 +8639,7 @@ function onlineLeave(quiet){
   if(!quiet) onlineSend({t:'bye'});
   try{ Online.conn && Online.conn.close(); }catch(_){}
   try{ Online.peer && Online.peer.destroy(); }catch(_){}
-  Online.peer=null; Online.conn=null; Online.role=null; Online.connected=false; Online.code=null;
+  Online.peer=null; Online.conn=null; Online.role=null; Online.connected=false; Online.code=null; Online.hold=null;
   const cr=document.getElementById('onlineCodeRow'); if(cr) cr.style.display='none';
   if(!quiet) onlineUi('退出しました。部屋を作るか、合言葉で入ってください。');
   else onlineUi(document.getElementById('onlineState').textContent, 'ng');
@@ -8653,6 +8667,12 @@ function onlineGuardButtons(){
   wrap('reset','host',true); wrap('swapSides','host',true); wrap('resetBoard','host',true);
   wrap('applyPresetBtn','host',true); wrap('loadBtn','host',true);
   wrap('ruleBtn','host',false); wrap('ruleClose','host',true);
+  // ルール画面を開いている間は相手に指させない（閉じると盤ごと送り直して解ける）
+  const rb=document.getElementById('ruleBtn'), rbOrig=rb.onclick;
+  rb.onclick=function(e){ const r=rbOrig.call(this,e);
+    if(Online.connected && Online.role==='host' && document.getElementById('ruleModal').classList.contains('show'))
+      onlineSend({t:'hold', why:'ルールを設定中'});
+    return r; };
 }
 (function(){
   const $=id=>document.getElementById(id);
