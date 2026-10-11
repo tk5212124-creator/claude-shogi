@@ -183,6 +183,38 @@ const out=await p.evaluate((C54)=>{
     syncLayers();
     R['⑪置き方を揃え直しても残るか']=board[4][4]?board[4][4].t:'★消えた';
   }
+  /* ⑫ 交点は 0〜NR・0〜NC なので、盤の端（最下段・最右列）はマスの盤には無い。
+        駒を選ぶ画面がそこでマスの盤を引くと落ちて、置けなくなる。
+        全部の交点で「開ける」「置ける」ことを確かめる。 */
+  {
+    loadState(mk(B(),P(),X())); SFX.on=false;
+    editing=true;
+    const ls=document.getElementById('editLayerSel');
+    ls.value='pt'; ls.dispatchEvent(new Event('change'));
+    const ng=[], put=[];
+    for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){
+      ptsBoard[r][c]=null;
+      try{ openPick(r,c); }catch(e){ ng.push((r+1)+'行'+(c+1)+'列 '+String(e).slice(0,40)); continue; }
+      applyPick('XA');
+      if(!ptsBoard[r][c]) put.push((r+1)+'行'+(c+1)+'列');
+      ptsBoard[r][c]=null;
+    }
+    R['⑫駒を選ぶ画面が開けない交点']=ng.length?ng:'なし';
+    R['⑫置けなかった交点']=put.length?put:'なし';
+    R['⑫交点の数']=(NR+1)*(NC+1);
+    // マスの側も同じように確かめる
+    ls.value='cell'; ls.dispatchEvent(new Event('change'));
+    const ng2=[];
+    for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){
+      board[r][c]=null;
+      try{ openPick(r,c); }catch(e){ ng2.push((r+1)+'行'+(c+1)+'列'); continue; }
+      applyPick('hP');
+      if(!board[r][c]) ng2.push((r+1)+'行'+(c+1)+'列 置けない');
+      board[r][c]=null;
+    }
+    R['⑫マス側で開けない／置けない']=ng2.length?ng2:'なし';
+    editing=false;
+  }
   return R;
 },C54);
 console.log(JSON.stringify(out,null,1)); console.log('errs',errs);

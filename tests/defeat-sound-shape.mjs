@@ -60,8 +60,14 @@ const out=await p.evaluate(async()=>{
     return {最大:+peak.toFixed(2), 体感の大きさ:+Math.sqrt(sq/nn).toFixed(3),
             平坦さ:+flat.toFixed(3), 長さ秒:+(last/sr).toFixed(2), ノイズらしさ:+noisy.toFixed(2)};
   };
+  /* 音はノイズで作っているので、鳴らすたびに山の高さが動く。
+     1回だけ測るとたまたま低い回を見てしまうので、3回鳴らして
+     いちばん大きかった回（＝割れやすい回）で判断する。 */
+  const worst=async(n)=>{ let w=null;
+    for(let i=0;i<3;i++){ const m=await measure(n); if(!w||m.最大>w.最大) w=m; }
+    return w; };
   const kinds=['shakeen','zashu','dukushi'];
-  for(const n of kinds.concat(['move','drop','crit','promote'])) R['①'+n]=await measure(n);
+  for(const n of kinds.concat(['move','drop','crit','promote'])) R['①'+n]=await worst(n);
   const M=Object.fromEntries(kinds.map(n=>[n,R['①'+n]]));
   const mv=R['①move'];
   // ② 倒す音は割れない
