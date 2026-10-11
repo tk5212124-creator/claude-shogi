@@ -6139,6 +6139,10 @@ const SFX = (function(){
      BGM と同じく <audio> で鳴らすので、ファイルを取りに行かずに済む file:// でも動く。
      同じ音が重なるので、鳴らすたびに使い回せる要素を1つ選ぶ（空いていなければ増やす）。 */
   const SE_FILES=[
+    {f:'pachi.wav',       n:'パチ（駒を動かす）'},
+    {f:'pachi-drop.wav',  n:'トン（持ち駒を打つ）'},
+    {f:'status-up-1.mp3', n:'ステータス上昇魔法1'},
+    {f:'status-up-2.mp3', n:'ステータス上昇魔法2'},
     {f:'slash-long.mp3',  n:'斬撃（長い）'},
     {f:'slash-mid.mp3',   n:'斬撃（中くらい）'},
     {f:'slash-sharp.mp3', n:'斬撃（鋭い）'},
@@ -6155,24 +6159,25 @@ const SFX = (function(){
     {f:'chime-1.mp3',     n:'澄んだ音1'},
     {f:'chime-2.mp3',     n:'澄んだ音2'},
     {f:'chime-3.mp3',     n:'澄んだ音3'},
-    {f:'sparkle.mp3',     n:'キラキラ'},
     {f:'jingle-short.mp3',n:'ジングル（1秒）'},
-    {f:'jingle-1.mp3',    n:'ジングル（2秒）'},
     {f:'jingle-long.mp3', n:'ジングル（3秒）'},
     {f:'jingle-grand.mp3',n:'ジングル（5秒）'},
     {f:'fanfare.mp3',     n:'ファンファーレ'}
   ];
-  // どの場面でどのファイルを鳴らすか。null なら合成音のまま
-  // 駒を置く「パチ」は 0.05秒より短い音で、もらったファイルには無いので合成で作る
+  /* どの場面でどのファイルを鳴らすか。null なら合成音のまま。
+     駒を置く「パチ」は、もらったファイルに無い（0.05秒より短い音）ので、
+     もとの合成音を pachi.wav / pachi-drop.wav に書き出して使う。
+     合成のまま鳴らすと、ファイルの音は聞こえるのにパチだけ鳴らない端末があったため、
+     全部の効果音を同じ <audio> の道に揃えた。 */
   let SE_MAP={
     shakeen:'slash-long.mp3',   // 倒す（シャッキーン）
     zashu:'slash-mid.mp3',      // 倒す（ザシュッ）
     dukushi:'hit-sharp.mp3',    // 倒す（デュクシ）
-    move:null,                  // 駒を動かす … パチ（合成）
-    drop:null,                  // 持ち駒を打つ … パチ（合成・少し低い）
+    move:'pachi.wav',           // 駒を動かす … パチ
+    drop:'pachi-drop.wav',      // 持ち駒を打つ … トン
     crit:'boom-1.mp3',          // 会心の一撃
     check:'drum-low.mp3',       // 王手 … いちばん低く大きい音。知らせとして目立たせる
-    promote:'chime-1.mp3',      // 成る
+    promote:'status-up-1.mp3',  // 成る … ステータス上昇魔法
     flip:'chime-3.mp3',         // オセロの裏返し
     win:'fanfare.mp3',          // 勝ち
     lose:'boom-2.mp3',          // 負け
@@ -6180,7 +6185,7 @@ const SFX = (function(){
   };
   /* 場面ごとの音量。駒音は小さく、倒す音は大きく、という緩急を付ける。
      何度も鳴るもの（駒音・王手・裏返し）は控えめにする */
-  const SE_VOL={ check:0.6, flip:0.5, win:0.9, lose:0.8, draw:0.7 };
+  const SE_VOL={ move:1.0, drop:1.0, check:0.6, flip:0.5, win:0.9, lose:0.8, draw:0.7 };
   const pool={};                                  // ファイルごとの <audio> の使い回し
   function playFile(file, vol){
     if(!file) return false;
@@ -6270,20 +6275,10 @@ const SFX = (function(){
       if(SE_MAP[name] && playFile(SE_MAP[name], SE_VOL[name])) return;
       if(!ensure()) return; const t=ctx.currentTime;
       switch(name){
-        case 'move': /* パチッ：駒を盤に打ちつける木の音。短く・固く・澄ませる */
-          noise(t,0.012,0.9,7000);                      /* 当たりの頭（カッ） */
-          noiseRing(t,0.055,1.8,2400,5);                /* 盤と駒の木の鳴り */
-          noiseRing(t+0.002,0.075,1.1,1100,4);
-          tone(240,t,0.05,'triangle',0.45,150);         /* 木の胴 */
-          tone(90,t,0.06,'sine',0.32,55);               /* 低い手応え */
-          break;
-        case 'drop': /* 持ち駒を打つ音。パチより少し低く重い */
-          noise(t,0.014,0.85,5000);
-          noiseRing(t,0.075,1.8,1500,5);
-          noiseRing(t+0.002,0.095,1.1,700,4);
-          tone(180,t,0.07,'triangle',0.5,110);
-          tone(70,t,0.09,'sine',0.42,45);
-          break;
+        case 'move': /* パチッと乾いた駒音 */
+          tone(310,t,0.06,'triangle',0.3); tone(620,t,0.03,'sine',0.14); noise(t,0.045,0.2,1400); break;
+        case 'drop': /* トンッと重めの打ち込み */
+          tone(220,t,0.1,'triangle',0.34); tone(110,t,0.12,'sine',0.24,70); noise(t,0.06,0.22,900); break;
         case 'shakeen': /* シャッキーン！：抜刀の「シャッ」＋金属の非整数倍音が長く鳴る「キーン」 */
           noiseSweep(t,0.10,0.88,14000,2200);           /* 抜き打ちのシャッ */
           noise(t+0.002,0.035,0.72,12000);              /* 当たりの芯（チッ） */
@@ -6666,8 +6661,7 @@ function applyFx(d){
     const pDelay = d.caps.length ? 340 : 170;
     fxCutHoldUntil = Date.now() + pDelay + 1100;  // 成りカットインが手番表示に潰されないよう予約
     setTimeout(()=>{
-      SFX.play('promote');
-      setTimeout(()=>SFX.play('crit'),120);            // 変身の追い打ち音
+      SFX.play('promote');   // ステータス上昇魔法。轟音を重ねると埋もれるので重ねない
       const cell=cellAt(d.moveTo[0],d.moveTo[1]); if(!cell) return;
       const cr2=cell.getBoundingClientRect();
       const x=cr2.left-fxRect.left, y=cr2.top-fxRect.top, w=cr2.width, h=cr2.height;

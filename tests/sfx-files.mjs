@@ -19,7 +19,12 @@ const out=await p.evaluate(async()=>{
   R['①場面の数']=document.getElementById('seScene').options.length;
   R['①音の選択肢']=[...document.getElementById('seFile').options].map(o=>o.textContent);
   R['①はじめの割り当て']=SFX.seMap;
-  R['①パチは合成音のまま']=(SFX.seMap.move===null && SFX.seMap.drop===null)?'そのとおり':'★ファイルが割り当たっている';
+  // 駒音（パチ）も他の効果音と同じくファイルで鳴らす（合成だと鳴らない端末があった）
+  R['①駒音はパチのファイル']=(SFX.seMap.move==='pachi.wav' && SFX.seMap.drop==='pachi-drop.wav')
+    ?'そのとおり':'★'+SFX.seMap.move+' / '+SFX.seMap.drop;
+  R['①成るはステータス上昇魔法']=/^status-up-/.test(SFX.seMap.promote||'')?'そのとおり':'★'+SFX.seMap.promote;
+  // 一覧に載っているファイルが全部 sfx/ にあるか（名前を変えたとき取りこぼさないように）
+  R['①一覧のファイル名']=SFX.seFiles.map(x=>x.f);
   // 古い保存（全場面を覚えていた版）が残っていても、既定の方が勝つ
   localStorage.setItem('shogiSeMap', JSON.stringify({move:'hit-short.mp3',drop:'hit-dry.mp3'}));
   // ② 鳴らすまでファイルを取りに行かない（起動しただけで13本読み込まない）
@@ -60,7 +65,11 @@ console.log('鳴らして読んだファイル:', played.join(' '));
 console.log('読めなかったファイル:', fail.length? fail : 'なし');
 // sfx/ のファイルが全部そろっているか
 const dir=new URL('../sfx/',import.meta.url).pathname;
-const have=fs.readdirSync(dir).filter(f=>f.endsWith('.mp3')).sort();
+const have=fs.readdirSync(dir).filter(f=>/\.(mp3|wav)$/.test(f)).sort();
+const listed=out['①一覧のファイル名']||[];
+const missing=listed.filter(f=>!have.includes(f)), unlisted=have.filter(f=>!listed.includes(f));
+console.log('一覧にあるのに sfx/ に無い:', missing.length? '★'+missing.join(' ') : 'なし');
+console.log('sfx/ にあるのに一覧に無い:', unlisted.length? '★'+unlisted.join(' ') : 'なし');
 console.log('sfx/ にあるファイル:', have.length+'本', have.join(' '));
 console.log('errs',errs);
 await b.close();
