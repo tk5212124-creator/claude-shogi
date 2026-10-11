@@ -18,7 +18,8 @@ node tests/cross-cell-rules.mjs [new|old]
 node tests/check-layer.mjs      [new|old]
 node tests/fx-layout.mjs        [new|old]
 node tests/bgm.mjs
-node tests/defeat-sound.mjs    [new|old]
+node tests/defeat-sound.mjs       [new|old]
+node tests/defeat-sound-shape.mjs [new|old]
 node tests/board-text-fit.mjs  [new|old]
 node tests/score-modes.mjs
 node tests/royal-endgame.mjs
@@ -284,7 +285,7 @@ headless では音そのものを聴けないので、`AudioContext` が**何を
 | 旧名 `'capture'` | 同じ3種に振り分かれる |
 | 「音・演出」OFF | 1つも鳴らさない |
 | 実際に駒を取る（`applyMoveSilent`→`render`→`applyFx`） | 3種のどれかが鳴る。OFFなら鳴らない |
-| 倒す音の大きさ | 3種とも重なりの最大が**1.0以下**（割れない）で、**差は0.25以内**（どれも同じくらい） |
+| 倒す音の大きさ・形 | `defeat-sound-shape.mjs` が波形をそのまま測って見る |
 | 途中で `stopPropagation()` されるタップ | それでも音が起きる（capture で聞いているので拾える） |
 | 「音・演出」をONにしたとき | 合図の音が鳴り、`SFX.state` が `running` になる |
 | pageerror | 0 |
@@ -381,6 +382,30 @@ headless では音そのものを聴けないので、`AudioContext` が**何を
 
 直す前は、56手目の途中取り（`caps`）だけが棋譜に出ていなかった。
 `caps` は座標しか持っておらず、取った駒の種類をどこにも記録していなかったのが原因。
+
+## defeat-sound-shape.mjs が見るもの
+
+ページの `AudioContext` を `OfflineAudioContext` にすり替えて、
+**SFX が組んだ音を本物の波形として取り出し**、形を数値で確かめる。
+
+| 数字 | 意味 |
+|---|---|
+| 最大 | 1.0 を超えると割れる |
+| 体感の大きさ | 最初の0.3秒の実効値。小さいと駒音（ポッ）に紛れる |
+| ノイズらしさ | ゼロ交差の間隔のばらつき。0に近いほど純音＝鐘（ピロン） |
+
+| 見るもの | 期待 |
+|---|---|
+| 倒す音3種の最大 | 0.95以下（割れない） |
+| 3種の体感の大きさ | いちばん大きいものといちばん小さいものの比が1.6倍以内 |
+| `move` との差 | 倒す音は `move` の**5倍以上**の大きさ |
+| 鐘になっていないか | 3種とも「ノイズらしさ」が `move` より高い |
+| 旧 `slash` | 無音（削除済み） |
+
+**この test を作った経緯。** 倒す音を正弦波の 2637 / 3951 / 5274 Hz（E7・B7・E8）で
+組んだところ、倍音が整列して鐘の音（ピロン）になった。さらに `move` の2〜4.5倍しか
+音量が無く、駒音に紛れていた。直す前の版をこの test に掛けると
+「★ばらつきが大きい」「★小さすぎる」で落ちる。
 
 ## theme.mjs が見るもの
 

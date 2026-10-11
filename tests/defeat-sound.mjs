@@ -8,16 +8,10 @@ const errs=[]; p.on('pageerror',e=>errs.push(String(e)));
 // AudioContext が「何をいくつ鳴らそうとしたか」を数えて中身を確かめる。
 await p.addInitScript(()=>{
   const AC=window.AudioContext||window.webkitAudioContext;
-  window.__snd={osc:0,buf:0,env:[]};
-  const o=AC.prototype.createOscillator, s=AC.prototype.createBufferSource, g=AC.prototype.createGain;
+  window.__snd={osc:0,buf:0};
+  const o=AC.prototype.createOscillator, s=AC.prototype.createBufferSource;
   AC.prototype.createOscillator=function(){ window.__snd.osc++; return o.apply(this,arguments); };
   AC.prototype.createBufferSource=function(){ window.__snd.buf++; return s.apply(this,arguments); };
-  // 音量カーブだけを記録する（周波数のカーブと区別するため gain に印を付ける）
-  AC.prototype.createGain=function(){ const n=g.apply(this,arguments); try{ n.gain.__g=1; }catch(_){} return n; };
-  const AP=window.AudioParam.prototype;
-  const sv=AP.setValueAtTime, er=AP.exponentialRampToValueAtTime;
-  AP.setValueAtTime=function(v,t){ if(this.__g) window.__snd.env.push(['set',v,t]); return sv.apply(this,arguments); };
-  AP.exponentialRampToValueAtTime=function(v,t){ if(this.__g) window.__snd.env.push(['ramp',v,t]); return er.apply(this,arguments); };
 });
 await p.goto('file://'+HTML); await p.waitForTimeout(900);
 const out=await p.evaluate(async()=>{
@@ -69,44 +63,8 @@ const out=await p.evaluate(async()=>{
     R['⑤音OFFで取ったとき']={音程:window.__snd.osc-a2.osc, ノイズ:window.__snd.buf-a2.buf};
     SFX.on=true;
   }
-  /* ⑥ 音が割れないか。鳴らすひとつひとつの音量カーブを拾って、
-        重なったところの合計（×マスター 0.6）の最大を見る。1.0 を超えると割れる。 */
-  {
-    const peakOf=(name)=>{
-      window.__snd.env.length=0;
-      SFX.on=true; SFX.play(name);
-      // 1音＝gainノード1つ。set で始まり、次の set までが1音ぶんのカーブ
-      const parts=[]; let cur=null;
-      for(const [kind,v,t] of window.__snd.env){
-        if(kind==='set'){ if(cur) parts.push(cur); cur={t0:t,tp:t,peak:v,tEnd:t}; }
-        else if(cur){ if(v>cur.peak){ cur.peak=v; cur.tp=t; } cur.tEnd=Math.max(cur.tEnd,t); }
-      }
-      if(cur) parts.push(cur);
-      if(!parts.length) return null;
-      const base=Math.min(...parts.map(x=>x.t0)), end=Math.max(...parts.map(x=>x.tEnd));
-      let mx=0;
-      for(let s=base;s<=end;s+=0.001){      // 1msごとに重なりを足す
-        let sum=0;
-        for(const q of parts){
-          if(s<q.t0||s>q.tEnd) continue;
-          // 立ち上がりと減衰を三角で近似する
-          sum += s<=q.tp ? (q.tp>q.t0 ? q.peak*(s-q.t0)/(q.tp-q.t0) : q.peak)
-                         : (q.tEnd>q.tp ? q.peak*(1-(s-q.tp)/(q.tEnd-q.tp)) : 0);
-        }
-        if(sum>mx) mx=sum;
-      }
-      return {重なりの最大:+(mx*0.6).toFixed(2), 音の数:parts.length, 長さ秒:+(end-base).toFixed(2)};
-    };
-    for(const n of ['shakeen','zashu','dukushi','crit','promote','move','drop'])
-      R['⑥'+n+'の音量']=peakOf(n);
-    // 倒す音は毎回鳴るので、割れない（1.0以下）かつ3種が同じくらいの大きさであること
-    const ps=SFX.defeatKinds.map(n=>peakOf(n).重なりの最大);
-    R['⑥倒す音は割れないか']=ps.every(x=>x<=1.0)?'大丈夫（'+ps.join(' / ')+'）'
-                                              :'★割れる（'+ps.join(' / ')+'）';
-    R['⑥3種の大きさの差']=(Math.max(...ps)-Math.min(...ps))<=0.25
-      ? '揃っている（差 '+(+(Math.max(...ps)-Math.min(...ps)).toFixed(2))+'）'
-      : '★ばらつきが大きい（差 '+(+(Math.max(...ps)-Math.min(...ps)).toFixed(2))+'）';
-  }
+  // 音の大きさ・形（割れないか／鐘になっていないか）は
+  // 波形をそのまま測る tests/defeat-sound-shape.mjs が見る
   /* ⑦ 音の起こし方。iOS は触った瞬間にしか鳴らし始められないので、
         画面に触れたら必ず AudioContext を起こす。途中で止められても拾えること。 */
   {
