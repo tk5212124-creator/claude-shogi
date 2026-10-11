@@ -2727,8 +2727,9 @@ function kifuToText(){
     const LT=(k.toPt!==undefined? k.toPt : k.pt)?'◇':'';   // 行き先の層（層をまたぐ手は違う）
     const to=LT+'('+(k.to?(k.to[0]+1)+'行'+(k.to[1]+1)+'列':'?')+')';
     const nmOf=t=>KANJI[t]||t;
-    // 同じ層の取り＋相手レイヤーの取り（共有点・飛び越え）＋囲みで取った分をまとめて出す
-    const shown = (k.cap?[k.cap]:[]).concat(k.xcapCodes||[], k.enclCap||[]);
+    // 同じ層の取り＋移動の途中で取った分（獅子型）＋相手レイヤーの取り（共有点・飛び越え）
+    // ＋囲みで取った分を、ぜんぶまとめて出す
+    const shown = (k.cap?[k.cap]:[]).concat(k.capsCodes||[], k.xcapCodes||[], k.enclCap||[]);
     const cap = shown.length? (' 取:'+shown.map(nmOf).join('・')) : '';
     // 自分の駒が囲まれて消えた分（自分の手で自分の群が死ぬことがある）
     const lost = (k.enclLost&&k.enclLost.length)? (' 失:'+k.enclLost.map(nmOf).join('・')) : '';
@@ -5725,11 +5726,17 @@ function applyMoveSilent(side,m,_legacySilent){
       const v=OB[cr] && OB[cr][cc];
       if(v && v.p!==side && !xcaps.some(x=>x[0]===cr&&x[1]===cc)) xcaps.push([cr,cc,v.t]);
     }
+    // 獅子型の途中取り（caps）も、取った駒の種類を棋譜に残す。
+    // 盤を書き換える前に拾う（着手記録より後だと、もう駒が消えている）
+    const capsCodes = (m.caps||[]).map(([cr,cc])=>{ const v=LB[cr]&&LB[cr][cc]; return v? v.t : null; })
+                                  .filter(Boolean);
     recordKifu({side,from:[m.fr,m.fc],to:[m.tr,m.tc],code:pc.t,promo:!!promo0,promoTo:cpawnPromo?'cQ':(promoNew||undefined),
       cap: tg? tg.t : null,
       xcaps: xcaps.length? xcaps.map(x=>[x[0],x[1]]) : undefined,
       xcapCodes: xcaps.length? xcaps.map(x=>x[2]) : undefined,
-      caps:m.caps||undefined,pt:m.pt||undefined,toPt:(m.toPt!==undefined?m.toPt:undefined)});
+      caps:m.caps||undefined,
+      capsCodes: capsCodes.length? capsCodes : undefined,
+      pt:m.pt||undefined,toPt:(m.toPt!==undefined?m.toPt:undefined)});
     let tookRoyal = tg && isRoyal(tg.t);
     // 取った駒は royal（玉・帥など）も含めて他の駒と同じように持ち駒へ入る
     if(tg && RULES.drops){ cap.push(capturedCode(tg)); }
