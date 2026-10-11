@@ -400,7 +400,7 @@
   .online-box input{min-width:0;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,.25);
     background:rgba(0,0,0,.25);color:inherit;font-size:.9rem;}
   .online-box #onlineUrl{width:100%;box-sizing:border-box;margin-top:6px;font-size:.78rem;}
-  .online-box .online-code b{font-size:1.4rem;letter-spacing:.2em;}
+  .online-box .online-code b{font-size:1.4rem;letter-spacing:.2em;user-select:all;-webkit-user-select:all;}
   #onlineBtn.on{outline:2px solid #6fd36f;}
   .promo-box{background:linear-gradient(160deg,var(--panel2),var(--panel));
     border:1px solid rgba(245,207,107,.35);border-radius:16px;
@@ -1325,7 +1325,10 @@
       <div class="online-sec" id="onlineHostSec">
         <button class="primary" id="onlineCreate">部屋を作る</button>
         <div class="online-code" id="onlineCodeRow" style="display:none;">
-          <div>合言葉 <b id="onlineCode"></b></div>
+          <div class="online-row" style="align-items:center;">
+            <div>合言葉 <b id="onlineCode"></b></div>
+            <button id="onlineCopyCode" style="flex:0 0 auto;">合言葉をコピー</button>
+          </div>
           <input id="onlineUrl" readonly>
           <div class="online-row">
             <button id="onlineCopy">URLをコピー</button>
@@ -1335,8 +1338,9 @@
       </div>
       <div class="online-sec" id="onlineJoinSec">
         <div class="online-row">
-          <input id="onlineJoinCode" placeholder="合言葉（6文字）" maxlength="12" autocomplete="off" autocapitalize="off">
-          <button class="primary" id="onlineJoin">入る</button>
+          <input id="onlineJoinCode" placeholder="合言葉か招待URL" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button id="onlinePaste" style="flex:0 0 auto;">貼り付け</button>
+          <button class="primary" id="onlineJoin" style="flex:0 0 auto;">入る</button>
         </div>
       </div>
       <div class="online-row">
@@ -8496,6 +8500,8 @@ function mirrorRec(k){
   if(k.pass) return m;
   const toIsPt = (k.toPt!==undefined? k.toPt : k.pt);
   if(k.drop){ m.drop=mirrorCode(k.drop); m.to=(k.pt?mirrorPoint:mirrorCell)(k.to); return m; }
+  // 成った先が碁石のとき（ランダムに成る設定）も、色が持ち主を決めるので入れ替える
+  if(k.promoTo) m.promoTo=mirrorCode(k.promoTo);
   m.from=(k.pt?mirrorPoint:mirrorCell)(k.from);
   m.to=(toIsPt?mirrorPoint:mirrorCell)(k.to);
   if(k.caps) m.caps=k.caps.map(k.pt?mirrorPoint:mirrorCell);
@@ -8685,6 +8691,14 @@ function onlineGuardButtons(){
     if(!Online.active) onlineStart('guest', code);
   };
   $('onlineCopy').onclick=()=>copyText($('onlineUrl').value,'招待URL');
+  $('onlineCopyCode').onclick=()=>copyText(Online.code||$('onlineCode').textContent,'合言葉');
+  // 合言葉でも招待URLまるごとでも貼り付けられる（入るときに合言葉だけ取り出す）
+  $('onlinePaste').onclick=async()=>{
+    try{
+      const t=await navigator.clipboard.readText();
+      $('onlineJoinCode').value=(t||'').trim(); $('onlineJoinCode').focus();
+    }catch(_){ $('onlineJoinCode').focus(); onlineUi('貼り付けできませんでした。欄を長押しして「ペースト」してください','ng'); }
+  };
   $('onlineShare').onclick=()=>{
     const url=$('onlineUrl').value;
     if(navigator.share) navigator.share({title:'将棋で対戦しよう', text:'合言葉 '+Online.code, url}).catch(()=>{});

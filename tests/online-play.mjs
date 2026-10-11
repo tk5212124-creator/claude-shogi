@@ -44,9 +44,17 @@ const flipBack=(g)=>{ const R_=g.NR,C=g.NC, mc=t=>t==='GOB'?'GOW':t==='GOW'?'GOB
     capYou:g.capEnemy.map(mc).sort().join(','), capEnemy:g.capYou.map(mc).sort().join(','), gameOver:g.gameOver}; };
 const norm=h=>({turn:h.turn, board:h.board.map(r=>r.map(x=>x?x.t+':'+x.p:null)), pts:h.pts.map(r=>r.map(x=>x?x.t+':'+x.p:null)),
   diag:h.diag, capYou:h.capYou.slice().sort().join(','), capEnemy:h.capEnemy.slice().sort().join(','), gameOver:h.gameOver});
-const same=async()=>{ const h=norm(await snap(H.p)), g=flipBack(await snap(G.p));
-  const bad=[]; for(const k of Object.keys(h)) if(JSON.stringify(h[k])!==JSON.stringify(g[k])) bad.push(k);
-  return bad.length?'★食い違い：'+bad.join(','):'一致'; };
+// 盤を送り直した直後は、届くまでのわずかな間だけ古い盤が見えることがある。
+// 3秒まで待ってそろえば「一致」。それでも違えば本当に食い違っている
+const same=async()=>{ let last='';
+  for(const t0=Date.now(); Date.now()-t0<3000; ){
+    const h=norm(await snap(H.p)), g=flipBack(await snap(G.p));
+    const bad=[]; for(const k of Object.keys(h)) if(JSON.stringify(h[k])!==JSON.stringify(g[k])) bad.push(k);
+    if(!bad.length) return '一致';
+    last='★食い違い：'+bad.join(',');
+    await new Promise(r=>setTimeout(r,100));
+  }
+  return last; };
 R['①つながった直後の盤']=await same();
 R['①ゲストの向き']=await G.p.evaluate(()=>({自分の玉:board[8][4]&&board[8][4].t+':'+board[8][4].p, 手番:turn, 状態:document.getElementById('status').textContent}));
 // ② ホストが歩を突く（画面のタップと同じ onCell を通す）
@@ -167,6 +175,16 @@ R['⑮ルール設定（二歩）がそろう']={ホスト:await H.p.evaluate(()
 await H.p.evaluate(()=>{ document.getElementById('presetSel').value='mini'; document.getElementById('applyPresetBtn').click(); SFX.on=false; });
 await until(G.p,()=>NR===5 && Online.ply===0);
 R['⑮盤の大きさを変えたあと']=await same();
+// ⑬' ランダムに成った先が碁石だった場合（たまにしか起きないので、成り先を決めて確かめる）
+await H.p.evaluate(()=>{ document.getElementById('presetSel').value='hon'; document.getElementById('applyPresetBtn').click(); SFX.on=false; });
+await until(G.p,()=>NR===9 && Online.ply===0);
+await H.p.evaluate(()=>{ for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const q=board[r][c]; if(q&&q.t!=='hK'&&q.t!=='hKw') board[r][c]=null; }
+  board[3][1]={t:'hG',p:1}; turn=1; render(); onlineSendState(); });
+await until(G.p,()=>Online.ply===0 && turn===-1 && NR===9 && !board[6][0]);
+await H.p.evaluate(()=>{ applyMoveSilent(1,{fr:3,fc:1,tr:2,tc:1,promo:true,promoTo:'GOW'}); afterPlayer(); });
+await until(G.p,()=>turn===1);
+R["⑬'碁石に成ったとき"]={ホスト:await H.p.evaluate(()=>{const q=board[2][1]; return q&&q.t+':'+q.p;}),
+  ゲスト:await G.p.evaluate(()=>{const q=board[6][7]; return q&&q.t+':'+q.p;}), 盤:await same()};
 // ⑨ 投了
 await G.p.evaluate(()=>{ document.getElementById('presetSel').value='hon'; });
 await G.p.evaluate(()=>document.getElementById('onlineResign').click());
@@ -184,6 +202,28 @@ R['⑭開き直してつながる']=await until(G2.p,()=>Online.connected && !On
 const h2=norm(await snap(H.p)), g2=flipBack(await snap(G2.p));
 R['⑭開き直したあとの盤']=JSON.stringify(h2.board)===JSON.stringify(g2.board)?'一致':'★食い違い';
 R['⑭ゲストのエラー']=G2.errs;
+// ⑯ 合言葉をコピーして、別の人が貼り付けて入る（URLではなく合言葉で）
+await G2.p.close({runBeforeUnload:true});
+await until(H.p,()=>!Online.connected);
+const ctx3=await b.newContext({viewport:{width:390,height:844}, permissions:['clipboard-read','clipboard-write']});
+await H.p.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:'http://127.0.0.1:8123'});
+await H.p.evaluate(()=>document.getElementById('onlineCopyCode').click());
+await new Promise(r=>setTimeout(r,300));
+const copied=await H.p.evaluate(()=>navigator.clipboard.readText());
+R['⑯コピーした合言葉']=copied===await H.p.evaluate(()=>Online.code)?'合言葉そのもの':'★'+copied;
+const G3p=await ctx3.newPage(); const g3errs=[]; G3p.on('pageerror',e=>g3errs.push(String(e)));
+await G3p.addInitScript(init); await G3p.goto('http://127.0.0.1:8123/shogi.html'); await G3p.waitForTimeout(600);
+await G3p.evaluate(()=>{ SFX.on=false; });
+// 共有メッセージをまるごとクリップボードに入れて「貼り付け」→「入る」
+await G3p.evaluate(t=>navigator.clipboard.writeText(t), '将棋で対戦しよう 合言葉 '+copied+' '+url);
+await G3p.evaluate(()=>{ document.getElementById('onlineBtn').click(); document.getElementById('onlinePaste').click(); });
+await new Promise(r=>setTimeout(r,300));
+R['⑯貼り付けた中身']=await G3p.evaluate(()=>document.getElementById('onlineJoinCode').value.slice(0,12)+'…');
+await G3p.evaluate(()=>document.getElementById('onlineJoin').click());
+R['⑯合言葉で入れる']=await until(G3p,()=>Online.connected && !Online.hold, 10000);
+const h3=norm(await snap(H.p)), g3=flipBack(await snap(G3p));
+R['⑯入ったあとの盤']=JSON.stringify(h3.board)===JSON.stringify(g3.board)?'一致':'★食い違い';
+R['⑯エラー']=g3errs;
 console.log(JSON.stringify(R,null,1));
 console.log('ホストのエラー',H.errs,'ゲストのエラー',G.errs);
 await b.close(); srv.close(); try{ peerSrv.close(); }catch(_){} process.exit(0);
