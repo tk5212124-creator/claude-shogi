@@ -23,6 +23,7 @@ const out=await p.evaluate(async()=>{
   R['①駒音はパチのファイル']=(SFX.seMap.move==='pachi.wav' && SFX.seMap.drop==='pachi-drop.wav')
     ?'そのとおり':'★'+SFX.seMap.move+' / '+SFX.seMap.drop;
   R['①成るはステータス上昇魔法']=/^status-up-/.test(SFX.seMap.promote||'')?'そのとおり':'★'+SFX.seMap.promote;
+  R['①成るときに重ねる音']=SFX.seMap.promote2==='levelup.wav'?'前のレベルアップ音':'★'+SFX.seMap.promote2;
   // 一覧に載っているファイルが全部 sfx/ にあるか（名前を変えたとき取りこぼさないように）
   R['①一覧のファイル名']=SFX.seFiles.map(x=>x.f);
   // 題名どおりの場面に割り当たっているか
@@ -40,6 +41,7 @@ const out=await p.evaluate(async()=>{
   R['②倒す音を6回']=SFX.defeatKinds.slice();
   for(let i=0;i<6;i++) SFX.play('defeat');
   SFX.play('move'); SFX.play('crit');
+  SFX.play('promote');                     // 成る：2つ同時に鳴る（下の「鳴らして読んだファイル」に両方出る）
   await new Promise(r=>setTimeout(r,500));
   // ③ 割り当てを外すと合成音に戻る（ファイルが無くても音は出る）
   SFX.setSe('move',null);
