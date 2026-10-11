@@ -6138,54 +6138,67 @@ const SFX = (function(){
      合成音の代わりに sfx/ の mp3 を鳴らす。割り当てが無い名前は今までどおり合成する。
      BGM と同じく <audio> で鳴らすので、ファイルを取りに行かずに済む file:// でも動く。
      同じ音が重なるので、鳴らすたびに使い回せる要素を1つ選ぶ（空いていなければ増やす）。 */
+  /* 題名は、聞いた人が付けた中身どおりの名前。
+     「未確認」は題名が分からず、鳴らして測った性格から付けた仮の名前。 */
   const SE_FILES=[
-    {f:'pachi.wav',       n:'パチ（駒を動かす）'},
-    {f:'pachi-drop.wav',  n:'トン（持ち駒を打つ）'},
-    {f:'status-up-1.mp3', n:'ステータス上昇魔法1'},
-    {f:'status-up-2.mp3', n:'ステータス上昇魔法2'},
-    {f:'slash-long.mp3',  n:'斬撃（長い）'},
-    {f:'slash-mid.mp3',   n:'斬撃（中くらい）'},
-    {f:'slash-sharp.mp3', n:'斬撃（鋭い）'},
-    {f:'hit-sharp.mp3',   n:'鋭い当たり'},
-    {f:'hit-short.mp3',   n:'短い打撃'},
-    {f:'hit-dry.mp3',     n:'乾いた打撃'},
-    {f:'hit-mid.mp3',     n:'打撃（中くらい）'},
-    {f:'impact-dark.mp3', n:'低い衝撃'},
-    {f:'impact-low.mp3',  n:'重い衝撃'},
-    {f:'drum-low.mp3',    n:'ドン（太鼓）'},
-    {f:'boom-1.mp3',      n:'轟音1'},
-    {f:'boom-2.mp3',      n:'轟音2'},
-    {f:'riser.mp3',       n:'盛り上がり（12秒）'},
-    {f:'chime-1.mp3',     n:'澄んだ音1'},
-    {f:'chime-2.mp3',     n:'澄んだ音2'},
-    {f:'chime-3.mp3',     n:'澄んだ音3'},
-    {f:'jingle-short.mp3',n:'ジングル（1秒）'},
-    {f:'jingle-long.mp3', n:'ジングル（3秒）'},
-    {f:'jingle-grand.mp3',n:'ジングル（5秒）'},
-    {f:'fanfare.mp3',     n:'ファンファーレ'}
+    {f:'pachi.wav',        n:'パチ（駒を動かす）'},
+    {f:'pachi-drop.wav',   n:'トン（持ち駒を打つ）'},
+    {f:'shakeen.mp3',      n:'シャキーン'},
+    {f:'shakin-short.mp3', n:'短いシャキン'},
+    {f:'whip.mp3',         n:'鞭'},
+    {f:'punch.mp3',        n:'パンチ'},
+    {f:'punch-heavy.mp3',  n:'重いパンチ'},
+    {f:'fist.mp3',         n:'殴り'},
+    {f:'fist-heavy.mp3',   n:'重い殴り'},
+    {f:'strike.mp3',       n:'打撃音'},
+    {f:'fire.mp3',         n:'火炎攻撃'},
+    {f:'thunder.mp3',      n:'雷魔法'},
+    {f:'magic-circle.mp3', n:'魔法陣展開'},
+    {f:'status-up-1.mp3',  n:'ステータス上昇魔法1'},
+    {f:'status-up-2.mp3',  n:'ステータス上昇魔法2'},
+    {f:'dash.mp3',         n:'高速移動'},
+    {f:'knight-walk.mp3',  n:'鎧の騎士が歩く'},
+    {f:'knight-run.mp3',   n:'鎧の騎士が走る'},
+    {f:'wall-break.mp3',   n:'壁を破壊する'},
+    {f:'win.wav',          n:'勝利ファンファーレ'},
+    {f:'lose.wav',         n:'敗北'},
+    {f:'draw.wav',         n:'引き分け'},
+    {f:'hit-short.mp3',    n:'短い打撃（未確認）'},
+    {f:'hit-dry.mp3',      n:'乾いた打撃（未確認）'},
+    {f:'hit-mid.mp3',      n:'打撃・中（未確認）'},
+    {f:'boom-1.mp3',       n:'轟音1（未確認）'},
+    {f:'boom-2.mp3',       n:'轟音2（未確認）'}
   ];
-  /* どの場面でどのファイルを鳴らすか。null なら合成音のまま。
-     駒を置く「パチ」は、もらったファイルに無い（0.05秒より短い音）ので、
-     もとの合成音を pachi.wav / pachi-drop.wav に書き出して使う。
-     合成のまま鳴らすと、ファイルの音は聞こえるのにパチだけ鳴らない端末があったため、
-     全部の効果音を同じ <audio> の道に揃えた。 */
+  // 中身が分かって名前を変えたファイル。前に選んで保存してある割り当てを読み替える
+  const SE_RENAMED={
+    'chime-1.mp3':'shakeen.mp3', 'chime-2.mp3':'whip.mp3', 'chime-3.mp3':'shakin-short.mp3',
+    'drum-low.mp3':'fire.mp3', 'impact-dark.mp3':'fist.mp3', 'impact-low.mp3':'fist-heavy.mp3',
+    'riser.mp3':'knight-run.mp3', 'jingle-short.mp3':'thunder.mp3', 'jingle-long.mp3':'magic-circle.mp3',
+    'jingle-grand.mp3':'knight-walk.mp3', 'fanfare.mp3':'wall-break.mp3', 'slash-long.mp3':'punch-heavy.mp3',
+    'slash-mid.mp3':'punch.mp3', 'slash-sharp.mp3':'dash.mp3', 'hit-sharp.mp3':'strike.mp3',
+    'sparkle.mp3':'status-up-2.mp3', 'jingle-1.mp3':'status-up-1.mp3'
+  };
+  /* どの場面でどのファイルを鳴らすか。題名から選ぶ。
+     駒音（パチ）と勝敗の音は、もらったファイルに合うものが無いので、
+     もとの合成音を wav に書き出して使う（合成のままだと鳴らない端末があった）。 */
   let SE_MAP={
-    shakeen:'slash-long.mp3',   // 倒す（シャッキーン）
-    zashu:'slash-mid.mp3',      // 倒す（ザシュッ）
-    dukushi:'hit-sharp.mp3',    // 倒す（デュクシ）
+    shakeen:'shakeen.mp3',      // 倒す … シャキーン
+    zashu:'shakin-short.mp3',   // 倒す … 短いシャキン（ザシュッ）
+    dukushi:'punch.mp3',        // 倒す … パンチ（デュクシ）
     move:'pachi.wav',           // 駒を動かす … パチ
     drop:'pachi-drop.wav',      // 持ち駒を打つ … トン
-    crit:'boom-1.mp3',          // 会心の一撃
-    check:'drum-low.mp3',       // 王手 … いちばん低く大きい音。知らせとして目立たせる
+    crit:'punch-heavy.mp3',     // 会心の一撃 … 重いパンチ
+    fire:'fire.mp3',            // 火鬼が焼く … 火炎攻撃
+    check:'thunder.mp3',        // 王手 … 雷魔法
     promote:'status-up-1.mp3',  // 成る … ステータス上昇魔法
-    flip:'chime-3.mp3',         // オセロの裏返し
-    win:'fanfare.mp3',          // 勝ち
-    lose:'boom-2.mp3',          // 負け
-    draw:'jingle-short.mp3'     // 引き分け
+    flip:'whip.mp3',            // オセロの裏返し … 鞭（ピシッと返す）
+    win:'win.wav',              // 勝ち … 勝利ファンファーレ
+    lose:'lose.wav',            // 負け
+    draw:'draw.wav'             // 引き分け
   };
   /* 場面ごとの音量。駒音は小さく、倒す音は大きく、という緩急を付ける。
-     何度も鳴るもの（駒音・王手・裏返し）は控えめにする */
-  const SE_VOL={ move:1.0, drop:1.0, check:0.6, flip:0.5, win:0.9, lose:0.8, draw:0.7 };
+     何度も鳴るもの（王手・裏返し）は控えめにする */
+  const SE_VOL={ move:1.0, drop:1.0, check:0.7, flip:0.5, win:1.0, lose:1.0, draw:1.0 };
   const pool={};                                  // ファイルごとの <audio> の使い回し
   function playFile(file, vol){
     if(!file) return false;
@@ -6261,6 +6274,7 @@ const SFX = (function(){
     // 効果音のファイル（試聴・割り当ての確認用）
     get seFiles(){ return SE_FILES.map(x=>({...x})); },
     get seMap(){ return {...SE_MAP}; },
+    get seRenamed(){ return {...SE_RENAMED}; },
     setSe(scene,file){ SE_MAP[scene]=file||null; },
     playSeFile(file){ playFile(file,0.8); },
     // いま音を出せる状態か（鳴らないときの切り分け用）
@@ -6651,7 +6665,9 @@ function applyFx(d){
   // 音：倒したときは「シャッキーン／ザシュッ／デュクシ！」のどれか（同じ音は続かない）。
   // 会心のときはそこに轟音を重ねる。それ以外は従来どおり
   if(d.caps.length){
-    SFX.play('defeat');
+    // 火鬼が動いて焼いたときは火炎攻撃。それ以外は倒す音3種のどれか
+    const mv=d.moveTo && board[d.moveTo[0]] && board[d.moveTo[0]][d.moveTo[1]];
+    SFX.play(mv && hasFire(mv.t) ? 'fire' : 'defeat');
     if(d.crit) setTimeout(()=>SFX.play('crit'),90);
   }
   else if(d.drop) SFX.play('drop'); else SFX.play('move');
@@ -6974,7 +6990,7 @@ function cutIn(text, kind){
   {
     const SCENES=[
       ['shakeen','倒す（シャッキーン）'],['zashu','倒す（ザシュッ）'],['dukushi','倒す（デュクシ）'],
-      ['move','駒を動かす'],['drop','持ち駒を打つ'],['crit','会心の一撃'],['check','王手'],
+      ['move','駒を動かす'],['drop','持ち駒を打つ'],['crit','会心の一撃'],['fire','火鬼が焼く'],['check','王手'],
       ['promote','成る'],['flip','オセロの裏返し'],['win','勝ち'],['lose','負け'],['draw','引き分け']
     ];
     const sc=document.getElementById('seScene'), sf=document.getElementById('seFile');
@@ -7001,7 +7017,11 @@ function cutIn(text, kind){
       try{
         localStorage.removeItem('shogiSeMap');     // 全場面を覚えていた古い保存は捨てる
         userSe=JSON.parse(localStorage.getItem('shogiSe2')||'{}')||{};
-        for(const k in userSe) SFX.setSe(k, userSe[k]);
+        for(const k in userSe){
+          const f=userSe[k];
+          userSe[k]= (f && SFX.seRenamed[f]) || f;     // 名前を変えたファイルは読み替える
+          SFX.setSe(k, userSe[k]);
+        }
       }catch(_){ userSe={}; }
       syncSe();
     }

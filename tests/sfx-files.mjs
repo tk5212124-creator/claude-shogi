@@ -25,6 +25,14 @@ const out=await p.evaluate(async()=>{
   R['①成るはステータス上昇魔法']=/^status-up-/.test(SFX.seMap.promote||'')?'そのとおり':'★'+SFX.seMap.promote;
   // 一覧に載っているファイルが全部 sfx/ にあるか（名前を変えたとき取りこぼさないように）
   R['①一覧のファイル名']=SFX.seFiles.map(x=>x.f);
+  // 題名どおりの場面に割り当たっているか
+  const want={shakeen:'shakeen.mp3',zashu:'shakin-short.mp3',dukushi:'punch.mp3',crit:'punch-heavy.mp3',
+    fire:'fire.mp3',check:'thunder.mp3',flip:'whip.mp3',win:'win.wav',lose:'lose.wav',draw:'draw.wav'};
+  const bad=Object.keys(want).filter(k=>SFX.seMap[k]!==want[k]).map(k=>k+':'+SFX.seMap[k]);
+  R['①題名どおりの割り当て']=bad.length?'★'+bad.join(' '):'そのとおり';
+  // 名前を変える前の保存は、新しい名前に読み替える
+  R['①名前を変えたファイルの読み替え']=SFX.seRenamed['chime-1.mp3']==='shakeen.mp3'
+    && SFX.seRenamed['fanfare.mp3']==='wall-break.mp3' ? 'そのとおり':'★読み替えが無い';
   // 古い保存（全場面を覚えていた版）が残っていても、既定の方が勝つ
   localStorage.setItem('shogiSeMap', JSON.stringify({move:'hit-short.mp3',drop:'hit-dry.mp3'}));
   // ② 鳴らすまでファイルを取りに行かない（起動しただけで13本読み込まない）
@@ -36,16 +44,16 @@ const out=await p.evaluate(async()=>{
   // ③ 割り当てを外すと合成音に戻る（ファイルが無くても音は出る）
   SFX.setSe('move',null);
   R['③moveを合成音に戻す']=SFX.seMap.move;
-  SFX.setSe('move','hit-short.mp3');
+  SFX.setSe('move','pachi.wav');
   // ④ 画面から差し替えられて、覚えている
   const sc=document.getElementById('seScene'), sf=document.getElementById('seFile');
   sc.value='shakeen'; sc.dispatchEvent(new Event('change'));
   R['④シャッキーンの初期値']=sf.value;
-  sf.value='chime-1.mp3'; sf.dispatchEvent(new Event('change'));
+  sf.value='whip.mp3'; sf.dispatchEvent(new Event('change'));
   R['④差し替えたあと']=SFX.seMap.shakeen;
   R['④覚えているか']=(JSON.parse(localStorage.getItem('shogiSe2')||'{}')).shakeen;
   R['④覚えるのは選んだ場面だけ']=Object.keys(JSON.parse(localStorage.getItem('shogiSe2')||'{}'));
-  sf.value='slash-long.mp3'; sf.dispatchEvent(new Event('change'));   // 元に戻す
+  sf.value='shakeen.mp3'; sf.dispatchEvent(new Event('change'));   // 元に戻す
   // ⑤ 「音・演出」OFF のときは鳴らさない
   SFX.on=false;
   const n0=document.querySelectorAll('audio').length;
