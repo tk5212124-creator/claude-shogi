@@ -20,6 +20,8 @@ const out=await p.evaluate(async()=>{
   R['①音の選択肢']=[...document.getElementById('seFile').options].map(o=>o.textContent);
   R['①はじめの割り当て']=SFX.seMap;
   R['①パチは合成音のまま']=(SFX.seMap.move===null && SFX.seMap.drop===null)?'そのとおり':'★ファイルが割り当たっている';
+  // 古い保存（全場面を覚えていた版）が残っていても、既定の方が勝つ
+  localStorage.setItem('shogiSeMap', JSON.stringify({move:'hit-short.mp3',drop:'hit-dry.mp3'}));
   // ② 鳴らすまでファイルを取りに行かない（起動しただけで13本読み込まない）
   SFX.on=true; SFX.resume();
   R['②倒す音を6回']=SFX.defeatKinds.slice();
@@ -36,7 +38,8 @@ const out=await p.evaluate(async()=>{
   R['④シャッキーンの初期値']=sf.value;
   sf.value='chime-1.mp3'; sf.dispatchEvent(new Event('change'));
   R['④差し替えたあと']=SFX.seMap.shakeen;
-  R['④覚えているか']=(JSON.parse(localStorage.getItem('shogiSeMap')||'{}')).shakeen;
+  R['④覚えているか']=(JSON.parse(localStorage.getItem('shogiSe2')||'{}')).shakeen;
+  R['④覚えるのは選んだ場面だけ']=Object.keys(JSON.parse(localStorage.getItem('shogiSe2')||'{}'));
   sf.value='slash-long.mp3'; sf.dispatchEvent(new Event('change'));   // 元に戻す
   // ⑤ 「音・演出」OFF のときは鳴らさない
   SFX.on=false;

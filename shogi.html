@@ -2510,12 +2510,27 @@ function setupChess(){
   }
 }
 // オセロ（8×8）。中央4枚＋牌を持ち駒として最大限保持。勝敗は「取り切るまで戦う」ルールで判定。
+/* プリセットが持たせる持ち駒。盤に並べるだけでは足りないゲーム（囲碁・オセロ）用。
+   「適用」でも、編集ツールの「プリセット配置」でも同じ数になるよう1か所にまとめる。 */
+const PRESET_HAND={
+  go:      { 1:{t:'GOB',n:400}, '-1':{t:'GOW',n:400} },  // 打ち切って足りなくならない数
+  othello: { 1:{t:'OTH',n:30},  '-1':{t:'OTH',n:30}  }   // 全64枚のうち2枚ずつは盤上
+};
+// その側の持ち駒を、プリセットの数まで足す（すでに持っている分は減らさない）
+function fillPresetHand(key, side){
+  const h=PRESET_HAND[key] && PRESET_HAND[key][side];
+  if(!h) return 0;
+  const arr = side===1? capYou : capEnemy;
+  const have = arr.filter(x=>x===h.t).length;
+  const add = Math.max(0, h.n-have);
+  for(let i=0;i<add;i++) arr.push(h.t);
+  return add;
+}
 function setupOthello(){
   NR=NC=8; PZ=0; emptyBoard();
   board[3][3]={t:'OTH',p:-1}; board[3][4]={t:'OTH',p:1};
   board[4][3]={t:'OTH',p:1};  board[4][4]={t:'OTH',p:-1};
-  // 実物と同じ：全64枚を両者32枚ずつ、うち2枚は盤上 → 持ち駒は各30枚
-  capYou.push(...fill('OTH',30)); capEnemy.push(...fill('OTH',30));
+  fillPresetHand('othello',1); fillPresetHand('othello',-1);
 }
 // はさみ将棋（9×9）。駒を持ち駒として最大限保持し、打って動かす。
 function setupHasami(){
@@ -2526,8 +2541,7 @@ function setupHasami(){
 // 囲碁（19×19）。碁石を持ち駒として最大限保持し、空点に打つ。
 function setupGo(){
   NR=NC=19; PZ=0; emptyBoard();
-  // 打ち切って足りなくならないよう、黒白とも400個ずつ持つ
-  capYou.push(...fill('GOB',400)); capEnemy.push(...fill('GOW',400));
+  fillPresetHand('go',1); fillPresetHand('go',-1);
 }
 // どうぶつしょうぎ（3列×4段）。ライオン・ぞう・きりん・ひよこ。ひよこは最奥でにわとりに成る。
 function setupDoubutsu(){
@@ -2647,13 +2661,15 @@ function stampPreset(key, r0, c0){
 // 自駒のみを書き込む（他のマスや相手駒は触らない）。
 function stampPresetSide(key, r0, c0, side){
   ensurePts();
+  // 囲碁・オセロは盤に並べるだけでは足りない。「適用」と同じ数の持ち駒も用意する。
+  // 囲碁は盤に初期配置が無いので、盤の駒が0でもここは通す
+  const hand=fillPresetHand(key, side);
   const g=presetGrid(key);
   let minR=Infinity, minC=Infinity;
   for(let r=0;r<g.length;r++)for(let c=0;c<g[r].length;c++){
     const cell=g[r][c]; if(cell&&cell.p===side){ if(r<minR)minR=r; if(c<minC)minC=c; }
   }
-  if(minR===Infinity) return 0; // その側の駒がプリセットに無い
-  const rows=board.length, cols=board[0]?board[0].length:0;
+  if(minR===Infinity) return {board:0, hand};   // その側の駒がプリセットに無い
   let n=0;
   for(let r=0;r<g.length;r++)for(let c=0;c<g[r].length;c++){
     const cell=g[r][c];
@@ -2666,7 +2682,7 @@ function stampPresetSide(key, r0, c0, side){
         n++; }
     }
   }
-  return n;
+  return {board:n, hand};
 }
 // 先手＝最初に指す側。あなたが先手なら true。先後入替でトグルする。
 let youAreSente=true;
@@ -6155,14 +6171,16 @@ const SFX = (function(){
     move:null,                  // 駒を動かす … パチ（合成）
     drop:null,                  // 持ち駒を打つ … パチ（合成・少し低い）
     crit:'boom-1.mp3',          // 会心の一撃
-    check:'impact-dark.mp3',    // 王手
+    check:'drum-low.mp3',       // 王手 … いちばん低く大きい音。知らせとして目立たせる
     promote:'chime-1.mp3',      // 成る
     flip:'chime-3.mp3',         // オセロの裏返し
     win:'fanfare.mp3',          // 勝ち
     lose:'boom-2.mp3',          // 負け
     draw:'jingle-short.mp3'     // 引き分け
   };
-  const SE_VOL={ move:0.5, drop:0.6, flip:0.5, win:0.9, lose:0.8, draw:0.7 };
+  /* 場面ごとの音量。駒音は小さく、倒す音は大きく、という緩急を付ける。
+     何度も鳴るもの（駒音・王手・裏返し）は控えめにする */
+  const SE_VOL={ check:0.6, flip:0.5, win:0.9, lose:0.8, draw:0.7 };
   const pool={};                                  // ファイルごとの <audio> の使い回し
   function playFile(file, vol){
     if(!file) return false;
@@ -6973,21 +6991,25 @@ function cutIn(text, kind){
       SFX.seFiles.forEach(x=>{ const o=document.createElement('option'); o.value=x.f; o.textContent=x.n; sf.appendChild(o); });
       const syncSe=()=>{ sf.value=SFX.seMap[sc.value]||''; };
       sc.onchange=syncSe;
+      /* 覚えるのは「自分で選び直した場面」だけにする。
+         全部の場面を覚えてしまうと、既定を直しても古い割り当てが残り続ける
+         （実際、駒を動かす音を合成のパチに戻したのに、古い保存が勝って攻撃音のままだった）。 */
+      let userSe={};
+      const saveSeMap=()=>{ try{ localStorage.setItem('shogiSe2', JSON.stringify(userSe)); }catch(_){} };
       sf.onchange=()=>{
+        userSe[sc.value]=sf.value||null;
         SFX.setSe(sc.value, sf.value||null);
         if(!SFX.on){ SFX.on=true; upd(); }
         SFX.resume(); SFX.play(sc.value);
         saveSeMap();
       };
       tb.onclick=()=>{ if(!SFX.on){ SFX.on=true; upd(); } SFX.resume(); SFX.play(sc.value); };
-      syncSe();
-      // 選んだ割り当ては覚えておく（対局の内容とは関係ないので localStorage へ）
-      function saveSeMap(){ try{ localStorage.setItem('shogiSeMap', JSON.stringify(SFX.seMap)); }catch(_){} }
       try{
-        const saved=JSON.parse(localStorage.getItem('shogiSeMap')||'null');
-        if(saved) for(const k in saved) SFX.setSe(k, saved[k]);
-        syncSe();
-      }catch(_){}
+        localStorage.removeItem('shogiSeMap');     // 全場面を覚えていた古い保存は捨てる
+        userSe=JSON.parse(localStorage.getItem('shogiSe2')||'{}')||{};
+        for(const k in userSe) SFX.setSe(k, userSe[k]);
+      }catch(_){ userSe={}; }
+      syncSe();
     }
   }
   const rb=document.getElementById('resultBanner');
@@ -8247,12 +8269,16 @@ document.getElementById('rCheckPoints').onchange=e=>{ RULES.checkPoints=e.target
       if(!editCell){ setStatus('配置先のマスを選んでから押してください','think'); return; }
       const key=btn.getAttribute('data-preset');
       const {r,c}=editCell;
-      const n=stampPresetSide(key, r, c, editSide);
+      const got=stampPresetSide(key, r, c, editSide);
       closePick(); render();
       const nm=(typeof PRESET_LABELS!=='undefined'&&PRESET_LABELS[key])?PRESET_LABELS[key]:key;
       const who=editSide===1?'あなた':'相手';
-      if(n===0) setStatus(nm+'には'+who+'側の駒がありません','think');
-      else setStatus(nm+'（'+who+'側のみ '+n+'枚）を ('+(r+1)+'行,'+(c+1)+'列) を左上に配置しました','win');
+      if(!got.board && !got.hand) setStatus(nm+'には'+who+'側の駒がありません','think');
+      else {
+        const put = got.board ? ('（'+who+'側のみ '+got.board+'枚）を ('+(r+1)+'行,'+(c+1)+'列) を左上に配置') : '';
+        const hd  = got.hand ? ((got.board?'し、':'の')+who+'の持ち駒に '+got.hand+'枚を追加') : '';
+        setStatus(nm+put+hd+'しました','win');
+      }
     };
   });
 })();
