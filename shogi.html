@@ -2319,12 +2319,26 @@ function goesOnPoint(t){
   return isPointPiece(t);         // 'auto'（既定）と 'free' は駒の種類で決める
 }
 // 編集でその駒をその側へ置けるか
-function layerAllows(t, isPt){
+// ×（交差宮マス）は「マスであり交点でもある」共有点なので、交点の駒はその中にも置ける。
+// 場所が決まっているときは (r,c) を渡す。渡さないとき（駒一覧の絞り込み）は、
+// 盤に×が1つでもあれば候補に出す（実際に置けるかは置くときに見る）。
+function layerAllows(t, isPt, r, c){
   const m=RULES.pointMode;
   if(m==='free'||m==='freeMove') return true;    // どちらにも置ける
   if(m==='cell')  return !isPt;
   if(m==='point') return !!isPt;
-  return !!isPt === isPointPiece(t);   // 'auto'
+  if(!!isPt === isPointPiece(t)) return true;    // 'auto'：種類どおりの側
+  // 交点の駒をマスの中へ置こうとしている。×のマスならそこは共有点なので置ける
+  if(!isPt && isPointPiece(t)){
+    if(r!==undefined) return isSharedPoint(r,c);
+    return anySharedPoint();                     // 一覧の絞り込み：×が1つでもあれば出す
+  }
+  return false;
+}
+// 盤に×（交差宮マス）が1つでもあるか
+function anySharedPoint(){
+  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++) if(getDiag(r,c)==='x') return true;
+  return false;
 }
 // 駒の種類に応じて2層へ振り分け直す（設定変更・配置後に呼ぶ）
 function syncLayers(){
@@ -3269,6 +3283,19 @@ function movesInner(b,r,c){
     // 層をまたぐ手はこの絞り込みの対象外。ただし宮の交点から出ることはできない
     const crossOKc=res.filter(m=>m[2] && isPalacePoint(m[0],m[1]));
     res=res.filter(m=>!m[2]);
+    /* ×（交差マス）の中に居る漢・楚・士は、宮の斜め線に沿って半歩戻れば交点へ出られる。
+       この駒は自分の動きに斜めを持たないので、交点側の分岐と同じようにここで足す。
+       足さないと、×に入った（置いた）あと二度と動けなくなる。 */
+    if(isJPalaceBound(pc.t) && isSharedPoint(r,c)){
+      const o=otherLayer(b);
+      for(const [dr,dc] of [[-1,-1],[-1,1],[1,-1],[1,1]]){
+        const pr=r+(dr>0?1:0), pc2=c+(dc>0?1:0);        // ×の四隅の交点
+        if(pr<0||pr>NR||pc2<0||pc2>NC) continue;
+        if(!isPalacePoint(pr,pc2)) continue;
+        const q=o&&o[pr]&&o[pr][pc2]; if(q&&q.p===p) continue;
+        if(!crossOKc.some(m=>m[0]===pr&&m[1]===pc2)) crossOKc.push([pr,pc2,1]);
+      }
+    }
     return res.filter(([tr,tc])=>{
       if(!isPalaceCell(tr,tc)) return false;
       // 仕・士は行った先のマスにも線が無いと、そこから動けなくなる
@@ -4461,7 +4488,12 @@ function foeStoneAt(L, rows, cols, r, c, side){
   return !!q && isGo(q.t) && ownerOf(q.t,q.p)!==side;
 }
 // 碁石をマスの中に置けるルールか（③の判定を使うのはこのときだけ）
-function goStoneInCell(){ return layerAllows('GOB', false); }
+// ここで見るのはルールそのもの。×（交差宮マス）が盤に1つあるかどうかは関係ない
+// （layerAllows は編集のための関数なので、×の例外が入っている）
+function goStoneInCell(){
+  const m=RULES.pointMode;
+  return m==='free'||m==='freeMove'||m==='cell';
+}
 /* 交点(R,C)から (dr,dc) へ伸びる辺を挟む「2マス」。
      上へ … マス (R-1,C-1) と (R-1,C)      下へ … マス (R,C-1) と (R,C)
      左へ … マス (R-1,C-1) と (R,C-1)      右へ … マス (R-1,C) と (R,C)   */
@@ -7781,11 +7813,24 @@ function applyPick(t){
   }
   ensurePts();
   // 交点には囲碁・シャンチー・チャンギの駒しか置けない。逆にそれらはマスの中に置けない。
+  // ただし×（交差宮マス）は「マスであり交点でもある」共有点なので、そこへは置ける。
   if(!layerAllows(t, editLayerIsPt())){
     closePick();
     setStatus((KANJI[t]||t)+'は'+(editLayerIsPt()?'線の交点':'マスの中')
       +'には置けません（盤の設定「駒の置き方」で変えられます）','lose');
     render(); return;
+  }
+  // 置く場所が決まっているので、そのマスが×かどうかまで見て確かめる
+  {
+    const isPt=editLayerIsPt();
+    const want = multiSel.length>0 ? multiSel : (editCell? [editCell] : []);
+    const ng = want.filter(({r,c})=>!layerAllows(t,isPt,r,c));
+    if(ng.length){
+      closePick();
+      setStatus((KANJI[t]||t)+'は交点に置く駒です。マスの中では'
+        +'交差宮マス（×）にしか置けません','lose');
+      render(); return;
+    }
   }
   const putAt=(r,c)=>{
     const L = editLayerIsPt()? ptsBoard : board;      // 編集ツールで選んだ側へ置く

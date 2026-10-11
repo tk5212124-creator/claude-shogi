@@ -158,6 +158,31 @@ const out=await p.evaluate((C54)=>{
       R['⑨'+k+'の層をまたぐ手']=cross;
     }
   }
+  /* ⑩ 編集でも ×（交差宮マス）には交点の駒を置ける。
+        ×は「マスであり交点でもある」ので、交点の駒はマスの中にも入れるのが筋。 */
+  {
+    const dg=X(); dg[4][3]='l';               // 斜め線だけのマス（×ではない）も用意する
+    loadState(mk(B(),P(),dg)); SFX.on=false;
+    R['⑩×のマスへ漢']=layerAllows('JK',false,4,4);
+    R['⑩ふつうのマスへ漢']=layerAllows('JK',false,0,0);
+    R['⑩斜め線だけのマスへ漢']=layerAllows('JK',false,4,3);
+    R['⑩マスの駒（歩）を交点へ']=layerAllows('hP',true,0,0);
+    R['⑩駒一覧（×あり・マスの中に漢が出るか）']=layerAllows('JK',false);
+    loadState(mk(B(),P(),D())); SFX.on=false;
+    R['⑩×が無い盤なら出さない']=layerAllows('JK',false);
+    // 囲みのルール判定は×の有無に左右されない（碁石をマスに置けるルールかどうかだけ）
+    loadState(mk(B(),P(),X())); SFX.on=false;
+    R['⑩×があっても碁石はマスに置けないまま']=goStoneInCell();
+  }
+  /* ⑪ ×に置いた漢が、そのあと動けること。
+        漢は自分の動きに斜めを持たないので、足さないと ×に入ったきり詰んでしまう。 */
+  {
+    loadState(mk(B(),P(),X())); SFX.on=false;
+    board[4][4]={t:'JK',p:1};
+    R['⑪×の中の漢が行ける先']=moves(board,4,4).map(m=>(m[2]?'交点(':'マス(')+(m[0]+1)+'行'+(m[1]+1)+'列)');
+    syncLayers();
+    R['⑪置き方を揃え直しても残るか']=board[4][4]?board[4][4].t:'★消えた';
+  }
   return R;
 },C54);
 console.log(JSON.stringify(out,null,1)); console.log('errs',errs);
