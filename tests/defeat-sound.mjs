@@ -17,6 +17,8 @@ await p.goto('file://'+HTML); await p.waitForTimeout(900);
 const out=await p.evaluate(async()=>{
   const R={};
   SFX.on=true; SFX.resume();
+  // ここで見るのは「ファイルが無いときの合成音」なので、割り当てを全部外してから測る
+  for(const k in SFX.seMap) SFX.setSe(k,null);
   const count=(fn)=>{ const a={...window.__snd}; fn(); const z=window.__snd;
     return {音程:z.osc-a.osc, ノイズ:z.buf-a.buf}; };
   R['倒す音の種類']=SFX.defeatKinds;

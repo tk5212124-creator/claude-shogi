@@ -18,6 +18,7 @@ node tests/cross-cell-rules.mjs [new|old]
 node tests/check-layer.mjs      [new|old]
 node tests/fx-layout.mjs        [new|old]
 node tests/bgm.mjs
+node tests/sfx-files.mjs          [new|old]
 node tests/defeat-sound.mjs       [new|old]
 node tests/defeat-sound-shape.mjs [new|old]
 node tests/board-text-fit.mjs  [new|old]
@@ -269,6 +270,22 @@ iOS が画面を縮めて表示していた（見出しがステータスバー�
 | ランダム中に ⏭→⏮ | 聴いた順に1つ戻り、元の曲に戻る |
 | pageerror | 0 |
 
+## sfx-files.mjs が見るもの
+
+効果音は `sfx/` の mp3 を鳴らし、割り当ての無い場面は合成音に落ちる。
+
+| 見るもの | 期待 |
+|---|---|
+| `sfx/` のファイル | 13本そろっている |
+| 場面の選択肢 | 12（倒す3種・動かす・打つ・会心・王手・成る・裏返し・勝ち・負け・引き分け） |
+| 音の選択肢 | 「（合成音）」＋13本 |
+| 起動しただけのとき | **1本も読み込まない**（鳴らすまで取りに行かない） |
+| 鳴らしたあと | 鳴らした音のファイルだけが読まれ、読めなかったファイルは0 |
+| 割り当てを外す | `null` になり、合成音に戻る |
+| 画面から差し替える | その場で変わり、`localStorage` に覚える |
+| 「音・演出」OFF | 鳴らさない |
+| 同じ音を20回重ねる | `<audio>` を増やしすぎない（1つの音につき最大4つを使い回す） |
+
 ## defeat-sound.mjs が見るもの
 
 倒したときの音は **シャッキーン／ザシュッ／デュクシ！** の3種から1つを選ぶ。
@@ -279,7 +296,7 @@ headless では音そのものを聴けないので、`AudioContext` が**何を
 
 | 見るもの | 期待 |
 |---|---|
-| 3種それぞれ単体 | 音が組まれる（数が0なら名前が無い＝無音） |
+| 3種それぞれ単体 | 音が組まれる（数が0なら名前が無い＝無音）。**ファイルの割り当てを外してから測る** |
 | 旧 `slash`・知らない名前 | 無音（`slash` は `shakeen` に置き換えて削除済み） |
 | `'defeat'` を60回 | 3種がほぼ均等に出て、**同じ音が続いた回数0** |
 | 旧名 `'capture'` | 同じ3種に振り分かれる |

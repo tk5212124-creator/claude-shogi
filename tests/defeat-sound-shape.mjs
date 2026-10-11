@@ -26,7 +26,9 @@ const out=await p.evaluate(async()=>{
   const BODY=SRC.slice(st,en+6).replace('const SFX = (function(){','window.__SFX = (function(){');
   const measure=async(name)=>{
     (0,eval)(BODY);                       // 音ごとにまっさらな SFX（＝新しい文脈）を作る
-    const S=window.__SFX; S.on=true; S.resume(); S.play(name);
+    const S=window.__SFX; S.on=true; S.resume();
+    for(const k in S.seMap) S.setSe(k,null);   // 合成音そのものを測る
+    S.play(name);
     const buf=await window.__last.startRendering();
     const d=buf.getChannelData(0), sr=buf.sampleRate;
     let peak=0; for(let i=0;i<d.length;i++){ const v=Math.abs(d[i]); if(v>peak) peak=v; }
