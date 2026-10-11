@@ -224,6 +224,38 @@ R['⑯合言葉で入れる']=await until(G3p,()=>Online.connected && !Online.ho
 const h3=norm(await snap(H.p)), g3=flipBack(await snap(G3p));
 R['⑯入ったあとの盤']=JSON.stringify(h3.board)===JSON.stringify(g3.board)?'一致':'★食い違い';
 R['⑯エラー']=g3errs;
+// ⑰ 合言葉は6けたの数字。貼り付けた文字からも取り出せる
+R['⑰合言葉の形']=/^\d{6}$/.test(await H.p.evaluate(()=>Online.code))?'6けたの数字':'★'+(await H.p.evaluate(()=>Online.code));
+R['⑰取り出し']=await H.p.evaluate(()=>[onlineCodeFrom('123456'), onlineCodeFrom('合言葉 ６５４３２１ です'),
+  onlineCodeFrom('https://x/claude-shogi/?room=777111'), onlineCodeFrom('将棋しよう 合言葉 135790 https://x/?room=135790')]);
+// ⑱ 先に「入る」を押してしまっても、部屋ができるまで探し続けて入れる
+const ctx4=await b.newContext({viewport:{width:390,height:844}});
+const G4p=await ctx4.newPage(); await G4p.addInitScript(init); await G4p.goto('http://127.0.0.1:8123/shogi.html'); await G4p.waitForTimeout(600);
+const H2ctx=await b.newContext({viewport:{width:390,height:844}});
+const H2p=await H2ctx.newPage(); await H2p.addInitScript(init); await H2p.goto('http://127.0.0.1:8123/shogi.html'); await H2p.waitForTimeout(600);
+await G4p.evaluate(()=>{ SFX.on=false; onlineStart('guest','424242'); });
+await new Promise(r=>setTimeout(r,4000));
+R['⑱部屋ができる前']=await G4p.evaluate(()=>document.getElementById('onlineState').textContent);
+await H2p.evaluate(()=>{ SFX.on=false; onlineStart('host','424242'); });
+R['⑱あとから部屋ができても入れる']=await until(G4p,()=>Online.connected && !Online.hold, 15000);
+// ⑲ 作った側が仲介サーバーから外れても（携帯で別の画面に切り替えたとき）つなぎ直し、新しく入れる
+await G4p.close();
+await until(H2p,()=>!Online.connected, 8000);
+await H2p.evaluate(()=>Online.peer.disconnect());          // 仲介サーバーから外れた状態にする
+await until(H2p,()=>Online.peer && !Online.peer.disconnected && Online.peer.open, 8000);
+R['⑲外れたあと自分でつなぎ直す']=await H2p.evaluate(()=>Online.peer && !Online.peer.disconnected && Online.code==='424242');
+const G5ctx=await b.newContext({viewport:{width:390,height:844}});
+const G5p=await G5ctx.newPage(); await G5p.addInitScript(init); await G5p.goto('http://127.0.0.1:8123/shogi.html?room=424242'); await G5p.waitForTimeout(600);
+R['⑲同じ合言葉で入れる']=await until(G5p,()=>Online.connected && !Online.hold, 15000);
+if(!R['⑲同じ合言葉で入れる']) R['⑲入れなかったときの様子']=[await G5p.evaluate(()=>[Online.connected,Online.hold,Online.tries,document.getElementById('onlineState').textContent]), await H2p.evaluate(()=>[Online.connected,Online.peer&&Online.peer.open,Online.peer&&Online.peer.disconnected,document.getElementById('onlineState').textContent])];
+// ⑳ 打ち間違えた合言葉では、入れた合言葉を見せて止まる（いつまでも探さない）
+const G6ctx=await b.newContext({viewport:{width:390,height:844}});
+const G6p=await G6ctx.newPage(); await G6p.addInitScript(init); await G6p.goto('http://127.0.0.1:8123/shogi.html'); await G6p.waitForTimeout(600);
+await G6p.evaluate(()=>{ window.ONLINE_FIND_TRIES=2; });   // 本番は15回。試験では2回であきらめさせる
+await G6p.evaluate(()=>onlineStart('guest','000001'));
+await until(G6p,()=>!Online.active, 60000);
+R['⑳打ち間違い']=await G6p.evaluate(()=>document.getElementById('onlineState').textContent);
+R['⑳探すのをやめた']=await G6p.evaluate(()=>!Online.active && Online.tries===2);
 console.log(JSON.stringify(R,null,1));
 console.log('ホストのエラー',H.errs,'ゲストのエラー',G.errs);
 await b.close(); srv.close(); try{ peerSrv.close(); }catch(_){} process.exit(0);

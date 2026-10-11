@@ -1338,7 +1338,7 @@
       </div>
       <div class="online-sec" id="onlineJoinSec">
         <div class="online-row">
-          <input id="onlineJoinCode" placeholder="合言葉か招待URL" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <input id="onlineJoinCode" placeholder="合言葉（6けたの数字）か招待URL" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false">
           <button id="onlinePaste" style="flex:0 0 auto;">貼り付け</button>
           <button class="primary" id="onlineJoin" style="flex:0 0 auto;">入る</button>
         </div>
@@ -8461,11 +8461,24 @@ function onlineLoadLib(){
     document.head.appendChild(s);
   });
 }
+// 合言葉は6けたの数字。英字だと 9 と q、5 と s のような見間違い・打ち間違いが起きる
+// （実際に g65n9p を g65nqp と打って入れなかった）。数字なら携帯の数字キーで打てる
 function onlineNewCode(){
-  const A='abcdefghjkmnpqrstuvwxyz23456789'; let s='';
-  const r=new Uint32Array(6); (window.crypto||{}).getRandomValues ? crypto.getRandomValues(r) : r.forEach((_,i)=>r[i]=Math.random()*1e9);
-  for(let i=0;i<6;i++) s+=A[r[i]%A.length];
+  const r=new Uint32Array(6);
+  if(window.crypto && crypto.getRandomValues) crypto.getRandomValues(r);
+  else for(let i=0;i<6;i++) r[i]=Math.floor(Math.random()*1e9);
+  let s=''; for(let i=0;i<6;i++) s+=String(r[i]%10);
   return s;
+}
+// 貼られた文字から合言葉を取り出す。招待URL（?room=）でも、共有メッセージまるごとでもよい。
+// 全角数字も半角に直す
+function onlineCodeFrom(text){
+  let t=String(text||'').trim().replace(/[０-９ａ-ｚＡ-Ｚ]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0));
+  const m=t.match(/room=([A-Za-z0-9]+)/);
+  if(m) return m[1].toLowerCase();
+  const d=t.match(/\b\d{6}\b/) || t.match(/\d{6}/);
+  if(d) return d[0];
+  return t.toLowerCase().replace(/[^a-z0-9]/g,'');
 }
 function onlineUi(msg, kind){
   const st=document.getElementById('onlineState');
@@ -8570,6 +8583,7 @@ function onlineOnData(msg){
     Online.hold=msg.why||'設定中'; sel=null; render(); nextTurn(); return;
   }
   if(msg.t==='state' && Online.role==='guest'){
+    if(Online.conn) Online.conn._gotState=true;
     Online.hold=null;
     loadState(JSON.stringify(mirrorStateObj(msg.s)));
     autoYou=false; autoEnemy=false; refreshAutoLabels();
@@ -8592,55 +8606,96 @@ function onlineAttach(conn){
   if(Online.conn && Online.conn!==conn){ try{ Online.conn.close(); }catch(_){} }
   Online.conn=conn;
   conn.on('open',()=>{
+    conn._opened=true;
     Online.connected=true;
     autoYou=false; autoEnemy=false; refreshAutoLabels(); stopAutoLoop();
     if(Online.role==='host'){ onlineSendState(); nextTurn(); }
     else {
-      // ホストの盤が届くまでは、こちらの盤は古いまま。届くまで指させない
-      Online.hold='盤を送っているところ'; sel=null; nextTurn();
-      onlineUi('つながりました。盤を受け取っています…','ok');
+      // ホストの盤が届くまでは、こちらの盤は古いまま。届くまで指させない。
+      // ただし盤が「つながった」の知らせより先に届くことがある。そのときは止めない
+      if(!conn._gotState){
+        Online.hold='盤を送っているところ'; sel=null; nextTurn();
+        onlineUi('つながりました。盤を受け取っています…','ok');
+        // 3秒たっても届かなければ、送り直してもらう
+        setTimeout(()=>{ if(Online.conn===conn && !conn._gotState && conn.open) onlineSend({t:'sync?'}); }, 3000);
+      }
     }
   });
   conn.on('data', onlineOnData);
   conn.on('close',()=>{
-    if(Online.conn!==conn) return;
+    if(Online.conn!==conn || !conn._opened) return;   // つながる前に失敗した試行は「切れた」にしない
     Online.connected=false;
     onlineUi(Online.role==='host'?'相手との接続が切れました（同じURLを開き直してもらえば再開できます）'
                                   :'部屋との接続が切れました（もう一度入り直してください）','ng');
     setStatus('オンライン対戦の接続が切れました','lose'); render();
   });
-  conn.on('error',e=>onlineUi('通信エラー：'+(e&&e.type||e),'ng'));
+  conn.on('error',e=>{ if(conn._opened) onlineUi('通信エラー：'+(e&&e.type||e),'ng'); });
 }
+/* つなぎ方の粘り強さ
+   ・入る側：部屋が見つからなくても、しばらく探し続ける（作った側がまだ準備中・
+     一時的に仲介サーバーから外れている、ということがある）
+   ・作った側：仲介サーバーから外れたら（携帯で別の画面に切り替えたときなど）つなぎ直す。
+     同じ合言葉のまま戻るので、相手は同じURLで入れる */
+const ONLINE_FIND_TRIES=15, ONLINE_FIND_WAIT=3000;   // 試験では window.ONLINE_FIND_TRIES で減らせる
 async function onlineStart(role, code){
   try{
     onlineUi('通信の準備をしています…');
     await onlineLoadLib();
     const opts=window.ONLINE_PEER_OPTS||{};
-    Online.role=role; Online.code=code;
-    Online.peer = role==='host'? new Peer(ONLINE_PREFIX+code, opts) : new Peer(opts);
-    Online.peer.on('error',e=>{
+    Online.role=role; Online.code=code; Online.tries=0;
+    const peer = Online.peer = role==='host'? new Peer(ONLINE_PREFIX+code, opts) : new Peer(opts);
+    const tryConnect=()=>{
+      if(Online.peer!==peer || Online.connected) return;
+      Online.tries++;
+      onlineUi(Online.tries===1 ? '合言葉 '+code+' の部屋に入っています…'
+                                : '合言葉 '+code+' の部屋を探しています…（'+Online.tries+'回目）');
+      onlineAttach(peer.connect(ONLINE_PREFIX+code,{reliable:true}));
+    };
+    peer.on('error',e=>{
+      if(Online.peer!==peer) return;
       const t=e&&e.type;
-      onlineUi(t==='peer-unavailable'?'その合言葉の部屋が見つかりません（部屋を作った人がページを開いたままか確かめてください）'
-             : t==='unavailable-id'?'その合言葉は使われています。もう一度「部屋を作る」を押してください'
+      if(t==='peer-unavailable' && role==='guest'){
+        if(Online.tries<(window.ONLINE_FIND_TRIES||ONLINE_FIND_TRIES)){ setTimeout(tryConnect, ONLINE_FIND_WAIT); return; }
+        onlineUi('合言葉 '+code+' の部屋が見つかりません。合言葉が合っているか、'
+          +'部屋を作った人がページを開いたままか確かめてください'
+          +'（同じ携帯の別のブラウザで試すと、裏に回った側が止まってつながりません）','ng');
+        onlineLeave(true); return;
+      }
+      if((t==='network'||t==='server-error'||t==='socket-error'||t==='socket-closed') && role==='host' && !peer.destroyed){
+        onlineUi('仲介サーバーから外れました。つなぎ直しています…','ng');
+        setTimeout(()=>{ try{ if(Online.peer===peer && peer.disconnected && !peer.destroyed) peer.reconnect(); }catch(_){} }, 1500);
+        return;
+      }
+      onlineUi(t==='unavailable-id'?'その合言葉は使われています。もう一度「部屋を作る」を押してください'
              : t==='network'||t==='server-error'?'仲介サーバーにつながりません。時間をおいて試してください'
              : '通信エラー：'+(t||e),'ng');
       if(t==='unavailable-id'||t==='network'||t==='server-error') onlineLeave(true);
     });
-    Online.peer.on('open',()=>{
+    // 作った側が仲介サーバーから外れたら、同じ合言葉のままつなぎ直す
+    peer.on('disconnected',()=>{
+      if(Online.peer!==peer || peer.destroyed || role!=='host') return;
+      setTimeout(()=>{ try{ if(Online.peer===peer && peer.disconnected && !peer.destroyed) peer.reconnect(); }catch(_){} }, 1000);
+    });
+    peer.on('open',()=>{
+      if(Online.peer!==peer) return;
       if(role==='host'){
         const url=location.origin+location.pathname+'?room='+code;
         document.getElementById('onlineCode').textContent=code;
         document.getElementById('onlineUrl').value=url;
         document.getElementById('onlineCodeRow').style.display='';
-        onlineUi('部屋を作りました。URLか合言葉を相手に送って、入ってくるのを待ってください','ok');
-      } else {
-        onlineUi('部屋に入っています…');
-        onlineAttach(Online.peer.connect(ONLINE_PREFIX+code,{reliable:true}));
-      }
+        if(!Online.connected) onlineUi('部屋を作りました。URLか合言葉を相手に送って、入ってくるのを待ってください','ok');
+      } else tryConnect();
     });
-    if(role==='host') Online.peer.on('connection', c=>onlineAttach(c));
+    if(role==='host') peer.on('connection', c=>onlineAttach(c));
   }catch(e){ onlineUi(String(e.message||e),'ng'); onlineLeave(true); }
 }
+// 画面に戻ってきたら、外れていた仲介サーバーにつなぎ直す（携帯で別の画面から戻ったとき）
+document.addEventListener('visibilitychange',()=>{
+  const peer=Online.peer;
+  if(!document.hidden && peer && Online.role==='host' && peer.disconnected && !peer.destroyed){
+    try{ peer.reconnect(); }catch(_){}
+  }
+});
 function onlineLeave(quiet){
   if(!quiet) onlineSend({t:'bye'});
   try{ Online.conn && Online.conn.close(); }catch(_){}
@@ -8686,7 +8741,7 @@ function onlineGuardButtons(){
   $('onlineClose').onclick=()=>$('onlineModal').classList.remove('show');
   $('onlineCreate').onclick=()=>{ if(!Online.active) onlineStart('host', onlineNewCode()); };
   $('onlineJoin').onclick=()=>{
-    const code=($('onlineJoinCode').value||'').trim().toLowerCase().replace(/^.*room=/,'').replace(/[^a-z0-9]/g,'');
+    const code=onlineCodeFrom($('onlineJoinCode').value);
     if(!code){ onlineUi('合言葉を入れてください','ng'); return; }
     if(!Online.active) onlineStart('guest', code);
   };
@@ -8716,7 +8771,7 @@ function onlineGuardButtons(){
   // 招待URL（?room=合言葉）で開いたら、そのまま部屋に入る
   const room=new URLSearchParams(location.search).get('room');
   if(room){
-    const code=room.toLowerCase().replace(/[^a-z0-9]/g,'');
+    const code=onlineCodeFrom(room);
     $('onlineJoinCode').value=code;
     $('onlineModal').classList.add('show');
     onlineStart('guest', code);
