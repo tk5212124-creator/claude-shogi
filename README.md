@@ -586,6 +586,18 @@ CPUの読み（`simulate`）も同じ条件で、`king`（この手で勝ち）�
 3種は**どれも同じくらいの大きさ**にしてある（重なりの最大 0.73〜0.91／マスター 0.6 込み）。
 毎手鳴る音なので 1.0 を超えると割れる。`tests/defeat-sound.mjs` がそこを見張っている。
 
+**音の起こし方（iOS 対策）**
+iOS/iPadOS は「指で触ったその瞬間」にしか音を鳴らし始められず、触ったあとも
+`AudioContext` が `suspended` のまま残ることがある。そのため
+
+- 解除は `pointerdown` / `touchend` / `click` / `keydown` を **capture で**聞く
+  （途中で `stopPropagation()` されても拾える）。`running` になるまで外さない
+- タブに戻ったときも `visibilitychange` で起こし直す
+- iOS のときだけ、無音の wav を1つループ再生して音声セッションを掴む（`holdSession`）。
+  こうすると効果音が消音スイッチに引きずられず、BGM と同じ扱いになる
+- 「音・演出」をONにすると確認の音が鳴る。鳴らせない状態なら
+  `SFX.state`（`suspended` など）を画面に出す。黙って無音にしない
+
 **画面の揺れは `#page` に掛ける。** `body` そのものを transform すると
 `body::before`（背景）が body 基準の巨大な要素になり、文書の横幅が広がって
 画面が縮んで表示される。`html`/`body` には `overflow-x:clip` を付けてある。

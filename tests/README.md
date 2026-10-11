@@ -284,6 +284,8 @@ headless では音そのものを聴けないので、`AudioContext` が**何を
 | 「音・演出」OFF | 1つも鳴らさない |
 | 実際に駒を取る（`applyMoveSilent`→`render`→`applyFx`） | 3種のどれかが鳴る。OFFなら鳴らない |
 | 倒す音の大きさ | 3種とも重なりの最大が**1.0以下**（割れない）で、**差は0.25以内**（どれも同じくらい） |
+| 途中で `stopPropagation()` されるタップ | それでも音が起きる（capture で聞いているので拾える） |
+| 「音・演出」をONにしたとき | 合図の音が鳴り、`SFX.state` が `running` になる |
 | pageerror | 0 |
 
 ## board-text-fit.mjs が見るもの

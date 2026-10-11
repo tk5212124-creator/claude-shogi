@@ -107,6 +107,22 @@ const out=await p.evaluate(async()=>{
       ? '揃っている（差 '+(+(Math.max(...ps)-Math.min(...ps)).toFixed(2))+'）'
       : '★ばらつきが大きい（差 '+(+(Math.max(...ps)-Math.min(...ps)).toFixed(2))+'）';
   }
+  /* ⑦ 音の起こし方。iOS は触った瞬間にしか鳴らし始められないので、
+        画面に触れたら必ず AudioContext を起こす。途中で止められても拾えること。 */
+  {
+    const blocker=document.createElement('div');
+    blocker.style.cssText='position:fixed;inset:0;z-index:9999';
+    blocker.addEventListener('pointerdown',e=>e.stopPropagation());   // バブリングを止める邪魔者
+    document.body.appendChild(blocker);
+    blocker.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
+    await new Promise(r=>setTimeout(r,200));
+    R['⑦止められても音が起きるか']=SFX.state==='running'?'起きる':'★'+SFX.state+'のまま';
+    blocker.remove();
+    // 音・演出ボタンをONにしたら、合図の音が鳴る（鳴らせていることがその場で分かる）
+    SFX.on=false;
+    const c=count(()=>document.getElementById('sfxToggle').click());
+    R['⑦ONにした合図の音']={鳴った:c, 音:SFX.on, 状態:SFX.state};
+  }
   return R;
 });
 console.log(JSON.stringify(out,null,1)); console.log('errs',errs);

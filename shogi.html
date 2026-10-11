@@ -6026,12 +6026,54 @@ function endDraw(msg){
 /* ===== 効果音（Web Audioで合成・アセット不要） ===== */
 const SFX = (function(){
   let ctx=null, master=null, on=true;
+  /* iOS/iPadOS は「指で触ったその瞬間」にしか音を鳴らし始められない。
+     さらに、触ったあとも AudioContext が suspended のまま残ることがある。
+     そこで ensure() では resume() を毎回試し、解除できるまで何度でも粘る（unlock）。 */
+  const isIOS = /iP(hone|ad|od)/.test(navigator.platform||'')
+             || /iPad|iPhone|iPod/.test(navigator.userAgent||'')
+             || (navigator.maxTouchPoints>1 && /Mac/.test(navigator.platform||''));
   function ensure(){
     if(!ctx){ try{ const AC=window.AudioContext||window.webkitAudioContext; ctx=new AC();
       master=ctx.createGain(); master.gain.value=0.6; master.connect(ctx.destination);
     }catch(e){ ctx=null; } }
-    if(ctx && ctx.state==='suspended'){ try{ctx.resume();}catch(_){} }
+    if(ctx && ctx.state!=='running'){ try{ctx.resume();}catch(_){} }
     return ctx;
+  }
+  /* 無音の mp3/wav を1つ鳴らし続けると、iOS の音声セッションが「再生中」になる。
+     こうすると効果音（Web Audio）が消音スイッチに引きずられなくなる。
+     BGM と同じ土俵に上がるだけなので、鳴る音そのものは今までどおり。 */
+  let keep=null;
+  function silentWav(){
+    const sr=8000, n=(sr*0.05)|0, len=44+n;
+    const b=new Uint8Array(len), dv=new DataView(b.buffer);
+    const w=(o,s)=>{ for(let i=0;i<s.length;i++) b[o+i]=s.charCodeAt(i); };
+    w(0,'RIFF'); dv.setUint32(4,len-8,true); w(8,'WAVE');
+    w(12,'fmt '); dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+    dv.setUint32(24,sr,true); dv.setUint32(28,sr,true); dv.setUint16(32,1,true); dv.setUint16(34,8,true);
+    w(36,'data'); dv.setUint32(40,n,true);
+    for(let i=0;i<n;i++) b[44+i]=128;               // 8bit の無音は 128
+    let s=''; for(let i=0;i<len;i++) s+=String.fromCharCode(b[i]);
+    return 'data:audio/wav;base64,'+btoa(s);
+  }
+  function holdSession(){
+    if(!isIOS || keep) return;                      // 必要なのは iOS だけ
+    try{
+      keep=new Audio(silentWav()); keep.loop=true; keep.volume=0.01;
+      keep.setAttribute('playsinline',''); keep.play().catch(()=>{});
+    }catch(_){ keep=null; }
+  }
+  // 画面に触れたら必ず音を起こす。鳴らせるようになるまで外さない
+  function unlock(){
+    ensure(); holdSession();
+    if(ctx && ctx.state==='running'){
+      for(const ev of ['pointerdown','touchend','click','keydown'])
+        document.removeEventListener(ev,unlock,true);
+    }
+  }
+  function installUnlock(){
+    for(const ev of ['pointerdown','touchend','click','keydown'])
+      document.addEventListener(ev,unlock,true);    // capture：途中で止められても拾う
+    document.addEventListener('visibilitychange',()=>{ if(!document.hidden && on) ensure(); });
   }
   function tone(f,t0,dur,type,gain,slideTo){
     if(!ctx) return; const o=ctx.createOscillator(), g=ctx.createGain();
@@ -6075,7 +6117,10 @@ const SFX = (function(){
   return {
     get on(){return on;}, set on(v){on=!!v;},
     get defeatKinds(){ return DEFEAT.slice(); },
-    resume(){ ensure(); },
+    // いま音を出せる状態か（鳴らないときの切り分け用）
+    get state(){ return ctx ? ctx.state : 'まだ作っていない'; },
+    installUnlock,
+    resume(){ ensure(); holdSession(); },
     play(name){
       if(!on || !ensure()) return; const t=ctx.currentTime;
       // 'capture'（旧名）と 'defeat' は、倒す音3種のどれかになる
@@ -6716,7 +6761,17 @@ function cutIn(text, kind){
 (function(){
   const btn=document.getElementById('sfxToggle');
   const upd=()=>{ if(btn){ btn.textContent=(SFX.on?'🔊':'🔇')+' 音・演出：'+(SFX.on?'ON':'OFF'); btn.classList.toggle('on',SFX.on); } };
-  if(btn) btn.onclick=()=>{ SFX.on=!SFX.on; if(SFX.on) SFX.resume(); else SFX.bgm.stop(); updBgm(); upd(); };
+  if(btn) btn.onclick=()=>{
+    SFX.on=!SFX.on;
+    if(SFX.on){
+      SFX.resume();
+      SFX.play('move');                 // ONにした合図。ここで鳴れば音は出せている
+      // 鳴らせない状態のときは、黙って無音にせず理由を出す
+      setTimeout(()=>{ if(SFX.on && SFX.state!=='running')
+        setStatus('音を鳴らせません（オーディオの状態：'+SFX.state+'）。画面をもう一度タップしてください','think'); },120);
+    } else SFX.bgm.stop();
+    updBgm(); upd();
+  };
   upd();
   const bgmBtn=document.getElementById('bgmToggle');
   const sel=document.getElementById('bgmTrack');
@@ -6759,8 +6814,7 @@ function cutIn(text, kind){
   const hide=()=>{ if(rb){ rb.classList.remove('show'); rb.querySelectorAll('.confetti').forEach(c=>c.remove()); } };
   const cl=document.getElementById('rbClose'); if(cl) cl.onclick=hide;
   if(rb) rb.addEventListener('pointerdown', e=>{ if(e.target===rb) hide(); });
-  const wake=()=>{ SFX.resume(); document.removeEventListener('pointerdown',wake); document.removeEventListener('keydown',wake); };
-  document.addEventListener('pointerdown',wake); document.addEventListener('keydown',wake);
+  SFX.installUnlock();   // 画面に触れたら音を起こす（鳴らせるようになるまで粘る）
 })();
 // side が動かせる駒・打てる持ち駒を1つでも持つか（最初に見つけたら即true）
 function hasAnyLegalMove(side){
