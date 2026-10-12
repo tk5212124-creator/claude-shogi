@@ -5018,7 +5018,8 @@ function nextTurn(){
   // 手番側が動けない・打てない → 持将棋 or 詰み
   if(!hasAnyLegalMove(turn)){ resolveNoMove(turn); return; }
   if(typeof Online!=='undefined' && Online.remoteTurn()){
-    setStatus(!Online.hold ? '相手の番です（相手が指すのを待っています）'
+    setStatus(Online.reconnecting ? '通信が途切れたので、つなぎ直しています…（つながると続きから指せます）'
+      : !Online.hold ? '相手の番です（相手が指すのを待っています）'
       : Online.role==='host' ? '相手が'+Online.hold+'です。返事を待っています'
       : Online.proposal ? '部屋を作った人から変更の相談です。「許可する」か「断る」を選んでください'
       : '部屋を作った人が'+Online.hold+'です。終わるまで待ってください','think');
@@ -8614,11 +8615,12 @@ const PEERJS_SRC='https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
 const ONLINE_PREFIX='claude-shogi-';
 var Online={   // var：起動中（定義より前）に nextTurn から参照されても落ちないように
   peer:null, conn:null, role:null,   // role: 'host' | 'guest' | null
-  code:null, ply:0, connected:false,
+  code:null, ply:0, connected:false, mis:0,
+  reconnecting:false,   // 入った側がつなぎ直している間（指した手が届かないので指させない）
   hold:null,   // ゲスト側：ホストが盤の編集・ルール設定をしている間の理由（その間は指せない）
   get active(){ return !!this.role; },
   // 相手の番か、ホストが設定中か（このときは盤を触っても動かせない）
-  remoteTurn(){ return this.active && this.connected && !gameOver && (turn===-1 || !!this.hold); },
+  remoteTurn(){ return this.active && !gameOver && (this.reconnecting || (this.connected && (turn===-1 || !!this.hold))); },
   isGuest(){ return this.role==='guest'; }
 };
 function onlineLoadLib(){
@@ -8701,7 +8703,9 @@ function recToMove(k){
   return m;
 }
 /* ---- 送る・受け取る ---- */
-function onlineSend(obj){ try{ if(Online.conn && Online.connected) Online.conn.send(obj); }catch(_){} }
+function onlineSend(obj){
+  if(window.ONLINE_DROP && window.ONLINE_DROP(obj,'out')) return;   // 試験用：通信が途切れたことにする
+  try{ if(Online.conn && Online.connected){ Online.conn.send(obj); Online.lastTx=Date.now(); } }catch(_){} }
 // ホストの局面をまるごと送る（つながった時・新しい対局・設定を変えた時・食い違った時）
 function onlineSendState(){
   if(Online.role!=='host' || !Online.connected) return;
@@ -8710,17 +8714,22 @@ function onlineSendState(){
   const s=stateJSON(); delete s.kifu; delete s.start;
   // 千日手・王手点などの記録はここから数え直す（相手も読み込んだ時点から数える）
   posCount={}; repLog=[]; passStreak=0; checkCount={1:0,'-1':0};
-  Online.ply=0;
+  Online.ply=0; Online.unacked=null; Online.mis=0;
   onlineSend({t:'state', s, fresh: kifu.length===0 && !gameOver});   // fresh：まだ1手も指していない
   onlineUi('対戦中：あなたが部屋を作った側です（盤と設定を相手に送りました）','ok');
 }
 // 自分の手を棋譜に書いたところで相手へ送る（人の手はすべて recordKifu を通る）
 function onlineOnRecord(rec){
   if(!Online.connected || rec.side!==1) return;
-  onlineSend({t:'move', k:rec, n:Online.ply, rules:(Online.role==='host'? RULES : undefined)});
+  const msg={t:'move', k:rec, n:Online.ply, rules:(Online.role==='host'? RULES : undefined)};
+  // 届いたと返事が来るまで覚えておき、来なければ送り直す
+  Online.unacked={msg, at:Date.now()};
+  onlineSend(msg);
   Online.ply++;
 }
 function onlineApplyRemote(msg){
+  // 送り直しで同じ手が2度届いた：もう反映してあるので、届いたと返すだけ
+  if(typeof msg.n==='number' && msg.n<Online.ply){ onlineSend({t:'ack', n:msg.n}); return; }
   if(msg.n!==Online.ply){ onlineDesync('手数が合いません（'+msg.n+' と '+Online.ply+'）'); return; }
   if(turn!==-1 || gameOver){ onlineDesync('相手の番ではないのに手が届きました'); return; }
   if(msg.rules && Online.role==='guest') Object.keys(RULES).forEach(k=>{ if(msg.rules[k]!==undefined) RULES[k]=msg.rules[k]; });
@@ -8741,6 +8750,7 @@ function onlineApplyRemote(msg){
     if(!isLegalMove(m, me)){ onlineDesync('相手の手がこちらの盤では指せない手でした'); return; }
     applyMoveSilent(me, m);
   }
+  onlineSend({t:'ack', n:msg.n});
   afterPlayer();
 }
 function onlineDesync(why){
@@ -8749,6 +8759,23 @@ function onlineDesync(why){
 }
 function onlineOnData(msg){
   if(!msg||typeof msg!=='object') return;
+  if(window.ONLINE_DROP && window.ONLINE_DROP(msg,'in')) return;
+  Online.lastRx=Date.now();
+  if(msg.t==='ack'){ if(Online.unacked && Online.unacked.msg.n===msg.n) Online.unacked=null; return; }
+  if(msg.t==='ping'){
+    // 手数の確かめ合い：どちらも返事待ちの手が無いのに2回続けて食い違ったら、送り直してそろえる
+    if(!msg.un && !Online.unacked && typeof msg.ply==='number' && msg.ply!==Online.ply && !Online.proposal){
+      if(++Online.mis>=2){ Online.mis=0; onlineDesync('手数の確かめ合いが合いません'); }
+    } else Online.mis=0;
+    return;
+  }
+  // 入った側がつながった（つなぎ直した）ときの挨拶。届いていなかった手があれば先に反映してから盤を送る
+  if(msg.t==='hello' && Online.role==='host'){
+    clearTimeout(Online.helloTimer);
+    const pm=msg.pending;
+    if(pm && pm.t==='move' && pm.n===Online.ply && turn===-1 && !gameOver) onlineApplyRemote(pm);
+    onlineSendState(); nextTurn(); return;
+  }
   if(msg.t==='hold' && Online.role==='guest'){
     Online.hold=msg.why||'設定中'; sel=null; render(); nextTurn(); return;
   }
@@ -8790,7 +8817,7 @@ function onlineOnData(msg){
     onlineUi('相手が投了しました','ok');
   }
   else if(msg.t==='bye'){
-    Online.connected=false; Online.proposal=null; Online.change=null; Online.hold=null; Online.peerCpu=false; closeProposal();
+    Online.connected=false; Online.byeGot=true; Online.proposal=null; Online.change=null; Online.hold=null; Online.peerCpu=false; closeProposal();
     onlineUi(Online.role==='host'?'相手が退出しました（同じURLを開き直してもらえば再開できます）':'部屋を作った人が退出しました','ng');
     setStatus('相手が退出しました','lose'); render(); updatePassBtn();
   }
@@ -8812,15 +8839,69 @@ function onlineAnswer(yes){
 }
 document.getElementById('proposeYes').onclick=()=>onlineAnswer(true);
 document.getElementById('proposeNo').onclick=()=>onlineAnswer(false);
+/* ---- 届いたかの確かめと、切れたときのつなぎ直し ----
+   携帯で別の画面に切り替えたり画面が消えたりすると、通信が知らせもなく止まることがある。
+   ・手には「届いた」の返事（ack）をもらい、来なければ2.5秒ごとに送り直す（同じ手は1度しか反映しない）
+   ・3秒ごとに合図（ping。手数つき）を送り合い、10秒何も届かなければ切れたとみなす。
+     入った側はつなぎ直し、届いていなかった自分の手を挨拶（hello）に添えて渡す。作った側は盤を送り直す
+   ・画面に戻ってきたときはすぐ確かめる */
+const ONLINE_PING_MS=3000, ONLINE_DEAD_MS=10000, ONLINE_RESEND_MS=2500;
+function onlineHeartbeat(){
+  if(Online.beat) return;
+  Online.beat=setInterval(onlineTick, 1000);
+}
+function onlineTick(){
+  if(!Online.active){ clearInterval(Online.beat); Online.beat=null; return; }
+  if(!Online.connected) return;
+  const now=Date.now(), dead=window.ONLINE_DEAD_MS||ONLINE_DEAD_MS;
+  if(now-(Online.lastPing||0)>=ONLINE_PING_MS){ Online.lastPing=now; onlineSend({t:'ping', ply:Online.ply, un:!!Online.unacked}); }
+  if(Online.unacked && now-Online.unacked.at>=ONLINE_RESEND_MS){ Online.unacked.at=now; onlineSend(Online.unacked.msg); }
+  if(now-(Online.lastRx||now)>dead){
+    if(Online.role==='guest') onlineRejoin('部屋からの応答がありません');
+    else if(!Online.silentShown){ Online.silentShown=true;
+      onlineUi('相手からの応答がありません。相手がつなぎ直すのを待っています…','ng'); }
+  } else Online.silentShown=false;
+}
+// 入った側：同じ合言葉の部屋につなぎ直す（返事待ちの手は Online.unacked に残したまま）
+function onlineRejoin(why){
+  if(Online.role!=='guest' || !Online.peer || Online.rejoining) return;
+  Online.rejoining=true; Online.reconnecting=true; sel=null;
+  const old=Online.conn; Online.conn=null; Online.connected=false; Online.tries=0;
+  try{ old && old.close(); }catch(_){}
+  onlineUi(why+'。つなぎ直しています…','ng');
+  nextTurn();
+  const peer=Online.peer;
+  setTimeout(()=>{
+    Online.rejoining=false;
+    if(Online.peer!==peer || Online.connected) return;
+    try{ if(peer.disconnected && !peer.destroyed){ peer.reconnect(); return; } }catch(_){}   // つながり次第 open から入り直す
+    if(Online.tryConnect) Online.tryConnect();
+  }, 300);
+}
+// 画面に戻ってきたら、すぐ合図を送って確かめる（裏にいる間はタイマーがほとんど動かない）
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden || !Online.active) return;
+  // 裏にいた間に届いた分はこれから受け取るので、切れたと決めるまで少し待つ
+  if(Online.connected){ const dead=window.ONLINE_DEAD_MS||ONLINE_DEAD_MS;
+    Online.lastRx=Math.max(Online.lastRx||0, Date.now()-dead+3000); Online.lastPing=0; onlineTick(); }
+  else if(Online.role==='guest' && !Online.byeGot) onlineRejoin('画面に戻りました');
+});
 function onlineAttach(conn){
   if(Online.conn && Online.conn!==conn){ try{ Online.conn.close(); }catch(_){} }
   Online.conn=conn;
   conn.on('open',()=>{
     conn._opened=true;
-    Online.connected=true;
+    Online.connected=true; Online.reconnecting=false; Online.lastRx=Date.now(); Online.mis=0; Online.byeGot=false;
     autoYou=false; autoEnemy=false; refreshAutoLabels(); stopAutoLoop();
-    if(Online.role==='host'){ onlineSendState(); nextTurn(); }
+    onlineHeartbeat();
+    if(Online.role==='host'){
+      // 入った側の挨拶（届いていない手があればそれも）を待ってから盤を送る。来なければ1.5秒で送る
+      clearTimeout(Online.helloTimer);
+      Online.helloTimer=setTimeout(()=>{ if(Online.conn===conn){ onlineSendState(); nextTurn(); } },1500);
+    }
     else {
+      onlineSend({t:'hello', pending: Online.unacked? Online.unacked.msg : null});
+      Online.unacked=null;
       // ホストの盤が届くまでは、こちらの盤は古いまま。届くまで指させない。
       // ただし盤が「つながった」の知らせより先に届くことがある。そのときは止めない
       if(!conn._gotState){
@@ -8835,7 +8916,9 @@ function onlineAttach(conn){
   conn.on('close',()=>{
     if(Online.conn!==conn || !conn._opened) return;   // つながる前に失敗した試行は「切れた」にしない
     Online.connected=false; Online.proposal=null; Online.change=null; Online.hold=null; Online.peerCpu=false; closeProposal();
-    onlineUi(Online.role==='host'?'相手との接続が切れました（同じURLを開き直してもらえば再開できます）'
+    // 入った側は、相手が退出したのでなければ自分でつなぎ直す
+    if(Online.role==='guest' && !Online.byeGot){ onlineRejoin('部屋との接続が切れました'); return; }
+    onlineUi(Online.role==='host'?'相手との接続が切れました。相手がつなぎ直すのを待っています（同じURLを開き直してもらっても再開できます）'
                                   :'部屋との接続が切れました（もう一度入り直してください）','ng');
     setStatus('オンライン対戦の接続が切れました','lose'); render();
   });
@@ -8857,6 +8940,7 @@ async function onlineStart(role, code){
     const tryConnect=()=>{
       if(Online.peer!==peer || Online.connected) return;
       Online.tries++;
+      if(Online.reconnecting) onlineUi('部屋につなぎ直しています…（'+Online.tries+'回目）','ng'); else
       onlineUi(Online.tries===1 ? '合言葉 '+code+' の部屋に入っています…'
                                 : '合言葉 '+code+' の部屋を探しています…（'+Online.tries+'回目）');
       onlineAttach(peer.connect(ONLINE_PREFIX+code,{reliable:true}));
@@ -8866,6 +8950,11 @@ async function onlineStart(role, code){
       const t=e&&e.type;
       if(t==='peer-unavailable' && role==='guest'){
         if(Online.tries<(window.ONLINE_FIND_TRIES||ONLINE_FIND_TRIES)){ setTimeout(tryConnect, ONLINE_FIND_WAIT); return; }
+        // 対局の途中でつなぎ直しているときはあきらめない（相手が画面に戻れば入れる）
+        if(Online.reconnecting){
+          onlineUi('部屋が見つかりません。相手が画面に戻るのを待って、つなぎ直し続けています…','ng');
+          setTimeout(tryConnect, 5000); return;
+        }
         onlineUi('合言葉 '+code+' の部屋が見つかりません。合言葉が合っているか、'
           +'部屋を作った人がページを開いたままか確かめてください'
           +'（同じ携帯の別のブラウザで試すと、裏に回った側が止まってつながりません）','ng');
@@ -8883,9 +8972,11 @@ async function onlineStart(role, code){
     });
     // 作った側が仲介サーバーから外れたら、同じ合言葉のままつなぎ直す
     peer.on('disconnected',()=>{
-      if(Online.peer!==peer || peer.destroyed || role!=='host') return;
+      if(Online.peer!==peer || peer.destroyed) return;
+      if(role==='guest'){ if(!Online.connected) setTimeout(()=>{ try{ if(peer.disconnected && !peer.destroyed) peer.reconnect(); }catch(_){} },1000); return; }
       setTimeout(()=>{ try{ if(Online.peer===peer && peer.disconnected && !peer.destroyed) peer.reconnect(); }catch(_){} }, 1000);
     });
+    Online.tryConnect=tryConnect;
     peer.on('open',()=>{
       if(Online.peer!==peer) return;
       if(role==='host'){
@@ -8912,6 +9003,7 @@ function onlineLeave(quiet){
   try{ Online.peer && Online.peer.destroy(); }catch(_){}
   Online.peer=null; Online.conn=null; Online.role=null; Online.connected=false; Online.code=null; Online.hold=null;
   Online.proposal=null; Online.change=null; Online.peerCpu=false; closeProposal();
+  Online.unacked=null; Online.reconnecting=false; Online.rejoining=false; clearInterval(Online.beat); Online.beat=null; clearTimeout(Online.helloTimer);
   const cr=document.getElementById('onlineCodeRow'); if(cr) cr.style.display='none';
   if(!quiet) onlineUi('退出しました。部屋を作るか、合言葉で入ってください。');
   else onlineUi(document.getElementById('onlineState').textContent, 'ng');

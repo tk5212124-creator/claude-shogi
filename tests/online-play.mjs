@@ -297,6 +297,33 @@ if(!R['㉕入った側のCPUが指す']) R['㉕様子']={H:await H.p.evaluate(()
 R['㉕CPUの手のあと']=await same(G3p);
 await G3p.evaluate(()=>document.getElementById('autoYou').click());
 R['㉕エラー']=g3errs;
+// ㉖ 指した手の知らせが途中で消えても、返事が来ないので送り直して届く
+{ const P=(await H.p.evaluate(()=>turn===1))?H.p:G3p, O=P===H.p?G3p:H.p;
+  await P.evaluate(()=>{ window.ONLINE_DROP=(m,dir)=>dir==='out' && m.t==='move' && !window.__dropped && (window.__dropped=true); });
+  const t0=Date.now();
+  R['㉖1回目が消えても届く']=await pushPawn()? '届いた（'+Math.round((Date.now()-t0)/100)/10+'秒）' : '★届かない';
+  R['㉖消した回数']=await P.evaluate(()=>window.__dropped?1:0);
+  R['㉖盤']=await same(G3p);
+  await P.evaluate(()=>{ window.ONLINE_DROP=null; }); }
+// ㉗ 作った側が知らせもなく黙った（携帯の画面が消えたなど）。入った側は気づいてつなぎ直し、
+//     届いていなかった自分の手も渡してそろう
+if(await H.p.evaluate(()=>turn===1)) await pushPawn();
+await G3p.evaluate(()=>{ window.ONLINE_DEAD_MS=4000; });
+await H.p.evaluate(()=>{ window.ONLINE_DROP=()=>!window.__lift; });
+const hk=await H.p.evaluate(()=>kifu.length);
+{ const gp=await G3p.evaluate(()=>{ for(let r=NR-1;r>0;r--)for(let c=0;c<NC;c++){ const q=board[r][c]; if(q&&q.p===1&&q.t==='hP'&&!board[r-1][c]) return [r,c]; } });
+  await tap3(G3p,gp[0],gp[1]); await tap3(G3p,gp[0]-1,gp[1]); }
+R['㉗黙っている間は届かない']=await H.p.evaluate(k=>kifu.length===k?'届かない':'★届いた',hk);
+R['㉗入った側が気づく']=await until(G3p,()=>Online.reconnecting,8000)
+  ? await G3p.evaluate(()=>document.getElementById('status').textContent) : '★気づかない';
+R['㉗つなぎ直す間は指せない']=await G3p.evaluate(()=>Online.remoteTurn());
+await H.p.evaluate(()=>{ window.__lift=true; });
+R['㉗つなぎ直せる']=await until(G3p,()=>Online.connected && !Online.reconnecting && !Online.hold,20000);
+R['㉗届いていなかった手']=await until(H.p,k=>kifu.length===k+1,5000,hk)?'反映された':'★失われた';
+R['㉗盤']=await same(G3p);
+R['㉗続けて指せる']=await pushPawn();
+await H.p.evaluate(()=>{ window.ONLINE_DROP=null; });
+R['㉗エラー']=g3errs;
 // ⑰ 合言葉は6けたの数字。貼り付けた文字からも取り出せる
 R['⑰合言葉の形']=/^\d{6}$/.test(await H.p.evaluate(()=>Online.code))?'6けたの数字':'★'+(await H.p.evaluate(()=>Online.code));
 R['⑰取り出し']=await H.p.evaluate(()=>[onlineCodeFrom('123456'), onlineCodeFrom('合言葉 ６５４３２１ です'),
