@@ -6607,7 +6607,7 @@ const SFX = (function(){
       }
     },
     // ===== BGM：曲ファイルを流す（既定OFF） =====
-    // bgm/ の mp3 を <audio> で再生する。効果音のWebAudioとは別系統なので、
+    // bgm/ の mp3・m4a を <audio> で再生する。効果音のWebAudioとは別系統なので、
     // 「音・演出」を切ったときも stop() を通して必ず止める。
     // preload="none" なので、ONにするまで1バイトも読み込まない。
     bgm:{
@@ -6629,7 +6629,10 @@ const SFX = (function(){
         {f:'bgm/susume-monster-battle-2.mp3', n:'進め モンスターバトル 2'},
         {f:'bgm/banjo-battle.mp3',            n:'盤上バトル'},
         {f:'bgm/banjo-battle-2.mp3',          n:'盤上バトル 2'},
-        {f:'bgm/mudai.mp3',                   n:'Mudai'}
+        {f:'bgm/mudai.mp3',                   n:'Mudai'},
+        {f:'bgm/new-track-1.m4a',             n:'新しい曲 1'},
+        {f:'bgm/new-track-2.m4a',             n:'新しい曲 2'},
+        {f:'bgm/new-track-3.m4a',             n:'新しい曲 3'}
       ],
       _el(){
         if(this.el) return this.el;
