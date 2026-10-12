@@ -391,6 +391,27 @@
     display:none;align-items:center;justify-content:center;z-index:20;
   }
   .promo-modal.show{display:flex;}
+  /* 対局を始める前に、盤の上にルールと盤の設定を出す */
+  .start-card{position:absolute;left:0;right:0;top:0;min-height:100%;z-index:6;border-radius:18px;
+    background:rgba(8,6,18,.82);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;
+    padding:12px;box-sizing:border-box;}
+  .start-card[hidden]{display:none;}
+  .sc-box{width:100%;max-width:420px;text-align:left;font-size:.84rem;line-height:1.45;}
+  .sc-head{font-size:.72rem;color:var(--gold);letter-spacing:.2em;text-align:center;}
+  .sc-title{font-size:1.15rem;font-weight:700;text-align:center;margin:2px 0 8px;font-family:'Shippori Mincho',serif;}
+  .sc-rows{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin-bottom:8px;}
+  .sc-rows dt{color:var(--gold);white-space:nowrap;} .sc-rows dd{margin:0;}
+  .sc-chips{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0;}
+  .sc-chips span{padding:2px 7px;border-radius:999px;font-size:.74rem;border:1px solid rgba(255,255,255,.25);}
+  .sc-chips.on span{border-color:var(--sel);color:var(--sel);}
+  .sc-chips.off span{opacity:.55;text-decoration:line-through;}
+  .sc-lbl{font-size:.7rem;opacity:.8;margin-top:4px;}
+  .sc-off summary{font-size:.7rem;opacity:.8;margin-top:4px;cursor:pointer;}
+  .start-card #scGo{display:block;width:100%;margin-top:10px;}
+  #proposeBody .sc-rows,#proposeBody .sc-chips{text-align:left;font-size:.82rem;}
+  .hand-qty{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:14px;}
+  .hand-qty #handQty{min-width:2.4em;text-align:center;font-weight:700;font-size:1.4rem;}
+  .hand-acts{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;}
   .online-box .online-state{font-size:.86rem;line-height:1.5;margin:4px 0 10px;padding:8px 10px;border-radius:8px;
     background:rgba(0,0,0,.18);}
   .online-box .online-state.ok{color:#9be29b;} .online-box .online-state.ng{color:#ff9a9a;}
@@ -928,7 +949,16 @@
   <div class="sub" style="font-size:.62rem;color:#7d6e57;margin-top:-8px;">「編集ツール」で大局将棋 全209種＋成92種を配置できます</div>
 
   <div class="captured" id="capEnemy"><span class="lbl">相手</span></div>
-  <div class="board-wrap"><div class="board" id="board"></div><div id="fxLayer"></div></div>
+  <div class="board-wrap"><div class="board" id="board"></div><div id="fxLayer"></div>
+    <div class="start-card" id="startCard" hidden>
+      <div class="sc-box">
+        <div class="sc-head">この設定で対局します</div>
+        <div class="sc-title" id="scTitle"></div>
+        <div id="scBody"></div>
+        <button class="primary" id="scGo">この設定で始める</button>
+      </div>
+    </div>
+  </div>
   <div class="zukan-row"><button type="button" id="zukanBtn" title="選んだ駒の説明を見る">図鑑</button></div>
   <div class="captured" id="capYou"><span class="lbl">あなた</span></div>
 
@@ -1419,9 +1449,39 @@
       <label class="rule-row"><input type="checkbox" id="rPromoZone"> 敵陣に入ったら成れる</label>
       <label class="rule-row"><input type="checkbox" id="rPromoLast"> 敵陣の一番奥に着いたら成れる</label>
       <label class="rule-row"><input type="checkbox" id="rPromoCap"> 敵駒を取ったら成れる</label>
+      <p class="rule-note" style="margin:6px 0 2px;">オンライン対戦</p>
+      <label class="rule-row"><input type="checkbox" id="rOnlineCpu"> オンライン対戦で、自分の手番をCPUに指させてよい（OFFなら両者とも自分で指す）</label>
       <p class="rule-note">チェスの駒は編集モードの一覧から配置できます（キャスリング対応）。設定変更は次の指し手から反映されます。</p>
       <div class="pick-actions">
         <button class="primary" id="ruleClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="promo-modal" id="handModal">
+    <div class="promo-box">
+      <p id="handTitle">持ち駒</p>
+      <div class="hand-qty">
+        <button id="handMinus" class="qty-btn">−</button>
+        <span id="handQty">1</span>
+        <button id="handPlus" class="qty-btn">＋</button>
+      </div>
+      <div class="hand-acts">
+        <button id="handRemove">この駒を取り除く</button>
+        <button id="handInfo">説明を見る</button>
+        <button class="primary" id="handClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="promo-modal" id="proposeModal">
+    <div class="pick-box" style="max-width:min(92vw,420px);">
+      <p id="proposeTitle">変更の相談</p>
+      <div class="rule-note" id="proposeNote"></div>
+      <div id="proposeBody"></div>
+      <div class="pick-actions">
+        <button class="primary" id="proposeYes">許可する</button>
+        <button id="proposeNo">断る（元に戻す）</button>
       </div>
     </div>
   </div>
@@ -2789,6 +2849,7 @@ const RULES={
   palaceEscape:false,  // 九宮があっても、帥/將・仕/士が宮の外へ出られるようにする
   bikjang:false,       // ビッチャングン（チャンギ）：漢・楚が相対したまま解消できなければ引き分け
   janggiSetup:'std',   // チャンギの馬・象の並び：'std'|'in'|'left'|'right'
+  onlineCpu:false,     // オンライン対戦で、自分の手番をCPUに指させてよい
   xiangqiSennichite:false // シャンチー式の千日手判定（連続王手の反復は攻撃側の負け）
 };
 // ===== デバッグ情報の書き出し（棋譜・初期配置・ルール・現局面をテキスト化） =====
@@ -2861,7 +2922,7 @@ function debugReport(){
 function stateJSON(){
   ensurePts();
   const lay=a=>(a||[]).map(r=>r.map(x=>x?{t:x.t,p:x.p,o:x.o||undefined}:null));
-  return {v:2, NR,NC,PZ,turn,youAreSente,gameOver,RULES,
+  return {v:2, NR,NC,PZ,turn,youAreSente,gameOver,RULES,gameName,
     board:lay(board), pts:lay(ptsBoard), diag:cellDiag.map(r=>r.slice()),
     capYou:[...capYou], capEnemy:[...capEnemy],
     start: gameStartSnap? {board:lay(gameStartSnap.board), pts:lay(gameStartSnap.pts),
@@ -2923,7 +2984,9 @@ function loadState(text){
   updateSenteLabel(); syncSizeUI(); refreshAutoLabels(); refreshEditLabel();
   updateMultiBar(); updateEditBar(); updateReplayUI(); updatePlayPauseLabel();
   render();
+  gameName = d.gameName || '読み込んだ盤';
   setStatus('盤面データを読み込みました（'+(kifu.length?kifu.length+'手の棋譜つき・':'')+'▶ 開始 で続きから）','win');
+  showStartCard();
   return true;
 }
 // クリップボードへコピー（非対応環境ではテキスト選択でフォールバック）
@@ -4141,9 +4204,9 @@ function renderCap(id,arr,p){
     // 碁石・オセロ牌は駒面に文字が無いため、名前と枚数をテキストでも示す
     const needLabel = isGo(t) || t==='OTH';
     if(editing){
-      // 編集中：タップで説明、「−」で1枚減らす
-      d.title='タップで説明／−で1枚減らす';
-      d.onclick=()=>{ infoOnly=true; editCell=null; openPickList(); showPreview(t); };
+      // 編集中：タップで枚数を変える窓（取り除く・説明も）、「−」で1枚減らす
+      d.title='タップで枚数を変える／−で1枚減らす';
+      d.onclick=()=>openHandModal(p,t);
       const minus=document.createElement('span');
       minus.className='ct'; minus.textContent='−';
       minus.style.cssText='left:-2px;right:auto;background:#c0392b;cursor:pointer;';
@@ -4175,6 +4238,94 @@ function renderCap(id,arr,p){
     el.appendChild(add);
   }
 }
+
+/* ===== 編集中に持ち駒をタップしたときの枚数の窓 =====
+   ＋／−でその場で枚数を変える。「この駒を取り除く」で同じ種類をまとめて消す。 */
+let handCtx=null;
+function handArr(p){ return p===1? capYou : capEnemy; }
+function handCount(){ return handCtx? handArr(handCtx.p).filter(x=>x===handCtx.t).length : 0; }
+function openHandModal(p,t){
+  handCtx={p,t};
+  document.getElementById('handTitle').textContent=(p===1?'あなた':'相手')+'の持ち駒：'+(KANJI[t]||t);
+  updateHandModal();
+  document.getElementById('handModal').classList.add('show');
+}
+function updateHandModal(){
+  const n=handCount();
+  document.getElementById('handQty').textContent=n+'枚';
+  document.getElementById('handMinus').disabled = n<=1;
+}
+function closeHandModal(){ handCtx=null; document.getElementById('handModal').classList.remove('show'); }
+(function(){
+  const $=id=>document.getElementById(id);
+  $('handPlus').onclick=()=>{ if(!handCtx) return; const a=handArr(handCtx.p);
+    if(handCount()>=99) return; a.push(handCtx.t); render(); updateHandModal(); };
+  $('handMinus').onclick=()=>{ if(!handCtx||handCount()<=1) return; const a=handArr(handCtx.p);
+    a.splice(a.lastIndexOf(handCtx.t),1); render(); updateHandModal(); };
+  $('handRemove').onclick=()=>{ if(!handCtx) return; const {p,t}=handCtx;
+    const a=handArr(p); for(let i=a.length-1;i>=0;i--) if(a[i]===t) a.splice(i,1);
+    closeHandModal(); render(); setStatus((p===1?'あなた':'相手')+'の持ち駒から'+(KANJI[t]||t)+'を取り除きました'); };
+  $('handInfo').onclick=()=>{ if(!handCtx) return; const t=handCtx.t; closeHandModal();
+    infoOnly=true; editCell=null; openPickList(); showPreview(t); };
+  $('handClose').onclick=closeHandModal;
+  $('handModal').onclick=e=>{ if(e.target.id==='handModal') closeHandModal(); };
+})();
+
+/* ===== 対局を始める前に、盤の上にルールと盤の設定を出す =====
+   新しい対局になったとき（起動・プリセット・盤の大きさ・指し直し・初期配置に戻す・先後入替・
+   読み込み・編集を終えたとき・オンラインで盤を受け取ったとき）に出す。1手目を指すまで出しておける。
+   同じ中身を、オンラインで設定の変更を相談されたときの窓にも使う。 */
+let gameName='本将棋（9×9）';
+function ruleSummaryHTML(){
+  const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const PT_SHORT={auto:'囲碁・シャンチー・チャンギの駒は交点', crossCap:'囲碁などの駒は交点（斜めの通り道も取れる）',
+    cell:'すべてマスの中', point:'すべて交点', free:'マスにも交点にも置ける', freeMove:'マスにも交点にも常時進める'};
+  const online=typeof Online!=='undefined' && Online.connected;
+  const promo=[RULES.promoOnZone&&'敵陣に入る', RULES.promoOnLast&&'一番奥に着く', RULES.promoOnCapture&&'敵駒を取る'].filter(Boolean);
+  const ends=[RULES.captureAll&&'相手の駒を取り切る', RULES.endByScore&&'相手の点数が0になる',
+              RULES.endOnRoyalCapture&&'王を1枚取る'].filter(Boolean);
+  const rows=[
+    ['盤', NR+' 行 × '+NC+' 列'+(PZ?'（敵陣 '+PZ+' 段）':'（敵陣なし）')],
+    ['駒の置き方', PT_SHORT[RULES.pointMode]||RULES.pointMode],
+    ['先手', youAreSente?'あなた':'相手'],
+    ['あなた', autoYou?'CPU':'手動'],
+    ['相手', online? 'オンラインの相手'+(Online.peerCpu?'（CPU）':'') : (autoEnemy?'CPU':'手動')],
+    ['終わり方', ends.length? ends.join('・')+'（先に満たした方）' : '相手の王がいなくなったら'],
+    ['勝ち負け', RULES.scoreOnly? '点数の多い方の勝ち' : '終わらせた方の勝ち'],
+    ['成る', promo.length? promo.join('・') : 'なし（成らない）'],
+    ['千日手', {avoid:'4回目になる手は指せない', draw:'同一局面4回で引き分け', xiangqi:'シャンチー式', none:'制限なし'}[RULES.sennichiteMode]||RULES.sennichiteMode],
+  ];
+  if(RULES.drawNoMove||RULES.drawBothEnter) rows.push(['持将棋', RULES.jishogiMode==='draw'?'引き分け':'点数計算で決める']);
+  const flags=[['drops','持ち駒を打てる'],['keepPromoted','成ったまま持ち駒'],['nifu','二歩禁止'],['allowPass','パス'],
+    ['flyingGeneral','王不見王'],['palaceEscape','九宮の駒が宮の外へ'],['bikjang','ビッチャングン'],
+    ['repromote','もう一度成れる'],['randomPromote','ランダムに成る'],['randomIncludeSpecial','ランダムに特殊駒も'],
+    ['ranklessAsGeneral','格なし駒を一般駒扱い'],['capturedPoints','取った駒を点数に'],['checkPoints','王手で点数'],
+    ['drawNoMove','動けなければ持将棋'],['drawBothEnter','双方入玉で持将棋'],['onlineCpu','オンラインでCPU可']];
+  const on=flags.filter(f=>RULES[f[0]]).map(f=>f[1]), off=flags.filter(f=>!RULES[f[0]]).map(f=>f[1]);
+  const chips=a=>a.map(x=>'<span>'+esc(x)+'</span>').join('');
+  return '<dl class="sc-rows">'+rows.map(r=>'<dt>'+esc(r[0])+'</dt><dd>'+esc(r[1])+'</dd>').join('')+'</dl>'
+    +'<div class="sc-lbl">あり</div><div class="sc-chips on">'+(chips(on)||'<span>なし</span>')+'</div>'
+    +'<details class="sc-off"><summary>なしのルール（'+off.length+'）</summary><div class="sc-chips off">'+chips(off)+'</div></details>';
+}
+let startCardTimer=null;
+// 中身は今の処理が終わってから作る（プリセット適用のあとにルールを自動で切り替えるため）
+function showStartCard(){
+  clearTimeout(startCardTimer);
+  startCardTimer=setTimeout(()=>{
+    const el=document.getElementById('startCard'); if(!el) return;
+    if(kifu.length || gameOver || editing || replaying){ el.hidden=true; return; }
+    document.getElementById('scTitle').textContent=gameName;
+    document.getElementById('scBody').innerHTML=ruleSummaryHTML();
+    el.hidden=false;
+  },0);
+}
+function hideStartCard(){ clearTimeout(startCardTimer); const el=document.getElementById('startCard'); if(el) el.hidden=true; }
+document.getElementById('scGo').onclick=()=>{
+  hideStartCard();
+  // CPUが指す側があれば、そのまま対局を始める（▶ 開始 と同じ）
+  const online=typeof Online!=='undefined' && Online.connected;
+  if(!online && paused && !gameOver && (autoYou||autoEnemy)){ paused=false; updatePlayPauseLabel(); nextTurn(); }
+};
 
 /* ===== 盤のポインタ操作（タップ／長押しで編集モード／編集中はドラッグ移動） ===== */
 // 編集モードでの移動：(fr,fc)→(tr,tc)。移動先が空のときだけ移す。
@@ -4820,7 +4971,8 @@ function pushHistory(){
     capYou:[...capYou], capEnemy:[...capEnemy], to:null
   });
 }
-function recordKifu(rec){ kifu.push(rec); if(!renderThrottled()) updateReplayUI(); if(typeof onlineOnRecord==='function') onlineOnRecord(rec); }
+function recordKifu(rec){ kifu.push(rec);
+  if(kifu.length===1 && !(typeof Online!=='undefined' && Online.connected)) hideStartCard(); if(!renderThrottled()) updateReplayUI(); if(typeof onlineOnRecord==='function') onlineOnRecord(rec); }
 
 /* ===== 成り選択 ===== */
 document.getElementById('promoYes').onclick=()=>resolvePromo(true);
@@ -4866,8 +5018,10 @@ function nextTurn(){
   // 手番側が動けない・打てない → 持将棋 or 詰み
   if(!hasAnyLegalMove(turn)){ resolveNoMove(turn); return; }
   if(typeof Online!=='undefined' && Online.remoteTurn()){
-    setStatus(Online.hold ? '部屋を作った人が'+Online.hold+'です。終わるまで待ってください'
-                          : '相手の番です（相手が指すのを待っています）','think');
+    setStatus(!Online.hold ? '相手の番です（相手が指すのを待っています）'
+      : Online.role==='host' ? '相手が'+Online.hold+'です。返事を待っています'
+      : Online.proposal ? '部屋を作った人から変更の相談です。「許可する」か「断る」を選んでください'
+      : '部屋を作った人が'+Online.hold+'です。終わるまで待ってください','think');
     lastRibbonTurn=turn; return;
   }
   if(isAuto(turn) && paused){
@@ -7389,6 +7543,7 @@ function newGame(keepBoard){
   exitReplay(); stopAutoLoop();
   editing=false; multiSel=[];
   initState(keepBoard); refreshAutoLabels(); refreshEditLabel(); updateMultiBar(); updateEditBar(); updateReplayUI(); nextTurn();
+  showStartCard();
 }
 // 新規対局：今の駒配置を維持して指し直し（強制開始せず一時停止で待つ）
 document.getElementById('reset').onclick=()=>{
@@ -7418,6 +7573,7 @@ document.getElementById('swapSides').onclick=()=>{
   paused=true; updateReplayUI(); render(); updatePlayPauseLabel(); updateSenteLabel();
   const youAre = youAreSente ? 'あなたが先手' : 'あなたは後手（相手が先手）';
   setStatus('先後を入れ替えました（'+youAre+'）。▶ 開始 で対局（手番側が手動なら盤をタップ）');
+  showStartCard();
 };
 // 初期配置に戻す：対局の最初の一打目を打つ直前の盤面（編集した配置も含む）へ戻す
 document.getElementById('resetBoard').onclick=()=>{
@@ -7494,6 +7650,7 @@ function restoreSetup(){
   updateSenteLabel(); syncSizeUI();
   refreshAutoLabels(); refreshEditLabel(); updateMultiBar(); updateEditBar(); updateReplayUI();
   paused=true; render(); updatePlayPauseLabel();
+  showStartCard();
 }
 // builder() で盤(NR/NC/PZ含む)を作り直し、対局の進行状態をリセット（一時停止で待機）
 function newGameWithBoard(builder){
@@ -7510,6 +7667,7 @@ function newGameWithBoard(builder){
   updateSenteLabel(); syncSizeUI();
   refreshAutoLabels(); refreshEditLabel(); updateMultiBar(); updateEditBar(); updateReplayUI();
   paused=true; render(); updatePlayPauseLabel();
+  showStartCard();
 }
 // プリセットを選ぶと、そのゲームの推奨値に九宮チェックを切り替える（適用前なので変更可能）
 document.getElementById('presetSel').onchange=()=>{
@@ -7521,6 +7679,7 @@ document.getElementById('applyPresetBtn').onclick=()=>{
   const pzBefore=pzEl?+pzEl.value:null;
   const pzChanged=pzEl && document.getElementById('pzSel').dataset.touched==='1';
   newGameWithBoard(()=>applyPreset(key));
+  gameName = PRESET_LABELS[key] || ('空盤 '+NR+'×'+NC);
   if(pzChanged && pzBefore!==null) PZ=Math.min(pzBefore, NR);   // 手動指定があれば優先
   if(pzEl) pzEl.dataset.touched='';
   // 囲碁・オセロ・はさみ将棋は王を置かない代わりに「取り切るまで戦う」を自動ON
@@ -7570,6 +7729,7 @@ document.getElementById('applyPresetBtn').onclick=()=>{
     const pzEl=document.getElementById('pzSel'); const wantPZ=pzEl?+pzEl.value:null;
     const keepY=[...capYou], keepE=[...capEnemy];         // 持ち駒も残す
     newGameWithBoard(()=>{ resizeKeepPieces(rows, cols); capYou=keepY; capEnemy=keepE; });
+    gameName = gameName.replace(/（[^（]*）$/,'')+'（'+NR+'×'+NC+'に変更）';
     if(wantPZ!==null) PZ=Math.min(wantPZ, NR);
     if(pzEl) pzEl.dataset.touched='';
     syncSizeUI(); render();
@@ -7602,11 +7762,13 @@ function setEditing(on){
   if(on && typeof Online!=='undefined' && Online.connected && Online.role!=='host'){
     setStatus('部屋を作った人だけが盤を編集できます','think'); updateEditBar(); return; }
   if(typeof Online!=='undefined' && Online.connected && Online.role==='host'){
-    if(on) onlineSend({t:'hold', why:'盤を編集中'});   // 編集中は相手に指させない
-    else setTimeout(onlineSendState,0);               // 終わったら盤ごと送り直す（待ってね状態も解ける）
+    if(on && Online.proposal){ setStatus('相手の返事を待っています','think'); updateEditBar(); return; }
+    if(on){ onlineBeginChange(); onlineSend({t:'hold', why:'盤を編集中'}); }   // 編集中は相手に指させない
+    else setTimeout(()=>onlineCommitChange('盤の編集'),0);  // 終わったら送る（途中なら相手の許可を取る）
   }
   if(replaying) exitReplay();
   editing=on; sel=null; multiSel=[]; updateMultiBar(); stopAutoLoop(); updateEditBar();
+  if(editing) hideStartCard();
   if(editing){ render(); setStatus('編集中：盤のマスをタップ（説明／変更／プリセット配置）');
     // 盤が画面外だと何を編集するのか分からないため、盤までスクロールする
     const bw=document.querySelector('.board-wrap');
@@ -7620,7 +7782,9 @@ function setEditing(on){
       board: cloneLayer(board), pts: cloneLayer(ptsBoard),
       capYou: [...capYou], capEnemy: [...capEnemy]
     };
+    if(!/（編集あり）$/.test(gameName)) gameName+='（編集あり）';
     setStatus('編集を終了しました（「記憶した配置に戻す」で戻せます）'); nextTurn();
+    showStartCard();
   }
 }
 // アコーディオン開閉の配線
@@ -8283,6 +8447,7 @@ function openRuleModal(){
   document.getElementById('rJishogiMode').value=RULES.jishogiMode||'points';
   document.getElementById('rCapturedPoints').checked=!!RULES.capturedPoints;
   document.getElementById('rCheckPoints').checked=!!RULES.checkPoints;
+  document.getElementById('rOnlineCpu').checked=!!RULES.onlineCpu;
   document.getElementById('ruleModal').classList.add('show');
 }
 (function(){
@@ -8292,8 +8457,9 @@ function openRuleModal(){
   if(m) m.onclick=(e)=>{ if(e.target.id==='helpModal') m.classList.remove('show'); };
 })();
 document.getElementById('ruleBtn').onclick=openRuleModal;
-document.getElementById('ruleClose').onclick=()=>{ document.getElementById('ruleModal').classList.remove('show'); };
-document.getElementById('ruleModal').onclick=(e)=>{ if(e.target.id==='ruleModal') document.getElementById('ruleModal').classList.remove('show'); };
+document.getElementById('ruleClose').onclick=()=>{ document.getElementById('ruleModal').classList.remove('show'); showStartCard(); };
+// 外側を押して閉じたときも「閉じる」と同じにする（オンラインではここで相手に送る）
+document.getElementById('ruleModal').onclick=(e)=>{ if(e.target.id==='ruleModal') document.getElementById('ruleClose').onclick(); };
 document.getElementById('rDrops').onchange=e=>RULES.drops=e.target.checked;
 document.getElementById('rKeep').onchange=e=>RULES.keepPromoted=e.target.checked;
 document.getElementById('rNifu').onchange=e=>RULES.nifu=e.target.checked;
@@ -8344,6 +8510,7 @@ document.getElementById('rDrawBothEnter').onchange=e=>{ RULES.drawBothEnter=e.ta
 document.getElementById('rJishogiMode').onchange=e=>{ RULES.jishogiMode=e.target.value; };
 document.getElementById('rCapturedPoints').onchange=e=>{ RULES.capturedPoints=e.target.checked; };
 document.getElementById('rCheckPoints').onchange=e=>{ RULES.checkPoints=e.target.checked; };
+document.getElementById('rOnlineCpu').onchange=e=>{ RULES.onlineCpu=e.target.checked; };
 // 置く側トグル
 (function(){ const b=document.getElementById('sideToggle'); if(b) b.onclick=()=>{
   editSide=-editSide;
@@ -8419,6 +8586,7 @@ document.getElementById('playPause').onclick=()=>{
   if(replaying||editing) return;
   if(gameOver){ setStatus('対局は終了しています'); return; }
   paused=!paused;
+  if(!paused) hideStartCard();
   if(paused){ stopAutoLoop(); render(); updatePlayPauseLabel(); setStatus('一時停止しました','think'); }
   else { updatePlayPauseLabel(); nextTurn(); }
 };
@@ -8490,6 +8658,7 @@ function onlineUi(msg, kind){
   show('onlineResign', Online.connected && !gameOver);
   show('onlineLeave', Online.active);
   const cr=document.getElementById('onlineCreate'); if(cr) cr.style.display=Online.active?'none':'';
+  onlineSyncLocks();
 }
 /* ---- 向きを変える（相手の画面での見え方へ） ----
    マス (r,c) → (NR-1-r, NC-1-c)、交点 (r,c) → (NR-r, NC-c)。持ち主は反転。
@@ -8502,7 +8671,7 @@ function mirrorStateObj(d){
   const flip=(a,rows,cols)=>Array.from({length:rows},(_,r)=>Array.from({length:cols},(_,c)=>{
     const x=a&&a[rows-1-r]&&a[rows-1-r][cols-1-c];
     return x? {t:mirrorCode(x.t), p:-x.p, ...(x.o?{o:x.o}:{})} : null; }));
-  return {v:2, NR:R, NC:C, PZ:d.PZ, RULES:d.RULES,
+  return {v:2, NR:R, NC:C, PZ:d.PZ, RULES:d.RULES, gameName:d.gameName,
     turn:-d.turn, youAreSente:!d.youAreSente, gameOver:false,
     board:flip(d.board,R,C), pts:flip(d.pts,R+1,C+1),
     diag:Array.from({length:R},(_,r)=>Array.from({length:C},(_,c)=>(d.diag&&d.diag[R-1-r]&&d.diag[R-1-r][C-1-c])||null)),
@@ -8537,11 +8706,12 @@ function onlineSend(obj){ try{ if(Online.conn && Online.connected) Online.conn.s
 function onlineSendState(){
   if(Online.role!=='host' || !Online.connected) return;
   ensurePts();
+  if(typeof onlineEnforceCpu==='function'){ autoEnemy=false; if(autoYou && !RULES.onlineCpu){ autoYou=false; onlineSend({t:'cpu',on:false}); refreshAutoLabels(); } }
   const s=stateJSON(); delete s.kifu; delete s.start;
   // 千日手・王手点などの記録はここから数え直す（相手も読み込んだ時点から数える）
   posCount={}; repLog=[]; passStreak=0; checkCount={1:0,'-1':0};
   Online.ply=0;
-  onlineSend({t:'state', s});
+  onlineSend({t:'state', s, fresh: kifu.length===0 && !gameOver});   // fresh：まだ1手も指していない
   onlineUi('対戦中：あなたが部屋を作った側です（盤と設定を相手に送りました）','ok');
 }
 // 自分の手を棋譜に書いたところで相手へ送る（人の手はすべて recordKifu を通る）
@@ -8586,10 +8756,33 @@ function onlineOnData(msg){
     if(Online.conn) Online.conn._gotState=true;
     Online.hold=null;
     loadState(JSON.stringify(mirrorStateObj(msg.s)));
-    autoYou=false; autoEnemy=false; refreshAutoLabels();
-    Online.ply=0; paused=true;
+    Online.proposal=null; closeProposal();
+    // 送り直しの盤には棋譜が付かないので、始まる前かどうかは作った側の知らせで決める
+    if(msg.fresh===false) hideStartCard();
+    Online.ply=0; paused=true; onlineEnforceCpu();
     onlineUi('対戦中：部屋を作った人の盤と設定を受け取りました','ok');
     nextTurn();
+  }
+  // 対局の途中の変更：変えたあとの盤を見せて、許可するか聞く
+  else if(msg.t==='propose' && Online.role==='guest'){
+    loadState(JSON.stringify(mirrorStateObj(msg.s)));
+    Online.proposal={what:msg.what}; Online.hold='変更を相談中'; sel=null; paused=true; hideStartCard();
+    openProposal(msg.what);
+    onlineUi('部屋を作った人が「'+msg.what+'」をしたいそうです','ok');
+    nextTurn();
+  }
+  else if((msg.t==='agree'||msg.t==='refuse') && Online.role==='host' && Online.proposal){
+    const pr=Online.proposal; Online.proposal=null; Online.hold=null;
+    if(msg.t==='refuse') loadState(pr.before);       // 断られたら変える前に戻す
+    onlineEnforceCpu();
+    onlineSendState();
+    const m = msg.t==='agree' ? '相手が「'+pr.what+'」を許可しました' : '相手が「'+pr.what+'」を断ったので、元に戻しました';
+    onlineUi(m, msg.t==='agree'?'ok':'ng');
+    nextTurn(); setStatus(m, msg.t==='agree'?'win':'think');
+  }
+  else if(msg.t==='cpu'){
+    Online.peerCpu=!!msg.on;
+    onlineUi(msg.on?'相手は自分の手番をCPUに指させています':'相手は自分で指しています','ok');
   } else if(msg.t==='move'){ onlineApplyRemote(msg); onlineUi(document.getElementById('onlineState').textContent,'ok'); }
   else if(msg.t==='sync?' && Online.role==='host'){ onlineSendState(); }
   else if(msg.t==='resign'){
@@ -8597,11 +8790,28 @@ function onlineOnData(msg){
     onlineUi('相手が投了しました','ok');
   }
   else if(msg.t==='bye'){
-    Online.connected=false;
+    Online.connected=false; Online.proposal=null; Online.change=null; Online.hold=null; Online.peerCpu=false; closeProposal();
     onlineUi(Online.role==='host'?'相手が退出しました（同じURLを開き直してもらえば再開できます）':'部屋を作った人が退出しました','ng');
     setStatus('相手が退出しました','lose'); render(); updatePassBtn();
   }
 }
+function openProposal(what){
+  document.getElementById('proposeTitle').textContent='「'+what+'」の相談';
+  document.getElementById('proposeNote').textContent='部屋を作った人が対局の途中で「'+what+'」をしたいそうです。'
+    +'盤は変えたあとの形を表示しています。断ると元の盤に戻って続きから指せます。';
+  document.getElementById('proposeBody').innerHTML=ruleSummaryHTML();
+  document.getElementById('proposeModal').classList.add('show');
+}
+function closeProposal(){ const m=document.getElementById('proposeModal'); if(m) m.classList.remove('show'); }
+function onlineAnswer(yes){
+  if(!(Online.connected && Online.role==='guest' && Online.proposal)) return;
+  closeProposal();
+  onlineSend({t: yes?'agree':'refuse'});
+  onlineUi(yes?'許可しました。盤を受け取っています…':'断りました。元の盤を受け取っています…','ok');
+  // 返事を送ったあとも、部屋を作った人の盤が届くまでは指さない（届くと hold が解ける）
+}
+document.getElementById('proposeYes').onclick=()=>onlineAnswer(true);
+document.getElementById('proposeNo').onclick=()=>onlineAnswer(false);
 function onlineAttach(conn){
   if(Online.conn && Online.conn!==conn){ try{ Online.conn.close(); }catch(_){} }
   Online.conn=conn;
@@ -8624,7 +8834,7 @@ function onlineAttach(conn){
   conn.on('data', onlineOnData);
   conn.on('close',()=>{
     if(Online.conn!==conn || !conn._opened) return;   // つながる前に失敗した試行は「切れた」にしない
-    Online.connected=false;
+    Online.connected=false; Online.proposal=null; Online.change=null; Online.hold=null; Online.peerCpu=false; closeProposal();
     onlineUi(Online.role==='host'?'相手との接続が切れました（同じURLを開き直してもらえば再開できます）'
                                   :'部屋との接続が切れました（もう一度入り直してください）','ng');
     setStatus('オンライン対戦の接続が切れました','lose'); render();
@@ -8701,6 +8911,7 @@ function onlineLeave(quiet){
   try{ Online.conn && Online.conn.close(); }catch(_){}
   try{ Online.peer && Online.peer.destroy(); }catch(_){}
   Online.peer=null; Online.conn=null; Online.role=null; Online.connected=false; Online.code=null; Online.hold=null;
+  Online.proposal=null; Online.change=null; Online.peerCpu=false; closeProposal();
   const cr=document.getElementById('onlineCodeRow'); if(cr) cr.style.display='none';
   if(!quiet) onlineUi('退出しました。部屋を作るか、合言葉で入ってください。');
   else onlineUi(document.getElementById('onlineState').textContent, 'ng');
@@ -8709,31 +8920,93 @@ function onlineLeave(quiet){
 /* ---- オンライン中に使えない・ホストだけが使える操作 ----
    ゲストは盤や設定を変えられない（ホストの盤に揃える）。
    ホストが変えたら、その局面を相手に送り直す。待った・CPU操作は両者とも使えない。 */
+/* ---- 部屋を作った人だけが変えられるもの ----
+   入った側（ゲスト）では、盤・ルールを変えるものをすべて押せなくする。
+   作った側（ホスト）も、対局の途中で変えるときは相手の許可を取る（勝手に変えると不公平なので）。
+   変える前の局面を覚えておき、断られたらそこへ戻す。 */
+const ONLINE_HOST_ONLY=['presetSel','applyPresetBtn','rowRange','colRange','applySizeBtn','pzSel','ptSel',
+  'bsMakePalace','bsClearPalace','swapSides','reset','resetBoard','ruleBtn','loadBtn','accEditHead'];
+function onlineSyncLocks(){
+  const guest=Online.connected && Online.role==='guest';
+  ONLINE_HOST_ONLY.forEach(id=>{ const el=document.getElementById(id); if(!el) return;
+    el.disabled=guest; el.title = guest? '部屋を作った人だけが変えられます' : ''; });
+  document.querySelectorAll('#ruleModal input, #ruleModal select').forEach(el=>el.disabled=guest);
+}
+// 念のため：押せなくしたものが押されても、ゲストでは何もしない
+['click','change','pointerdown'].forEach(ev=>document.addEventListener(ev,e=>{
+  if(!(Online.connected && Online.role==='guest')) return;
+  const t=e.target && e.target.closest && e.target.closest(ONLINE_HOST_ONLY.map(id=>'#'+id).join(',')+',#ruleModal input,#ruleModal select');
+  if(!t) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  if(ev==='click') setStatus('部屋を作った人だけが変えられます','think');
+}, true));
+// 変える前を覚える（いちばん最初の1回だけ。編集やルール画面は開いてから閉じるまでが1つの変更）
+function onlineBeginChange(){
+  if(!(Online.connected && Online.role==='host') || Online.change) return;
+  Online.change={before:JSON.stringify(stateJSON()), mid: kifu.length>0 && !gameOver};
+}
+// 変え終わった：対局の途中なら相手の許可を待つ。始まる前・終わったあとならそのまま送る
+function onlineCommitChange(what){
+  const ch=Online.change; Online.change=null;
+  if(!(Online.connected && Online.role==='host')) return;
+  const now=stateJSON();
+  if(ch && ch.mid && JSON.stringify(now)!==ch.before){
+    Online.proposal={before:ch.before, what}; Online.hold='変更を確認中'; sel=null;
+    const ps={...now}; delete ps.kifu; delete ps.start;
+    onlineSend({t:'propose', what, s:ps});
+    onlineUi('相手に「'+what+'」の許可を求めています…','ok');
+    nextTurn(); return;
+  }
+  onlineSendState();
+}
 function onlineGuardButtons(){
-  const wrap=(id,policy,after)=>{
-    const el=document.getElementById(id); if(!el||!el.onclick) return;
-    const orig=el.onclick;
-    el.onclick=function(e){
+  const wrap=(id,policy,what,ev)=>{
+    const el=document.getElementById(id), key=ev||'onclick'; if(!el||!el[key]) return;
+    const orig=el[key];
+    el[key]=function(e){
       if(Online.connected){
         if(policy==='never'){ setStatus('オンライン対戦中は使えません','think'); return; }
         if(policy==='host' && Online.role!=='host'){ setStatus('部屋を作った人だけが変えられます','think'); return; }
+        if(policy==='host' && Online.proposal){ setStatus('相手の返事を待っています','think'); if(ev) syncSizeUI(); return; }
+        if(policy==='host') onlineBeginChange();
       }
       const r=orig.call(this,e);
-      if(Online.connected && Online.role==='host' && after) onlineSendState();
+      if(Online.connected && Online.role==='host' && what) onlineCommitChange(what);
       return r;
     };
   };
-  wrap('undo','never'); wrap('stepFwd','never'); wrap('autoYou','never'); wrap('autoEnemy','never');
+  wrap('undo','never'); wrap('stepFwd','never'); wrap('autoEnemy','never');
   wrap('playPause','never');
-  wrap('reset','host',true); wrap('swapSides','host',true); wrap('resetBoard','host',true);
-  wrap('applyPresetBtn','host',true); wrap('loadBtn','host',true);
-  wrap('ruleBtn','host',false); wrap('ruleClose','host',true);
+  wrap('reset','host','指し直し'); wrap('swapSides','host','先後入替'); wrap('resetBoard','host','初期配置に戻す');
+  wrap('applyPresetBtn','host','プリセットの変更'); wrap('loadBtn','host','読み込み');
+  wrap('applySizeBtn','host','盤の大きさの変更');
+  wrap('bsMakePalace','host','九宮をつくる'); wrap('bsClearPalace','host','宮マスを消す');
+  wrap('ptSel','host','駒の置き方の変更','onchange');
+  wrap('ruleBtn','host'); wrap('ruleClose','host','ルールの変更');
   // ルール画面を開いている間は相手に指させない（閉じると盤ごと送り直して解ける）
   const rb=document.getElementById('ruleBtn'), rbOrig=rb.onclick;
   rb.onclick=function(e){ const r=rbOrig.call(this,e);
     if(Online.connected && Online.role==='host' && document.getElementById('ruleModal').classList.contains('show'))
       onlineSend({t:'hold', why:'ルールを設定中'});
     return r; };
+  // 自分の手番をCPUに任せるのは、ルールで許したときだけ（相手の側はいつも相手が指す）
+  const ay=document.getElementById('autoYou'), ayOrig=ay.onclick;
+  ay.onclick=function(e){
+    if(Online.connected && !RULES.onlineCpu && !autoYou){ setStatus('この部屋はCPUを使えないルールです（ルール設定で変えられます）','think'); return; }
+    const r=ayOrig.call(this,e);
+    if(Online.connected){
+      if(autoYou){ paused=false; updatePlayPauseLabel(); nextTurn(); }
+      onlineSend({t:'cpu', on:autoYou});
+    }
+    return r;
+  };
+}
+// ルールでCPUが使えなくなったら止める
+function onlineEnforceCpu(){
+  autoEnemy=false;
+  if(autoYou && !RULES.onlineCpu){ autoYou=false; onlineSend({t:'cpu', on:false}); }
+  else if(autoYou) paused=false;
+  refreshAutoLabels();
 }
 (function(){
   const $=id=>document.getElementById(id);

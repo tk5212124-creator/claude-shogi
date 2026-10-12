@@ -28,7 +28,7 @@ const mk=async(url)=>{ const ctx=await b.newContext({viewport:{width:390,height:
   const errs=[]; p.on('pageerror',e=>errs.push(String(e))); await p.addInitScript(init); await p.goto(url); await p.waitForTimeout(700);
   await p.evaluate(()=>{ SFX.on=false; }); return {p,errs}; };
 const H=await mk('http://127.0.0.1:8123/shogi.html');
-const until=async(pg,fn,ms=8000)=>{ const t=Date.now(); while(Date.now()-t<ms){ if(await pg.evaluate(fn)) return true; await new Promise(r=>setTimeout(r,100)); } return false; };
+const until=async(pg,fn,ms=8000,arg)=>{ const t=Date.now(); while(Date.now()-t<ms){ if(await pg.evaluate(fn,arg)) return true; await new Promise(r=>setTimeout(r,100)); } return false; };
 await H.p.evaluate(()=>document.getElementById('onlineCreate').click());
 await until(H.p,()=>!!Online.code && document.getElementById('onlineCodeRow').style.display!=='none');
 const url=await H.p.evaluate(()=>document.getElementById('onlineUrl').value);
@@ -46,9 +46,9 @@ const norm=h=>({turn:h.turn, board:h.board.map(r=>r.map(x=>x?x.t+':'+x.p:null)),
   diag:h.diag, capYou:h.capYou.slice().sort().join(','), capEnemy:h.capEnemy.slice().sort().join(','), gameOver:h.gameOver});
 // 盤を送り直した直後は、届くまでのわずかな間だけ古い盤が見えることがある。
 // 3秒まで待ってそろえば「一致」。それでも違えば本当に食い違っている
-const same=async()=>{ let last='';
+const same=async(gp)=>{ let last=''; gp=gp||G.p;
   for(const t0=Date.now(); Date.now()-t0<3000; ){
-    const h=norm(await snap(H.p)), g=flipBack(await snap(G.p));
+    const h=norm(await snap(H.p)), g=flipBack(await snap(gp));
     const bad=[]; for(const k of Object.keys(h)) if(JSON.stringify(h[k])!==JSON.stringify(g[k])) bad.push(k);
     if(!bad.length) return '一致';
     last='★食い違い：'+bad.join(',');
@@ -56,6 +56,10 @@ const same=async()=>{ let last='';
   }
   return last; };
 R['①つながった直後の盤']=await same();
+// 対局の途中で作った側が設定を変えると、入った側に許可を求める窓が出る。ここでは許可して進める
+const approve=async(gp)=>{ gp=gp||G.p;
+  if(await until(gp,()=>document.getElementById('proposeModal').classList.contains('show'),2500))
+    await gp.evaluate(()=>document.getElementById('proposeYes').click()); };
 R['①ゲストの向き']=await G.p.evaluate(()=>({自分の玉:board[8][4]&&board[8][4].t+':'+board[8][4].p, 手番:turn, 状態:document.getElementById('status').textContent}));
 // ② ホストが歩を突く（画面のタップと同じ onCell を通す）
 const tap=(pg,r,c,pt)=>pg.evaluate(([r,c,pt])=>onCell(r,c,!!pt),[r,c,pt]);
@@ -86,6 +90,7 @@ await until(G.p,()=>turn===1);
 R['⑤角を打ったあと']=await same();
 // ⑥ ホストがプリセットを変えると送り直される（チェス）
 await H.p.evaluate(()=>{ document.getElementById('presetSel').value='chess'; document.getElementById('applyPresetBtn').click(); SFX.on=false; });
+await approve();
 await until(G.p,()=>NR===8 && Online.ply===0);
 R['⑥チェスに変えたあと']=await same();
 // ⑦ チェスの特殊な手：ホストのキャスリング（キング側）とゲストのアンパッサン
@@ -114,6 +119,7 @@ R['⑦棋譜に印']=await H.p.evaluate(()=>!!(kifu[kifu.length-1]||{}).enpassan
 R['⑦ゲスト側で取られたポーン']=await G.p.evaluate(()=>board[4][4]?'★残っている':'消えた');
 // ⑧ 囲碁：碁石の色が入れ替わっても同じ局面
 await H.p.evaluate(()=>{ document.getElementById('presetSel').value='go'; document.getElementById('applyPresetBtn').click(); SFX.on=false; });
+await approve();
 await until(G.p,()=>NR===19 && Online.ply===0);
 await H.p.evaluate(()=>{ sel={drop:true,t:'GOB',p:1}; }); await tap(H.p,3,3,true);
 await until(G.p,()=>turn===1);
@@ -123,6 +129,7 @@ R['⑧囲碁で1手ずつ']=await same();
 R['⑧ゲストの画面では自分の石が黒']=await G.p.evaluate(()=>{ const a=ptsBoard[16][16], b2=ptsBoard[15][15]; return {相手の石:a&&a.t+':'+a.p, 自分の石:b2&&b2.t+':'+b2.p}; });
 // ⑪ 先後入替（ホストだけ）：ゲストが先手になる
 await H.p.evaluate(()=>{ document.getElementById('presetSel').value='hon'; document.getElementById('applyPresetBtn').click(); SFX.on=false; });
+await approve();
 await until(G.p,()=>NR===9 && Online.ply===0);
 await H.p.evaluate(()=>document.getElementById('swapSides').click());
 await until(G.p,()=>Online.ply===0 && turn===1);
@@ -160,6 +167,7 @@ await tap(G.p,6,0); await tap(G.p,5,0);
 R['⑮編集中はゲストが指せない']={状態:await G.p.evaluate(()=>document.getElementById('status').textContent),
   盤:(await G.p.evaluate(()=>JSON.stringify(board)))===gB?'動かない':'★動いた'};
 await H.p.evaluate(()=>{ board[4][4]={t:'hR',p:1}; board[4][5]={t:'hB',p:-1}; setEditing(false); });
+await approve();
 await until(G.p,()=>Online.ply===0 && board[4][4] && board[4][4].t==='hR');
 R['⑮盤を編集したあと']=await same();
 R['⑮編集が終わると指せる']=await G.p.evaluate(()=>Online.hold===null && !Online.remoteTurn());
@@ -169,10 +177,12 @@ await H.p.evaluate(()=>document.getElementById('ruleBtn').click());
 await until(G.p,()=>!!Online.hold);
 R['⑮ルール画面を開いている間']=await G.p.evaluate(()=>document.getElementById('status').textContent);
 await H.p.evaluate(()=>{ const cb=document.getElementById('rNifu'); cb.checked=!cb.checked; cb.dispatchEvent(new Event('change')); document.getElementById('ruleClose').click(); });
+await approve();
 await new Promise(r=>setTimeout(r,600));
 R['⑮ルール設定（二歩）がそろう']={ホスト:await H.p.evaluate(()=>RULES.nifu), ゲスト:await G.p.evaluate(()=>RULES.nifu),
   閉じたら指せる:await G.p.evaluate(()=>Online.hold===null)};
 await H.p.evaluate(()=>{ document.getElementById('presetSel').value='mini'; document.getElementById('applyPresetBtn').click(); SFX.on=false; });
+await approve();
 await until(G.p,()=>NR===5 && Online.ply===0);
 R['⑮盤の大きさを変えたあと']=await same();
 // ⑬' ランダムに成った先が碁石だった場合（たまにしか起きないので、成り先を決めて確かめる）
@@ -224,6 +234,69 @@ R['⑯合言葉で入れる']=await until(G3p,()=>Online.connected && !Online.ho
 const h3=norm(await snap(H.p)), g3=flipBack(await snap(G3p));
 R['⑯入ったあとの盤']=JSON.stringify(h3.board)===JSON.stringify(g3.board)?'一致':'★食い違い';
 R['⑯エラー']=g3errs;
+// ㉑ 入った側は盤の設定（プリセット・大きさ・置き方・九宮・編集・ルール）を変えられない
+await H.p.evaluate(()=>{ document.getElementById('presetSel').value='hon'; document.getElementById('applyPresetBtn').click(); SFX.on=false; });
+await until(G3p,()=>NR===9 && !Online.hold);
+R['㉑入った側で押せないもの']=await G3p.evaluate(()=>['presetSel','applyPresetBtn','rowRange','colRange','applySizeBtn','pzSel','ptSel',
+  'bsMakePalace','bsClearPalace','swapSides','reset','resetBoard','ruleBtn','loadBtn','accEditHead']
+  .filter(id=>!document.getElementById(id).disabled).map(id=>'★'+id).join(' ')||'すべて押せない');
+await G3p.evaluate(()=>{ const rr=document.getElementById('rowRange'); rr.value='5';
+  document.getElementById('applySizeBtn').click(); document.getElementById('bsMakePalace').click();
+  const pt=document.getElementById('ptSel'); pt.value='cell'; pt.dispatchEvent(new Event('change',{bubbles:true}));
+  document.getElementById('accEditHead').click(); });
+await new Promise(r=>setTimeout(r,400));
+R['㉑押そうとしても変わらない']={盤:await G3p.evaluate(()=>NR+'×'+NC), 置き方:await G3p.evaluate(()=>RULES.pointMode),
+  編集:await G3p.evaluate(()=>editing?'★編集できた':'できない'), 揃っている:await same(G3p)};
+// ㉒ 1手も指していないうちの変更は、許可なしでそのまま届く。始める前の画面がゲストにも出る
+await H.p.evaluate(()=>{ document.getElementById('presetSel').value='mini'; document.getElementById('applyPresetBtn').click(); SFX.on=false; });
+await until(G3p,()=>NR===5 && !Online.hold);
+R['㉒始まる前の変更']={許可の窓:await G3p.evaluate(()=>document.getElementById('proposeModal').classList.contains('show')?'★出た':'出ない'),
+  盤:await same(G3p), 始める前の画面:await G3p.evaluate(()=>document.getElementById('startCard').hidden?'★出ない':document.getElementById('scTitle').textContent)};
+// ㉓ 対局の途中の変更は、相手の許可が要る。断ると元に戻る
+const tap3=(pg,r,c)=>pg.evaluate(([r,c])=>onCell(r,c,false),[r,c]);
+// 手番の側が歩を1つ前へ（⑪で先後を入れ替えたので、どちらが先かは盤から見る）
+const pushPawn=async()=>{ const P=(await H.p.evaluate(()=>turn===1))?H.p:G3p;
+  const hp=await P.evaluate(()=>{ for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const q=board[r][c]; if(q&&q.p===1&&q.t==='hP'&&r>0&&!board[r-1][c]) return [r,c]; } });
+  const O=P===H.p?G3p:H.p, k0=await O.evaluate(()=>kifu.length);
+  await tap3(P,hp[0],hp[1]); await tap3(P,hp[0]-1,hp[1]);
+  return await until(O,k=>kifu.length>k,5000,k0); };
+R['㉓1手指す']=await pushPawn()?'指した':'★指せない';
+await H.p.evaluate(()=>{ document.getElementById('presetSel').value='hon'; document.getElementById('applyPresetBtn').click(); SFX.on=false; });
+R['㉓途中で変えると相談の窓']=await until(G3p,()=>document.getElementById('proposeModal').classList.contains('show'),5000)
+  ? await G3p.evaluate(()=>document.getElementById('proposeTitle').textContent) : '★出ない';
+R['㉓返事を待つ間']={作った側:await H.p.evaluate(()=>document.getElementById('status').textContent),
+  見せている盤:await G3p.evaluate(()=>NR+'×'+NC), 入った側は指せない:await G3p.evaluate(()=>Online.remoteTurn())};
+await G3p.evaluate(()=>document.getElementById('proposeNo').click());
+await until(H.p,()=>NR===5 && !Online.proposal);
+await until(G3p,()=>NR===5 && !Online.hold);
+R['㉓断ると元に戻る']={作った側:await H.p.evaluate(()=>NR+'×'+NC+' 棋譜'+kifu.length+'手'), 盤:await same(G3p),
+  状態:await H.p.evaluate(()=>document.getElementById('status').textContent),
+  始める前の画面:await G3p.evaluate(()=>document.getElementById('startCard').hidden?'出ない':'★出た')};
+R['㉓断ったあと続けて指せる']=await pushPawn();
+await H.p.evaluate(()=>{ document.getElementById('presetSel').value='hon'; document.getElementById('applyPresetBtn').click(); SFX.on=false; });
+await approve(G3p);
+await until(G3p,()=>NR===9 && !Online.hold);
+R['㉓許可すると変わる']={盤:await same(G3p), 大きさ:await H.p.evaluate(()=>NR+'×'+NC), 待ちが解ける:await H.p.evaluate(()=>!Online.hold && !Online.proposal)};
+// ㉕ CPUを使えるかはルールで決める
+await G3p.evaluate(()=>document.getElementById('autoYou').click());
+R['㉕使えないルールのとき']={状態:await G3p.evaluate(()=>document.getElementById('status').textContent), CPU:await G3p.evaluate(()=>autoYou)};
+await H.p.evaluate(()=>{ document.getElementById('ruleBtn').click(); const cb=document.getElementById('rOnlineCpu');
+  cb.checked=true; cb.dispatchEvent(new Event('change')); document.getElementById('ruleClose').click(); });
+await until(G3p,()=>RULES.onlineCpu && !Online.hold);
+await G3p.evaluate(()=>document.getElementById('autoYou').click());
+R['㉕使えるルールのとき']=await G3p.evaluate(()=>autoYou);
+await G3p.evaluate(()=>document.getElementById('autoEnemy').click());
+R['㉕相手側はCPUにできない']=await G3p.evaluate(()=>autoEnemy?'★できた':'できない');
+await until(H.p,()=>Online.peerCpu===true,3000);
+R['㉕相手がCPUと分かる']=await H.p.evaluate(()=>document.getElementById('onlineState').textContent);
+// 作った側の番なら作った側が指す。入った側の番になればCPUが指す
+if(await H.p.evaluate(()=>turn===1)) await pushPawn();
+R['㉕入った側のCPUが指す']=await until(H.p,()=>kifu.some(k=>k.side===-1), 15000);
+if(!R['㉕入った側のCPUが指す']) R['㉕様子']={H:await H.p.evaluate(()=>({turn,k:kifu.length,st:document.getElementById('status').textContent})),
+  G:await G3p.evaluate(()=>({turn,autoYou,paused,hold:Online.hold,k:kifu.length,st:document.getElementById('status').textContent}))};
+R['㉕CPUの手のあと']=await same(G3p);
+await G3p.evaluate(()=>document.getElementById('autoYou').click());
+R['㉕エラー']=g3errs;
 // ⑰ 合言葉は6けたの数字。貼り付けた文字からも取り出せる
 R['⑰合言葉の形']=/^\d{6}$/.test(await H.p.evaluate(()=>Online.code))?'6けたの数字':'★'+(await H.p.evaluate(()=>Online.code));
 R['⑰取り出し']=await H.p.evaluate(()=>[onlineCodeFrom('123456'), onlineCodeFrom('合言葉 ６５４３２１ です'),
