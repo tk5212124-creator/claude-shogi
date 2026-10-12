@@ -2986,7 +2986,7 @@ function loadState(text){
   render();
   gameName = d.gameName || '読み込んだ盤';
   setStatus('盤面データを読み込みました（'+(kifu.length?kifu.length+'手の棋譜つき・':'')+'▶ 開始 で続きから）','win');
-  showStartCard();
+  refreshStartCard();
   return true;
 }
 // クリップボードへコピー（非対応環境ではテキスト選択でフォールバック）
@@ -4272,8 +4272,9 @@ function closeHandModal(){ handCtx=null; document.getElementById('handModal').cl
 })();
 
 /* ===== 対局を始める前に、盤の上にルールと盤の設定を出す =====
-   新しい対局になったとき（起動・プリセット・盤の大きさ・指し直し・初期配置に戻す・先後入替・
-   読み込み・編集を終えたとき・オンラインで盤を受け取ったとき）に出す。1手目を指すまで出しておける。
+   ▶ 開始 を押したときに出し、「この設定で始める」で対局を始める（出しっぱなしだと盤の設定や
+   駒の配置をいじれないので、準備中は出さない）。オンラインでは相手とつながったらすぐ出す。
+   出ている間に設定が変わったら中身を作り直す（refreshStartCard）。
    同じ中身を、オンラインで設定の変更を相談されたときの窓にも使う。 */
 let gameName='本将棋（9×9）';
 function ruleSummaryHTML(){
@@ -4319,12 +4320,13 @@ function showStartCard(){
     el.hidden=false;
   },0);
 }
+function refreshStartCard(){ const el=document.getElementById('startCard'); if(el && !el.hidden) showStartCard(); }
 function hideStartCard(){ clearTimeout(startCardTimer); const el=document.getElementById('startCard'); if(el) el.hidden=true; }
 document.getElementById('scGo').onclick=()=>{
   hideStartCard();
-  // CPUが指す側があれば、そのまま対局を始める（▶ 開始 と同じ）
+  // ▶ 開始 から出したときは、ここで対局を始める
   const online=typeof Online!=='undefined' && Online.connected;
-  if(!online && paused && !gameOver && (autoYou||autoEnemy)){ paused=false; updatePlayPauseLabel(); nextTurn(); }
+  if(!online && paused && !gameOver){ paused=false; updatePlayPauseLabel(); nextTurn(); }
 };
 
 /* ===== 盤のポインタ操作（タップ／長押しで編集モード／編集中はドラッグ移動） ===== */
@@ -7544,7 +7546,7 @@ function newGame(keepBoard){
   exitReplay(); stopAutoLoop();
   editing=false; multiSel=[];
   initState(keepBoard); refreshAutoLabels(); refreshEditLabel(); updateMultiBar(); updateEditBar(); updateReplayUI(); nextTurn();
-  showStartCard();
+  refreshStartCard();
 }
 // 新規対局：今の駒配置を維持して指し直し（強制開始せず一時停止で待つ）
 document.getElementById('reset').onclick=()=>{
@@ -7574,7 +7576,7 @@ document.getElementById('swapSides').onclick=()=>{
   paused=true; updateReplayUI(); render(); updatePlayPauseLabel(); updateSenteLabel();
   const youAre = youAreSente ? 'あなたが先手' : 'あなたは後手（相手が先手）';
   setStatus('先後を入れ替えました（'+youAre+'）。▶ 開始 で対局（手番側が手動なら盤をタップ）');
-  showStartCard();
+  refreshStartCard();
 };
 // 初期配置に戻す：対局の最初の一打目を打つ直前の盤面（編集した配置も含む）へ戻す
 document.getElementById('resetBoard').onclick=()=>{
@@ -7651,7 +7653,7 @@ function restoreSetup(){
   updateSenteLabel(); syncSizeUI();
   refreshAutoLabels(); refreshEditLabel(); updateMultiBar(); updateEditBar(); updateReplayUI();
   paused=true; render(); updatePlayPauseLabel();
-  showStartCard();
+  refreshStartCard();
 }
 // builder() で盤(NR/NC/PZ含む)を作り直し、対局の進行状態をリセット（一時停止で待機）
 function newGameWithBoard(builder){
@@ -7668,7 +7670,7 @@ function newGameWithBoard(builder){
   updateSenteLabel(); syncSizeUI();
   refreshAutoLabels(); refreshEditLabel(); updateMultiBar(); updateEditBar(); updateReplayUI();
   paused=true; render(); updatePlayPauseLabel();
-  showStartCard();
+  refreshStartCard();
 }
 // プリセットを選ぶと、そのゲームの推奨値に九宮チェックを切り替える（適用前なので変更可能）
 document.getElementById('presetSel').onchange=()=>{
@@ -7785,7 +7787,7 @@ function setEditing(on){
     };
     if(!/（編集あり）$/.test(gameName)) gameName+='（編集あり）';
     setStatus('編集を終了しました（「記憶した配置に戻す」で戻せます）'); nextTurn();
-    showStartCard();
+    refreshStartCard();
   }
 }
 // アコーディオン開閉の配線
@@ -8458,7 +8460,7 @@ function openRuleModal(){
   if(m) m.onclick=(e)=>{ if(e.target.id==='helpModal') m.classList.remove('show'); };
 })();
 document.getElementById('ruleBtn').onclick=openRuleModal;
-document.getElementById('ruleClose').onclick=()=>{ document.getElementById('ruleModal').classList.remove('show'); showStartCard(); };
+document.getElementById('ruleClose').onclick=()=>{ document.getElementById('ruleModal').classList.remove('show'); refreshStartCard(); };
 // 外側を押して閉じたときも「閉じる」と同じにする（オンラインではここで相手に送る）
 document.getElementById('ruleModal').onclick=(e)=>{ if(e.target.id==='ruleModal') document.getElementById('ruleClose').onclick(); };
 document.getElementById('rDrops').onchange=e=>RULES.drops=e.target.checked;
@@ -8586,6 +8588,8 @@ document.getElementById('undo').onclick=()=>{
 document.getElementById('playPause').onclick=()=>{
   if(replaying||editing) return;
   if(gameOver){ setStatus('対局は終了しています'); return; }
+  // まだ1手も指していなければ、始める前にルールと盤の設定を見せる（「この設定で始める」で開始）
+  if(paused && kifu.length===0 && document.getElementById('startCard').hidden){ showStartCard(); return; }
   paused=!paused;
   if(!paused) hideStartCard();
   if(paused){ stopAutoLoop(); render(); updatePlayPauseLabel(); setStatus('一時停止しました','think'); }
@@ -8774,7 +8778,9 @@ function onlineOnData(msg){
     clearTimeout(Online.helloTimer);
     const pm=msg.pending;
     if(pm && pm.t==='move' && pm.n===Online.ply && turn===-1 && !gameOver) onlineApplyRemote(pm);
-    onlineSendState(); nextTurn(); return;
+    onlineSendState(); nextTurn();
+    if(kifu.length===0 && !gameOver) showStartCard();   // つながったら、始める前の設定を見せる
+    return;
   }
   if(msg.t==='hold' && Online.role==='guest'){
     Online.hold=msg.why||'設定中'; sel=null; render(); nextTurn(); return;
@@ -8785,7 +8791,7 @@ function onlineOnData(msg){
     loadState(JSON.stringify(mirrorStateObj(msg.s)));
     Online.proposal=null; closeProposal();
     // 送り直しの盤には棋譜が付かないので、始まる前かどうかは作った側の知らせで決める
-    if(msg.fresh===false) hideStartCard();
+    if(msg.fresh) showStartCard(); else hideStartCard();
     Online.ply=0; paused=true; onlineEnforceCpu();
     onlineUi('対戦中：部屋を作った人の盤と設定を受け取りました','ok');
     nextTurn();
@@ -8897,7 +8903,8 @@ function onlineAttach(conn){
     if(Online.role==='host'){
       // 入った側の挨拶（届いていない手があればそれも）を待ってから盤を送る。来なければ1.5秒で送る
       clearTimeout(Online.helloTimer);
-      Online.helloTimer=setTimeout(()=>{ if(Online.conn===conn){ onlineSendState(); nextTurn(); } },1500);
+      Online.helloTimer=setTimeout(()=>{ if(Online.conn===conn){ onlineSendState(); nextTurn();
+        if(kifu.length===0 && !gameOver) showStartCard(); } },1500);
     }
     else {
       onlineSend({t:'hello', pending: Online.unacked? Online.unacked.msg : null});

@@ -56,6 +56,10 @@ const same=async(gp)=>{ let last=''; gp=gp||G.p;
   }
   return last; };
 R['①つながった直後の盤']=await same();
+// つながったら、どちらの画面にもすぐ「この設定で対局します」が出る（オンラインでは ▶ 開始 を押さない）
+R['①始める前の画面']={作った側:await until(H.p,()=>!document.getElementById('startCard').hidden,3000)?'出る':'★出ない',
+  入った側:await until(G.p,()=>!document.getElementById('startCard').hidden,3000)?'出る':'★出ない'};
+await H.p.evaluate(()=>document.getElementById('scGo').click()); await G.p.evaluate(()=>document.getElementById('scGo').click());
 // 対局の途中で作った側が設定を変えると、入った側に許可を求める窓が出る。ここでは許可して進める
 const approve=async(gp)=>{ gp=gp||G.p;
   if(await until(gp,()=>document.getElementById('proposeModal').classList.contains('show'),2500))
