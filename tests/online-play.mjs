@@ -328,6 +328,28 @@ R['㉗盤']=await same(G3p);
 R['㉗続けて指せる']=await pushPawn();
 await H.p.evaluate(()=>{ window.ONLINE_DROP=null; });
 R['㉗エラー']=g3errs;
+// ㉘ 手が相手の盤で通らなかったとき：作った側が盤を送り直し、入った側はその手を送り直し続けない（前は繰り返した）
+{ if(await H.p.evaluate(()=>turn===1)) await pushPawn();
+  // 入った側の番。入った側が動かす歩を、作った側の盤からだけこっそり消す（食い違いを作る）
+  const gp=await G3p.evaluate(()=>{ for(let r=NR-1;r>0;r--)for(let c=0;c<NC;c++){ const q=board[r][c]; if(q&&q.p===1&&q.t==='hP'&&!board[r-1][c]) return [r,c]; } });
+  await H.p.evaluate(([r,c])=>{ board[NR-1-r][NC-1-c]=null; },gp);
+  await G3p.evaluate(()=>{ window.__states=0; const o=onlineOnData; window.onlineOnData=o;
+    Online.conn.on('data',m=>{ if(m&&m.t==='state') window.__states++; }); });
+  await tap3(G3p,gp[0],gp[1]); await tap3(G3p,gp[0]-1,gp[1]);
+  await new Promise(r=>setTimeout(r,9000));
+  R['㉘通らなかった手のあと']={盤を受け取った回数:await G3p.evaluate(()=>window.__states), 盤:await same(G3p),
+    返事待ちの手:await G3p.evaluate(()=>Online.unacked?'★残っている':'無い')};
+  R['㉘記録']=await H.p.evaluate(()=>{ const d=(Online.diverge||[]).slice(-1)[0]; return d? {理由:d.why, 手:!!d.rec, 相手の盤:!!d.theirs} : '★無い'; });
+  R['㉘デバッグ情報に載る']=await H.p.evaluate(()=>debugReport().includes('盤が食い違った記録')?'載る':'★載らない');
+  R['㉘続けて指せる']=await pushPawn(); }
+// ㉙ 手数は同じなのに盤が違う（どこかでずれた）：合図の指紋で気づいて送り直す
+{ await G3p.evaluate(()=>{ for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const q=board[r][c]; if(q&&q.p===-1&&q.t==='hP'){ board[r][c]=null; render(); return; } } });
+  R['㉙ずれた直後']=(await G3p.evaluate(()=>0), (await (async()=>{ const h=norm(await snap(H.p)), g=flipBack(await snap(G3p)); return JSON.stringify(h.board)!==JSON.stringify(g.board); })()) ? '盤が違う（わざとずらした）' : '★ずれていない');
+  const ok=await until(H.p,()=>(Online.diverge||[]).some(d=>/盤の確かめ合い/.test(d.why)),15000);
+  R['㉙気づく']=ok?'気づいた':'★気づかない';
+  R['㉙そろう']=await same(G3p);
+  R['㉙続けて指せる']=await pushPawn(); }
+R['㉙エラー']=g3errs;
 // ⑰ 合言葉は6けたの数字。貼り付けた文字からも取り出せる
 R['⑰合言葉の形']=/^\d{6}$/.test(await H.p.evaluate(()=>Online.code))?'6けたの数字':'★'+(await H.p.evaluate(()=>Online.code));
 R['⑰取り出し']=await H.p.evaluate(()=>[onlineCodeFrom('123456'), onlineCodeFrom('合言葉 ６５４３２１ です'),

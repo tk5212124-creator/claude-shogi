@@ -2915,6 +2915,12 @@ function debugReport(){
   try{
     L.push(JSON.stringify(stateJSON()));
   }catch(e){ L.push('(JSON化に失敗: '+e.message+')'); }
+  // オンライン対戦で盤が食い違ったときの記録（両方の盤。どこでずれたかを調べるため）
+  if(typeof Online!=='undefined' && Online.diverge && Online.diverge.length){
+    L.push('');
+    L.push('--- オンライン：盤が食い違った記録（新しい順・最大3件）---');
+    Online.diverge.slice(-3).reverse().forEach(d=>{ try{ L.push(JSON.stringify(d)); }catch(_){ } });
+  }
   return L.join('\n');
 }
 // ===== 盤面データ（保存・復元） =====
@@ -8718,20 +8724,22 @@ function onlineSendState(){
   const s=stateJSON(); delete s.kifu; delete s.start;
   // 千日手・王手点などの記録はここから数え直す（相手も読み込んだ時点から数える）
   posCount={}; repLog=[]; passStreak=0; checkCount={1:0,'-1':0};
-  Online.ply=0; Online.unacked=null; Online.mis=0;
-  onlineSend({t:'state', s, fresh: kifu.length===0 && !gameOver});   // fresh：まだ1手も指していない
+  Online.ply=0; Online.unacked=null; Online.mis=0; Online.epoch=(Online.epoch||0)+1;
+  onlineSend({t:'state', e:Online.epoch, s, fresh: kifu.length===0 && !gameOver});   // fresh：まだ1手も指していない
   onlineUi('対戦中：あなたが部屋を作った側です（盤と設定を相手に送りました）','ok');
 }
 // 自分の手を棋譜に書いたところで相手へ送る（人の手はすべて recordKifu を通る）
 function onlineOnRecord(rec){
   if(!Online.connected || rec.side!==1) return;
-  const msg={t:'move', k:rec, n:Online.ply, rules:(Online.role==='host'? RULES : undefined)};
+  const msg={t:'move', e:Online.epoch, k:rec, n:Online.ply, rules:(Online.role==='host'? RULES : undefined)};
   // 届いたと返事が来るまで覚えておき、来なければ送り直す
   Online.unacked={msg, at:Date.now()};
   onlineSend(msg);
   Online.ply++;
 }
 function onlineApplyRemote(msg){
+  // 盤を送り直す前に指された手（古い盤の手）は捨てる
+  if(msg.e!==undefined && Online.epoch!==undefined && msg.e!==Online.epoch) return;
   // 送り直しで同じ手が2度届いた：もう反映してあるので、届いたと返すだけ
   if(typeof msg.n==='number' && msg.n<Online.ply){ onlineSend({t:'ack', n:msg.n}); return; }
   if(msg.n!==Online.ply){ onlineDesync('手数が合いません（'+msg.n+' と '+Online.ply+'）'); return; }
@@ -8751,15 +8759,39 @@ function onlineApplyRemote(msg){
   } else {
     const m=recToMove(k);
     // 受け取った手もこちらで合法かを確かめる。通らない手は盤に反映しない
-    if(!isLegalMove(m, me)){ onlineDesync('相手の手がこちらの盤では指せない手でした'); return; }
+    if(!isLegalMove(m, me)){ onlineDesync('相手の手がこちらの盤では指せない手でした', msg.k); return; }
     applyMoveSilent(me, m);
   }
   onlineSend({t:'ack', n:msg.n});
   afterPlayer();
 }
-function onlineDesync(why){
-  if(Online.role==='host'){ setStatus('相手と盤が食い違ったので送り直しました（'+why+'）','think'); onlineSendState(); render(); }
-  else { setStatus('部屋を作った人と盤が食い違ったので、送り直してもらいます（'+why+'）','think'); onlineSend({t:'sync?'}); }
+function onlineDesync(why, rec){
+  onlineNoteDiverge(why, rec);
+  if(Online.role==='host'){
+    onlineSend({t:'dump?', why});          // 先に相手の盤を送ってもらう（記録用。盤を送り直す前の形）
+    setStatus('相手と盤が食い違ったので、こちらの盤を送り直しました（'+why+'）','think'); onlineSendState(); render(); }
+  else {
+    onlineSend({t:'dump', why, s:stateJSON()});
+    setStatus('部屋を作った人と盤が食い違ったので、送り直してもらいます（'+why+'）','think'); onlineSend({t:'sync?'}); }
+}
+// 食い違いの記録（デバッグ情報に載せる）。自分の盤と、届いた相手の盤
+function onlineNoteDiverge(why, rec, theirs){
+  const d={at:new Date().toISOString(), role:Online.role, why, ply:Online.ply, rec:rec||undefined};
+  try{ d.mine=stateJSON(); }catch(_){}
+  if(theirs) d.theirs=theirs;
+  (Online.diverge=Online.diverge||[]).push(d);
+  if(Online.diverge.length>3) Online.diverge.shift();
+  return d;
+}
+// 盤の指紋：作った側の向きにそろえた盤・交点・持ち駒・手番から作る（両方で同じになるはず）
+function onlineHash(){
+  let d=stateJSON();
+  if(Online.role==='guest') d=mirrorStateObj(d);
+  const cnt=a=>{ const o={}; (a||[]).forEach(t=>o[t]=(o[t]||0)+1); return Object.keys(o).sort().map(k=>k+o[k]).join(','); };
+  const lay=a=>(a||[]).map(r=>r.map(x=>x?x.t+(x.p>0?'+':'-'):'.').join('')).join('/');
+  const str=d.NR+'x'+d.NC+'|'+d.turn+'|'+lay(d.board)+'|'+lay(d.pts)+'|'+cnt(d.capYou)+'|'+cnt(d.capEnemy);
+  let h=5381; for(let i=0;i<str.length;i++) h=((h<<5)+h+str.charCodeAt(i))|0;
+  return h;
 }
 function onlineOnData(msg){
   if(!msg||typeof msg!=='object') return;
@@ -8768,9 +8800,22 @@ function onlineOnData(msg){
   if(msg.t==='ack'){ if(Online.unacked && Online.unacked.msg.n===msg.n) Online.unacked=null; return; }
   if(msg.t==='ping'){
     // 手数の確かめ合い：どちらも返事待ちの手が無いのに2回続けて食い違ったら、送り直してそろえる
-    if(!msg.un && !Online.unacked && typeof msg.ply==='number' && msg.ply!==Online.ply && !Online.proposal){
-      if(++Online.mis>=2){ Online.mis=0; onlineDesync('手数の確かめ合いが合いません'); }
-    } else Online.mis=0;
+    // 盤の指紋も比べる（手数が同じなのに盤が違う＝どこかでずれた）。どちらも落ち着いているときだけ
+    let diff=null;
+    if(!msg.un && !Online.unacked && !Online.proposal && msg.e===Online.epoch){
+      if(typeof msg.ply==='number' && msg.ply!==Online.ply) diff='手数の確かめ合いが合いません';
+      else if(msg.h!=null && !Online.hold && !editing){ let h=null; try{ h=onlineHash(); }catch(_){}
+        if(h!=null && h!==msg.h) diff='盤の確かめ合いが合いません'; }
+    }
+    if(diff){ if(++Online.mis>=2){ Online.mis=0; onlineDesync(diff); } } else Online.mis=0;
+    return;
+  }
+  // 食い違いの記録：相手の盤を受け取る（作った側）／求められたら送る（入った側）
+  if(msg.t==='dump?' && Online.role==='guest'){ onlineNoteDiverge(msg.why||'作った側で食い違い'); onlineSend({t:'dump', why:msg.why, s:stateJSON()}); return; }
+  if(msg.t==='dump' && Online.role==='host'){
+    const last=Online.diverge && Online.diverge[Online.diverge.length-1];
+    if(last && !last.theirs && Date.now()-Date.parse(last.at)<10000) last.theirs=msg.s;
+    else onlineNoteDiverge(msg.why||'入った側で食い違い', null, msg.s);
     return;
   }
   // 入った側がつながった（つなぎ直した）ときの挨拶。届いていなかった手があれば先に反映してから盤を送る
@@ -8787,6 +8832,8 @@ function onlineOnData(msg){
   }
   if(msg.t==='state' && Online.role==='guest'){
     if(Online.conn) Online.conn._gotState=true;
+    // 盤を送り直してもらったら、返事待ちの手は捨てる（送り直し続けると、また食い違いになって繰り返す）
+    Online.unacked=null; Online.mis=0; Online.epoch=msg.e;
     Online.hold=null;
     loadState(JSON.stringify(mirrorStateObj(msg.s)));
     Online.proposal=null; closeProposal();
@@ -8860,7 +8907,9 @@ function onlineTick(){
   if(!Online.active){ clearInterval(Online.beat); Online.beat=null; return; }
   if(!Online.connected) return;
   const now=Date.now(), dead=window.ONLINE_DEAD_MS||ONLINE_DEAD_MS;
-  if(now-(Online.lastPing||0)>=ONLINE_PING_MS){ Online.lastPing=now; onlineSend({t:'ping', ply:Online.ply, un:!!Online.unacked}); }
+  if(now-(Online.lastPing||0)>=ONLINE_PING_MS){ Online.lastPing=now;
+    let h=null; try{ if(!Online.proposal && !Online.hold && !editing) h=onlineHash(); }catch(_){}
+    onlineSend({t:'ping', ply:Online.ply, un:!!Online.unacked, e:Online.epoch, h}); }
   if(Online.unacked && now-Online.unacked.at>=ONLINE_RESEND_MS){ Online.unacked.at=now; onlineSend(Online.unacked.msg); }
   if(now-(Online.lastRx||now)>dead){
     if(Online.role==='guest') onlineRejoin('部屋からの応答がありません');
