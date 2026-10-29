@@ -1440,9 +1440,8 @@
           <option value="draw">点数を見ずに引き分けにする</option>
         </select>
       </div>
-      <label class="rule-row"><input type="checkbox" id="rCapturedPoints"> 取った駒の駒価を点数に足す</label>
       <label class="rule-row"><input type="checkbox" id="rCheckPoints"> 王手をかけたら点数を足す（4人チェス式）</label>
-      <p class="rule-note" style="margin:6px 0 2px;">点数は盤上の駒価＋取った駒の駒価＋囲碁の領域点。王を取った分もここに入ります。
+      <p class="rule-note" style="margin:6px 0 2px;">点数は<b>盤上の駒だけ</b>で数えます（盤上の駒価＋囲碁の領域点。持ち駒は盤に出るまで点になりません）。
       24点・31点・500手のルールは「双方の王が敵陣に入ったら持将棋」がONで、実際にその形になったときだけ使います。
       それ以外は単純に点数の多い方の勝ちです。</p>
       <p class="rule-note" style="margin:6px 0 2px;">成る条件（3つとも外すと「成り」が無くなります）</p>
@@ -2837,7 +2836,6 @@ const RULES={
   drawBothEnter:false,// 双方の王が敵陣に入ったら持将棋。初期OFF
   jishogiMode:'points', // 持将棋の決め方：'points'=点数計算 / 'draw'=無条件で引き分け
   checkPoints:false,  // 王手をかけたら点数を足す（4人チェス式）
-  capturedPoints:true,// 取った駒の駒価を点数に足す（王を取った分もここに入る）
   captureAll:false,  // 相手の駒を全て取り切るまで戦う（王の有無に関係なく勝敗判定）。囲碁/オセロ/はさみ向け
   endByScore:false,  // 相手の点数がなくなるまで戦う（王の有無では決着しない）
   endOnRoyalCapture:false, // 王を1枚でも取った時点で終わる（王が複数居ても残りを待たない）
@@ -3959,8 +3957,10 @@ function calcPieceValue(t, isPt){
 }
 // 駒価は起動時に1度だけ計算して持っておく（図鑑・持将棋点・演出が参照する）
 const PVAL={};
+const PVAL_AT={};   // 置き場所（マス／交点）を指定したときの駒価（CPUの読みでも呼ぶので覚えておく）
 function pieceValue(t, isPt){
-  if(isPt!==undefined) return calcPieceValue(t,isPt);
+  if(isPt!==undefined){ const k=t+(isPt?'|p':'|c'); let v=PVAL_AT[k];
+    if(v===undefined) v=PVAL_AT[k]=calcPieceValue(t,isPt); return v; }
   if(PVAL[t]===undefined) PVAL[t]=calcPieceValue(t);
   return PVAL[t];
 }
@@ -4194,7 +4194,7 @@ function renderCap(id,arr,p){
     sc.className='cap-score'+(scoreDecides()?' zero':'');
     sc.textContent=currentScore(p)+'点';
     sc.title=scoreDecides() ? '盤上の駒価＋囲碁の領域点。この点で勝敗が決まる'
-                            : '盤上の駒価＋囲碁の領域点＋取った駒の駒価（＋王手の点）';
+                            : '盤上の駒価＋囲碁の領域点（＋王手の点）。持ち駒は数えない';
     el.appendChild(sc);
   }
   el.classList.toggle('is-empty', arr.length===0 && !editing); // 空なら箱を詰める
@@ -4306,7 +4306,7 @@ function ruleSummaryHTML(){
   const flags=[['drops','持ち駒を打てる'],['keepPromoted','成ったまま持ち駒'],['nifu','二歩禁止'],['allowPass','パス'],
     ['flyingGeneral','王不見王'],['palaceEscape','九宮の駒が宮の外へ'],['bikjang','ビッチャングン'],
     ['repromote','もう一度成れる'],['randomPromote','ランダムに成る'],['randomIncludeSpecial','ランダムに特殊駒も'],
-    ['ranklessAsGeneral','格なし駒を一般駒扱い'],['capturedPoints','取った駒を点数に'],['checkPoints','王手で点数'],
+    ['ranklessAsGeneral','格なし駒を一般駒扱い'],['checkPoints','王手で点数'],
     ['drawNoMove','動けなければ持将棋'],['drawBothEnter','双方入玉で持将棋'],['onlineCpu','オンラインでCPU可']];
   const on=flags.filter(f=>RULES[f[0]]).map(f=>f[1]), off=flags.filter(f=>!RULES[f[0]]).map(f=>f[1]);
   const chips=a=>a.map(x=>'<span>'+esc(x)+'</span>').join('');
@@ -5155,7 +5155,42 @@ function findKing(b,p){
 // 評価は読みの中でいちばん多く呼ばれる。点数の付け方は一切変えずに、
 // 盤を3周（findKing×2＋本体）していたのを2周に減らし、
 // 内側のループから LR/LC の呼び出しと行の添字引きを追い出してある。
-function evaluate(b,cy,ce){ // 相手(-1)視点で大きいほど良い
+/* 点数で勝ち負けが決まるルール（「点数だけで勝負する」「相手の点数がなくなるまで戦う」）では、
+   CPUも同じ点数（盤上の駒価＋囲碁の領域点）で局面を見る。いつもの駒の価値（VALUE）ではなく。 */
+function scoreMode(){ return !!(RULES.scoreOnly || RULES.endByScore); }
+const SCORE_W=60;   // 1点 ＝ 歩1枚ぶんくらいの重さ
+function scoreEvaluate(b,cy,ce){
+  const pts=(b&&b.L&&b.L.pts)||null;
+  let s=SCORE_W*(boardScoreOn(b,pts,-1)-boardScoreOn(b,pts,1));
+  // 持ち駒は点ではないが、打てば盤上の点になるので少しだけ見込む（打てないルールなら0）
+  if(RULES.drops){
+    for(let i=0;i<ce.length;i++) s += SCORE_W*0.5*pieceValue(ce[i]);
+    for(let i=0;i<cy.length;i++) s -= SCORE_W*0.5*pieceValue(cy[i]);
+  }
+  // 同じ点どうしの手を比べるための、ごく小さい形の良さ（前に出る・玉に近づく）
+  return s + 0.05*classicEvaluate(b,cy,ce);
+}
+/* 読みの中で、この手（side が指した。結果 s）で対局が終わるか。
+   終わるなら相手(-1)視点の値（MATE＝相手の勝ち／-MATE＝あなたの勝ち／0＝引き分け）、続くなら null。
+   点数のルールでないときは今までどおり「相手の royal を取ったら勝ち」。 */
+function terminalAfter(s, side){
+  const win = side===-1? MATE : -MATE;
+  if(!scoreMode()) return s.king ? win : null;
+  const cells=s.nb, pts=(s.nb&&s.nb.L&&s.nb.L.pts)||null, opp=-side;
+  if(RULES.endByScore && boardScoreOn(cells,pts,opp)===0) return win;   // 相手の点数がなくなった
+  if(royalDecides() && s.king){
+    const ends = anyRoyalEnds() || !anyRoyalIn(cells, pts||[], opp);
+    if(ends){
+      if(!RULES.scoreOnly) return win;
+      // 「点数だけで勝負する」：王を取って終わっても、点数の多い方の勝ち
+      const d=boardScoreOn(cells,pts,-1)-boardScoreOn(cells,pts,1);
+      return d>0? MATE : d<0? -MATE : 0;
+    }
+  }
+  return null;
+}
+function evaluate(b,cy,ce){ return scoreMode()? scoreEvaluate(b,cy,ce) : classicEvaluate(b,cy,ce); }
+function classicEvaluate(b,cy,ce){ // 相手(-1)視点で大きいほど良い
   let s=0;
   const pts=(b&&b.L&&b.L.pts)||null;
   const NL=pts?2:1;
@@ -5534,8 +5569,11 @@ function search(b,cy,ce,depth,side,alpha,beta,ply,prevKey){
     let val=-Infinity;
     for(const m of list){
       const s=simulate(b,m,-1,cy,ce);
-      if(s.king){ return MATE+depth; } // あなたの玉を取れる→即勝ち（早いほど高評価）
-      const v=search(s.nb,s.ncy,s.nce,depth-1,1,alpha,beta,ply+1,mvKey(m));
+      // この手で終わるか（ふだんは「あなたの玉を取れる→即勝ち」。点数のルールなら点数で決まる）
+      const t=terminalAfter(s,-1);
+      if(t!==null && t>=MATE) return MATE+depth;   // 勝ち（早いほど高評価）
+      const v= t!==null ? (t<=-MATE? -MATE-depth : t)
+                        : search(s.nb,s.ncy,s.nce,depth-1,1,alpha,beta,ply+1,mvKey(m));
       if(v>val){ val=v; best=mvKey(m); }
       alpha=Math.max(alpha,val);
       if(alpha>=beta){ remember(m); break; }
@@ -5546,8 +5584,10 @@ function search(b,cy,ce,depth,side,alpha,beta,ply,prevKey){
     let val=Infinity;
     for(const m of list){
       const s=simulate(b,m,1,cy,ce);
-      if(s.king){ return -MATE-depth; } // 相手の玉を取れる→相手にとって即負け
-      const v=search(s.nb,s.ncy,s.nce,depth-1,-1,alpha,beta,ply+1,mvKey(m));
+      const t=terminalAfter(s,1);
+      if(t!==null && t<=-MATE) return -MATE-depth;   // 相手の玉を取れる→相手にとって即負け
+      const v= t!==null ? (t>=MATE? MATE+depth : t)
+                        : search(s.nb,s.ncy,s.nce,depth-1,-1,alpha,beta,ply+1,mvKey(m));
       if(v<val){ val=v; best=mvKey(m); }
       beta=Math.min(beta,val);
       if(alpha>=beta){ remember(m); break; }
@@ -5864,12 +5904,14 @@ function cpuPickMove(side, depth){
       let sc;
       try{
         const s=simulate(board,m,side,capYou,capEnemy);
-        if(s.king) return {m, mate:true};   // 相手royalを取る手は減点しない
+        const t=terminalAfter(s,side);
+        if(t!==null && (side===-1? t>=MATE : t<=-MATE)) return {m, mate:true};   // 勝ちになる手は減点しない
         // 窓は減点後の最善で絞る。減点は0以上なので、減点前の値がこれを下回る手は
         // 減点後も最善を超えられない＝切ってよい（選ばれる手は変わらない）
         const lo = (side===-1 && isFinite(bestScore)) ? bestScore-EPS : -Infinity;
         const hi = (side===1  && isFinite(bestScore)) ? bestScore+EPS :  Infinity;
-        sc = d<=0 ? evaluate(s.nb,s.ncy,s.nce)
+        sc = t!==null ? t        // この手で終わる（負け・引き分け）
+           : d<=0 ? evaluate(s.nb,s.ncy,s.nce)
                   : search(s.nb,s.ncy,s.nce,d,-side,lo,hi,1,mvKey(m));
         const p=pen(m);
         if(p) sc = side===-1 ? sc-p : sc+p;   // 指す側にとって不利な向きに寄せる
@@ -6160,6 +6202,10 @@ function endGame(winner,reason,detail){
    盤に碁石が1つも無いときは0。 */
 function goTerritory(side){
   ensurePts();
+  return goTerritoryOn(ptsBoard, side);
+}
+function goTerritoryOn(ptsBoard, side){
+  if(!ptsBoard) return 0;
   let hasStone=false;
   for(let r=0;r<=NR&&!hasStone;r++)for(let c=0;c<=NC;c++){
     const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&isGo(q.t)){ hasStone=true; break; } }
@@ -6189,12 +6235,18 @@ function goTerritory(side){
    王駒は盤上の集計から外す（将棋の点数計算と同じ考え方）。 */
 function calcPositionScore(side){
   ensurePts();
+  return boardScoreOn(board, ptsBoard, side);
+}
+// 任意の盤（読みの中の盤も）での点数。CPUの読みも、画面の点数と同じ数え方を使う
+function boardScoreOn(cells, pts, side){
   let v=0;
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const q=board[r][c];
-    if(q&&q.p===side&&!isRoyal(q.t)) v+=pieceValue(q.o||q.t, false); }
-  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=ptsBoard[r]&&ptsBoard[r][c];
-    if(q&&q.p===side&&!isRoyal(q.t)) v+=pieceValue(q.o||q.t, true); }
-  return v + goTerritory(side);
+  for(let r=0;r<NR;r++){ const row=cells[r]; if(!row) continue;
+    for(let c=0;c<NC;c++){ const q=row[c];
+      if(q&&q.p===side&&!isRoyal(q.t)) v+=pieceValue(q.o||q.t, false); } }
+  if(pts) for(let r=0;r<=NR;r++){ const row=pts[r]; if(!row) continue;
+    for(let c=0;c<=NC;c++){ const q=row[c];
+      if(q&&q.p===side&&!isRoyal(q.t)) v+=pieceValue(q.o||q.t, true); } }
+  return v + goTerritoryOn(pts, side);
 }
 /* 王手の加点（4人チェス式）。royal が複数あると1手で同時に王手を掛けられる。
      同時に1つ … 1点
@@ -6215,15 +6267,12 @@ function checkBonus(n, byQueen){
   if(n===2) return byQueen?1:5;
   return byQueen?5:20;
 }
-/* 持将棋・終局時の点数。
-   盤上の駒価＋取った駒（持ち駒）の駒価＋囲碁の領域点。
-   「取った駒を点数に足す」がONなら取った駒の駒価も足す。取った駒には王も含める
-   （王を取る＝チェックメイト分の点はここで入る）。
+/* 持将棋・終局時の点数。点数は盤上だけで数える：盤上の駒価＋囲碁の領域点。
+   持ち駒（取った駒）は盤に打つまで点にならない（前は「取った駒を点数に足す」で足せたが、やめた）。
    「王手で加点」がONなら、これまでに掛けた王手の回数も足す。 */
 let checkCount={1:0,'-1':0};
 function jishogiPoints(side){
   let pts=calcPositionScore(side);
-  if(RULES.capturedPoints) (side===1?capYou:capEnemy).forEach(t=>pts+=pieceValue(t));
   if(RULES.checkPoints) pts += (checkCount[side]||0);
   return pts;
 }
@@ -6235,7 +6284,7 @@ function scoreDecides(){ return !!RULES.scoreOnly; }
    取った駒の点は永久に減らないので、0にできる盤上の点だけを見る。 */
 function scoreZeroEnds(){ return !!RULES.endByScore; }
 /* いま画面に出す点数（勝敗を決めるのもこの数）。
-     ふだん … 持将棋点（盤上＋領域＋取った駒＋王手）
+     ふだん … 持将棋点（盤上＋領域＋王手）
      点数だけで勝負する … 盤上の点数（盤上の駒価＋領域点） */
 function currentScore(side){
   return scoreDecides() ? calcPositionScore(side) : jishogiPoints(side);
@@ -8457,7 +8506,6 @@ function openRuleModal(){
   document.getElementById('rDrawNoMove').checked=RULES.drawNoMove;
   document.getElementById('rDrawBothEnter').checked=RULES.drawBothEnter;
   document.getElementById('rJishogiMode').value=RULES.jishogiMode||'points';
-  document.getElementById('rCapturedPoints').checked=!!RULES.capturedPoints;
   document.getElementById('rCheckPoints').checked=!!RULES.checkPoints;
   document.getElementById('rOnlineCpu').checked=!!RULES.onlineCpu;
   document.getElementById('ruleModal').classList.add('show');
@@ -8520,7 +8568,6 @@ document.getElementById('rScoreOnly').onchange=e=>{ RULES.scoreOnly=e.target.che
 document.getElementById('rDrawNoMove').onchange=e=>{ RULES.drawNoMove=e.target.checked; };
 document.getElementById('rDrawBothEnter').onchange=e=>{ RULES.drawBothEnter=e.target.checked; };
 document.getElementById('rJishogiMode').onchange=e=>{ RULES.jishogiMode=e.target.value; };
-document.getElementById('rCapturedPoints').onchange=e=>{ RULES.capturedPoints=e.target.checked; };
 document.getElementById('rCheckPoints').onchange=e=>{ RULES.checkPoints=e.target.checked; };
 document.getElementById('rOnlineCpu').onchange=e=>{ RULES.onlineCpu=e.target.checked; };
 // 置く側トグル

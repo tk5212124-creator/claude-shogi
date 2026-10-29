@@ -16,7 +16,7 @@ const out=await p.evaluate(()=>{
   const mk=(bd,ru,pts,dg)=>JSON.stringify({v:2,NR:9,NC:9,PZ:3,turn:1,youAreSente:true,gameOver:false,
     RULES:Object.assign({drops:true,captureAll:false,endByScore:false,endOnRoyalCapture:false,scoreOnly:false,
       pointMode:'auto',allowPass:false,banSennichite:false,sennichiteMode:'none',
-      jishogiMode:'points',checkPoints:false,capturedPoints:true,nifu:false,palaceEscape:false},ru||{}),
+      jishogiMode:'points',checkPoints:false,nifu:false,palaceEscape:false},ru||{}),
     board:bd,pts:pts||P(),diag:dg||D(),capYou:[],capEnemy:[]});
   const st=()=>document.getElementById('status').textContent;
 

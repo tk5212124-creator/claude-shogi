@@ -22,13 +22,11 @@ const out=await p.evaluate(()=>{
     loadState(mk(bd)); SFX.on=false;
     R['①盤上のみ']={点:calcPositionScore(1), 内訳:'飛5+角5+歩9 = 19'};
   }
-  // ② 取った駒（王を含む）が加算される
+  // ② 持ち駒は点数にならない（点数は盤上だけ）。王を取って持ち駒にしても同じ
   {
     const bd=B(); bd[8][4]={t:'hK',p:1};
     loadState(mk(bd,null,['hR','hK'],[])); SFX.on=false;
-    R['②持ち駒に飛車と王']={点:jishogiPoints(1), 内訳:'盤上0 + 飛5 + 王20 = 25'};
-    loadState(mk(bd,null,['hR','hK'],[],{capturedPoints:false})); SFX.on=false;
-    R['②取った駒を足さない設定']={点:jishogiPoints(1), 内訳:'盤上0 のみ = 0'};
+    R['②持ち駒に飛車と王']=jishogiPoints(1)===0?'0点（持ち駒は数えない）':'★'+jishogiPoints(1)+'点';
   }
   // ③ 囲碁の領域点
   {

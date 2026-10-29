@@ -9,7 +9,7 @@ const out=await p.evaluate(()=>{
   const mk=(bd,ru,cy,ce)=>JSON.stringify({v:2,NR:9,NC:9,PZ:3,turn:1,youAreSente:true,gameOver:false,
     RULES:Object.assign({drops:true,captureAll:false,endByScore:false,scoreOnly:false,
       pointMode:'cell',allowPass:false,banSennichite:false,
-      sennichiteMode:'none',jishogiMode:'points',checkPoints:false,capturedPoints:true,drawNoMove:true,
+      sennichiteMode:'none',jishogiMode:'points',checkPoints:false,drawNoMove:true,
       drawBothEnter:false,nifu:false},ru||{}),
     board:bd, pts:Array.from({length:10},()=>Array(10).fill(null)),
     diag:Array.from({length:9},()=>Array(9).fill(null)),capYou:cy||[],capEnemy:ce||[]});
@@ -28,14 +28,14 @@ const out=await p.evaluate(()=>{
     RULES.jishogiMode='draw'; RULES.scoreOnly=false; render(); R['①引き分け設定のとき']=chips();
     RULES.jishogiMode='points'; render();
   }
-  // ② 出る中身。点数計算＝持将棋点（取った駒こみ）／点数だけ＝盤上の点数
+  // ② 出る中身。どちらも盤上の点数だけ（持ち駒の角は数えない）
   {
     const bd=B(); bd[8][4]={t:'hK',p:1}; bd[7][1]={t:'hR',p:1};
     bd[0][4]={t:'hK',p:-1}; bd[1][1]={t:'hP',p:-1};
     loadState(mk(bd,{jishogiMode:'points'},['hB'],[])); SFX.on=false;
-    R['②点数計算 あなた']={表示:chips()[1], 内訳:'飛5＋取った角5＝10'};
+    R['②点数計算 あなた']=chips()[1]==='5点'?'5点（盤上の飛5だけ。持ち駒の角は数えない）':'★'+chips()[1];
     loadState(mk(bd,{scoreOnly:true},['hB'],[])); SFX.on=false;
-    R['②点数だけ あなた']={表示:chips()[1], 内訳:'盤上の飛5だけ'};
+    R['②点数だけ あなた']=chips()[1]==='5点'?'5点（盤上の飛5だけ）':'★'+chips()[1];
   }
   // ③ 終わり方は2つのチェックで選ぶ
   //    どちらもOFF＝王を取ったら／全滅ON＝駒が全部消えるまで／点数ON＝相手の点数が0まで

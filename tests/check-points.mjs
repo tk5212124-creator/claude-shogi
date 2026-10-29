@@ -10,7 +10,7 @@ const out=await p.evaluate(()=>{
   const B=()=>Array.from({length:9},()=>Array(9).fill(null));
   const mk=(bd)=>JSON.stringify({v:2,NR:9,NC:9,PZ:0,turn:1,youAreSente:true,gameOver:false,
     RULES:{drops:false,captureAll:true,pointMode:'cell',allowPass:false,banSennichite:false,
-      sennichiteMode:'none',checkPoints:true,capturedPoints:true,jishogiMode:'points'},
+      sennichiteMode:'none',checkPoints:true,jishogiMode:'points'},
     board:bd, pts:Array.from({length:10},()=>Array(10).fill(null)),
     diag:Array.from({length:9},()=>Array(9).fill(null)),capYou:[],capEnemy:[]});
   // 攻め駒 t を (4,6)→(4,4) と動かし、敵 royal を kings の位置に置いて同時王手を作る
