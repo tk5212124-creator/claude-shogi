@@ -3009,21 +3009,7 @@ async function copyText(text, label){
     return ok;
   }
 }
-async function copyDebugReport(){
-  const text=debugReport();
-  try{
-    if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(text); }
-    else throw new Error('no clipboard api');
-    setStatus('デバッグ情報をコピーしました（'+text.length+'文字）','win');
-  }catch(_){
-    const ta=document.createElement('textarea');
-    ta.value=text; ta.style.cssText='position:fixed;left:0;top:0;opacity:0;';
-    document.body.appendChild(ta); ta.focus(); ta.select();
-    let ok=false; try{ ok=document.execCommand('copy'); }catch(__){}
-    ta.remove();
-    setStatus(ok?'デバッグ情報をコピーしました（'+text.length+'文字）':'コピーに失敗しました', ok?'win':'lose');
-  }
-}
+function copyDebugReport(){ return copyText(debugReport(), 'デバッグ情報'); }
 // 千日手の扱いはモードひとつで決め、内部フラグはそこから導出する（設定の一元化）
 function setSennichiteMode(mode){
   RULES.sennichiteMode = mode;
@@ -3848,27 +3834,20 @@ function isRoyal(t){ return t==='hK'||t==='hKw'||t==='mK'||t==='K'||t==='CP'||t=
 // 指定プレイヤーのroyal駒（玉・太子）が盤上または持ち駒に残っているか
 // 勝敗判定に使うのはこちら：盤上（マス・交点の両方）に royal が残っているか。
 // 持ち駒は数えない（「盤面から味方のroyal駒がなくなったら決着」）。
-function hasRoyalOnBoard(p){
-  ensurePts();
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) return true; }
-  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===p&&isRoyal(q.t)) return true; }
-  return false;
-}
+function hasRoyalOnBoard(p){ ensurePts(); return royalCountOn(board, ptsBoard, p, true)>0; }
 // 盤上に残っている royal の枚数（「王を1枚でも取ったら終わり」の判定に使う）
-function countRoyalsOnBoard(p){
-  ensurePts();
+function countRoyalsOnBoard(p){ ensurePts(); return royalCountOn(board, ptsBoard, p); }
+// 任意の2層の盤（読みの中の盤も）にある side の royal の枚数。持ち駒は数えない
+// （royal は盤上に無ければ負け。持ち駒にあっても助からない）。firstOnly なら1枚見つけた時点で返す
+function royalCountOn(cells, pts, side, firstOnly){
   let n=0;
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) n++; }
-  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===p&&isRoyal(q.t)) n++; }
+  for(const [L,R,C] of [[cells,NR,NC],[pts,NR+1,NC+1]]){
+    if(!L) continue;
+    for(let r=0;r<R;r++){ const row=L[r]; if(!row) continue;
+      for(let c=0;c<C;c++){ const q=row[c];
+        if(q&&q.p===side&&isRoyal(q.t)){ n++; if(firstOnly) return n; } } }
+  }
   return n;
-}
-function hasRoyal(p){
-  ensurePts();
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===p&&isRoyal(pc.t)) return true; }
-  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===p&&isRoyal(q.t)) return true; }
-  const cap = p===1?capYou:capEnemy;
-  if(cap.some(isRoyal)) return true;
-  return false;
 }
 // プレイヤー p が王手をかけられているか（pのroyalが相手の利きに入る）。royal位置も返す。
 function checkInfo(p){
@@ -5155,6 +5134,14 @@ function findKing(b,p){
 // 評価は読みの中でいちばん多く呼ばれる。点数の付け方は一切変えずに、
 // 盤を3周（findKing×2＋本体）していたのを2周に減らし、
 // 内側のループから LR/LC の呼び出しと行の添字引きを追い出してある。
+/* 持ち駒の価値。royal は盤上に無いと負けを防げない（持っているだけでは0枚と同じ）ので、
+   持ち駒のままでは低く見る。打てば盤上の royal（とても高い）になるので、CPUは早めに打つ。
+   前は持ち駒の royal を盤上より高く見ていて、打たずに持ち続けて負けることがあった。 */
+const HAND_ROYAL_V=300;
+function handValue(t){
+  if(isRoyal(t)) return RULES.drops? HAND_ROYAL_V : 0;
+  return VALUE[t]*1.05;
+}
 /* 点数で勝ち負けが決まるルール（「点数だけで勝負する」「相手の点数がなくなるまで戦う」）では、
    CPUも同じ点数（盤上の駒価＋囲碁の領域点）で局面を見る。いつもの駒の価値（VALUE）ではなく。 */
 function scoreMode(){ return !!(RULES.scoreOnly || RULES.endByScore); }
@@ -5164,8 +5151,8 @@ function scoreEvaluate(b,cy,ce){
   let s=SCORE_W*(boardScoreOn(b,pts,-1)-boardScoreOn(b,pts,1));
   // 持ち駒は点ではないが、打てば盤上の点になるので少しだけ見込む（打てないルールなら0）
   if(RULES.drops){
-    for(let i=0;i<ce.length;i++) s += SCORE_W*0.5*pieceValue(ce[i]);
-    for(let i=0;i<cy.length;i++) s -= SCORE_W*0.5*pieceValue(cy[i]);
+    for(let i=0;i<ce.length;i++) if(!isRoyal(ce[i])) s += SCORE_W*0.5*pieceValue(ce[i]);
+    for(let i=0;i<cy.length;i++) if(!isRoyal(cy[i])) s -= SCORE_W*0.5*pieceValue(cy[i]);
   }
   // 同じ点どうしの手を比べるための、ごく小さい形の良さ（前に出る・玉に近づく）
   return s + 0.05*classicEvaluate(b,cy,ce);
@@ -5225,7 +5212,7 @@ function classicEvaluate(b,cy,ce){ // 相手(-1)視点で大きいほど良い
       const advE=r*7, advY=(NR-1-r)*7;              // 前進ボーナス（行で決まるので先に出す）
       for(let c=0;c<CC;c++){
         const pc=row[c]; if(!pc) continue;
-        let v=VALUE[pc.t];
+        let v=VALUE[pc.t]+(pc.rp||0);
         if(pc.t!=='K'){
           const en = pc.p===-1;
           v += en? advE : advY;
@@ -5239,17 +5226,35 @@ function classicEvaluate(b,cy,ce){ // 相手(-1)視点で大きいほど良い
       } }
   }
   // 持ち駒（打てる駒は価値やや高め）
-  for(let i=0;i<ce.length;i++) s += VALUE[ce[i]]*1.05;
-  for(let i=0;i<cy.length;i++) s -= VALUE[cy[i]]*1.05;
+  for(let i=0;i<ce.length;i++) s += handValue(ce[i]);
+  for(let i=0;i<cy.length;i++) s -= handValue(cy[i]);
   // 玉の安全度：玉が盤端・囲いから出ているとペナルティ的に評価
   return s;
 }
 function dropTargetsRaw(b,t,p){ return dropTargets(b,t,p); } // 後方互換のため残置（中身はdropTargetsに統合）
-// 任意の2層の盤に side の royal が残っているか（探索用。実ゲームの hasRoyalOnBoard と同じ考え方）
-function anyRoyalIn(cells, pts, side){
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const q=cells[r]&&cells[r][c]; if(q&&q.p===side&&isRoyal(q.t)) return true; }
-  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=pts[r]&&pts[r][c]; if(q&&q.p===side&&isRoyal(q.t)) return true; }
-  return false;
+// 任意の2層の盤に side の royal が残っているか（探索用。実ゲームの hasRoyalOnBoard と同じ数え方）
+function anyRoyalIn(cells, pts, side){ return royalCountOn(cells, pts, side, true)>0; }
+/* 読みの中で成ったあとの駒。成り先が決まっている駒はその駒に。
+   ランダムに成る駒は何に成るか分からないので、駒は変えずに「ランダムに成ったときの平均の強さとの差」を
+   rp（駒の価値の差）・rs（点数の差）として持たせ、評価で足す（前は「成らないまま」と読んでいた）。 */
+function simPromotedPiece(pc, p, promo){
+  if(promo){
+    const pr=promoteCode(pc.t);
+    if(pr) return {t:pr,p};
+    if(canPromoteNow(pc.t) && !isRoyal(pc.t)){ const a=randomPromoAverage();
+      return {t:pc.t, p, rp:a.V-(VALUE[pc.t]||0), rs:a.PV-pieceValue(pc.t)}; }
+  }
+  return pc.rp!==undefined ? {t:pc.t, p, rp:pc.rp, rs:pc.rs} : {t:pc.t,p};
+}
+// ランダムに成ったときの平均（royal 以外の候補。「特殊駒も含める」設定ごとに覚える）
+let RAND_AVG=null;
+function randomPromoAverage(){
+  const key=RULES.randomIncludeSpecial?1:0;
+  if(RAND_AVG && RAND_AVG.key===key) return RAND_AVG;
+  const pool=randomPool().filter(t=>!isRoyal(t));
+  let V=0, PV=0; for(const t of pool){ V+=VALUE[t]||0; PV+=pieceValue(t); }
+  const n=Math.max(1,pool.length);
+  return RAND_AVG={key, V:V/n, PV:PV/n};
 }
 function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻り値 {nb,ncy,nce,king}
   // 駒オブジェクトはこのアプリでは書き換えられない（置き換えるか null にするかのどちらか）。
@@ -5361,7 +5366,7 @@ function simulate(b,m,p,cy,ce){ // 盤・持ち駒をコピーして着手。戻
     }
     const promo = m.promo!==undefined ? m.promo
       : (!igui && canPromoteMove(pc.t,m.fr,m.tr,p, !!(tg&&tg.p!==p)||!!(m.caps&&m.caps.length)));
-    db[m.tr][m.tc]={t:promo?(promoteCode(pc.t)||pc.t):pc.t,p};
+    db[m.tr][m.tc]=simPromotedPiece(pc, p, promo);
     touch.push([db===npts, m.tr, m.tc]);
     if(!igui||db!==lb) lb[m.fr][m.fc]=null;
     if(pc.t==='HASA') simHasamiCapture(m.tr,m.tc,p); // はさみ取りを読みに反映
@@ -5728,12 +5733,12 @@ function posTermOf(t, side, r, c, kr, kc, haveK){
 }
 function positionalDelta(side, m, kr, kc, haveK){
   if(m.pass) return 0;
-  if(m.drop) return posTermOf(m.drop, side, m.tr, m.tc, kr, kc, haveK) - (VALUE[m.drop]||0)*1.05;
+  if(m.drop) return posTermOf(m.drop, side, m.tr, m.tc, kr, kc, haveK) - handValue(m.drop);
   const LB = m.pt? ptsBoard : board;
   const pc = LB[m.fr] && LB[m.fr][m.fc];
   if(!pc) return 0;
-  const nt = m.promo ? (promoteCode(pc.t)||pc.t) : pc.t;
-  return posTermOf(nt, side, m.tr, m.tc, kr, kc, haveK)
+  const np = simPromotedPiece(pc, side, !!m.promo);   // 読みと同じ成り方（ランダム成りは平均）
+  return posTermOf(np.t, side, m.tr, m.tc, kr, kc, haveK) + (np.rp||0)
        - posTermOf(pc.t, side, m.fr, m.fc, kr, kc, haveK);
 }
 
@@ -5752,14 +5757,15 @@ const CPU_DIAG={enabled:false, last:null};
      （最後の royal を守る手や、他が全部大損の局面では上限を超える差がつくため） */
 let REP_PEN_STEP=24;    // 往復1回ごとの減点
 let REP_PEN_MAX =90;    // 減点の上限（歩1枚=60より少し上。これ以上の差があれば往復を許す）
-const REP_QUIET_MIN=4;    // 何手「何も起きていない」ら働かせるか
+const REP_QUIET_MIN=2;    // 何手「何も起きていない」ら働かせるか（前は4。往復が長く続いていた）
 // 直近で何も起きていない手数（取り・成り・打ち・持ち駒の増減のどれかで途切れる）
 function noProgressCount(){
   const handNow=capYou.length+capEnemy.length;
   let n=0;
   for(let i=kifu.length-1;i>=0 && n<64;i--){
     const k=kifu[i];
-    if(!k || k.cap || k.promo || k.drop || k.pass) break;
+    // 成りは数えない（ランダム成りの往復で、いつまでも「何か起きた」ことになっていた）
+    if(!k || k.cap || k.drop || k.pass) break;
     if((k.xcaps&&k.xcaps.length) || (k.caps&&k.caps.length)) break;
     const h=history[i];   // i手目を指す直前の状態。持ち駒が変わっていれば何かが起きている
     if(h && h.capYou && h.capEnemy && (h.capYou.length+h.capEnemy.length)!==handNow) break;
@@ -6253,10 +6259,10 @@ function boardScoreOn(cells, pts, side){
   let v=0;
   for(let r=0;r<NR;r++){ const row=cells[r]; if(!row) continue;
     for(let c=0;c<NC;c++){ const q=row[c];
-      if(q&&q.p===side&&!isRoyal(q.t)) v+=pieceValue(q.o||q.t, false); } }
+      if(q&&q.p===side&&!isRoyal(q.t)) v+=pieceValue(q.o||q.t, false)+(q.rs||0); } }
   if(pts) for(let r=0;r<=NR;r++){ const row=pts[r]; if(!row) continue;
     for(let c=0;c<=NC;c++){ const q=row[c];
-      if(q&&q.p===side&&!isRoyal(q.t)) v+=pieceValue(q.o||q.t, true); } }
+      if(q&&q.p===side&&!isRoyal(q.t)) v+=pieceValue(q.o||q.t, true)+(q.rs||0); } }
   return v + goTerritoryOn(pts, side);
 }
 /* 王手の加点（4人チェス式）。royal が複数あると1手で同時に王手を掛けられる。
@@ -7371,14 +7377,7 @@ function boardPieces(side){
 function endByDoublePass(){
   resolveJishogi('双方が続けてパス');
 }
-function sidePieces(side){
-  ensurePts();
-  let n=0;
-  for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){ const pc=board[r][c]; if(pc&&pc.p===side) n++; }
-  for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){ const q=ptsBoard[r]&&ptsBoard[r][c]; if(q&&q.p===side) n++; }
-  n += (side===1?capYou:capEnemy).length;
-  return n;
-}
+function sidePieces(side){ ensurePts(); return piecesLeftOn(board, ptsBoard, side===1?capYou:capEnemy, side); }
 // side の royal（王・玉）が敵陣（成りゾーン）に入っているか
 function royalInEnemyCamp(side){
   if(PZ<=0) return false;
@@ -8006,15 +8005,17 @@ function buildPickGrid(){
 // 検索ボックス配線
 (function(){
   const inp=document.getElementById('pieceSearch');
-  if(inp) inp.oninput=()=>{ pieceQuery=inp.value.trim(); buildPickGrid(); const sc=document.getElementById('pickScroll'); if(sc)sc.scrollTop=0; };
+  if(inp) inp.oninput=()=>{ pieceQuery=inp.value.trim(); rebuildPickGridTop(); };
   const clr=document.getElementById('pieceSearchClear');
   if(clr) clr.onclick=()=>{ pieceQuery=''; if(inp)inp.value=''; buildPickGrid(); };
 })();
 // ソート選択で再構築（スクロールは先頭へ）
 document.getElementById('zukanBtn').onclick=()=>openZukan();
-(function(){ const s=document.getElementById('sortSel'); if(s) s.onchange=()=>{ buildPickGrid(); const sc=document.getElementById('pickScroll'); if(sc)sc.scrollTop=0; };
+// 一覧を作り直して先頭に戻す（検索・並び替え・混在の切り替えで共通）
+function rebuildPickGridTop(){ buildPickGrid(); const sc=document.getElementById('pickScroll'); if(sc) sc.scrollTop=0; }
+(function(){ const s=document.getElementById('sortSel'); if(s) s.onchange=rebuildPickGridTop;
   const mx=document.getElementById('pickAllMix');
-  if(mx) mx.onchange=()=>{ buildPickGrid(); const sc=document.getElementById('pickScroll'); if(sc)sc.scrollTop=0; }; })();
+  if(mx) mx.onchange=rebuildPickGridTop; })();
 
 // 編集メニュー（説明 / 変更 / 複数選択追加）
 let menuCell=null;
@@ -8781,7 +8782,7 @@ function onlineSend(obj){
 function onlineSendState(){
   if(Online.role!=='host' || !Online.connected) return;
   ensurePts();
-  if(typeof onlineEnforceCpu==='function'){ autoEnemy=false; if(autoYou && !RULES.onlineCpu){ autoYou=false; onlineSend({t:'cpu',on:false}); refreshAutoLabels(); } }
+  onlineEnforceCpu();
   const s=stateJSON(); delete s.kifu; delete s.start;
   // 千日手・王手点などの記録はここから数え直す（相手も読み込んだ時点から数える）
   posCount={}; repLog=[]; passStreak=0; checkCount={1:0,'-1':0};
