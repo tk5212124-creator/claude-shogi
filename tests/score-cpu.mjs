@@ -37,6 +37,24 @@ const out=await p.evaluate(()=>{
     loadState(mk(bd,{scoreOnly:true},['hB'],[])); SFX.on=false;
     R['③読みの点数']= boardScoreOn(board,ptsBoard,1)===currentScore(1) ? '画面と同じ（'+currentScore(1)+'点）' : '★'+boardScoreOn(board,ptsBoard,1)+' と '+currentScore(1);
   }
+  // ④ 王が2枚あるとき、1枚取っただけでは終わらない（前は「王を取った＝勝ち」と読んでいた）
+  { const bd=B(); bd[0][4]={t:'hK',p:-1}; bd[8][0]={t:'hK',p:1}; bd[8][8]={t:'hKw',p:1}; bd[0][0]={t:'hR',p:-1};
+    loadState(mk(bd,{})); SFX.on=false;
+    const sim=simulate(board,{fr:0,fc:0,tr:8,tc:0},-1,capYou,capEnemy);
+    R['④2枚のうち1枚を取る']= terminalAfter(sim,-1)===null ? '続く（読みでも勝ちにしない）' : '★勝ち扱い';
+    bd[8][8]=null; loadState(mk(bd,{})); SFX.on=false;
+    const sim2=simulate(board,{fr:0,fc:0,tr:8,tc:0},-1,capYou,capEnemy);
+    R['④最後の1枚を取る']= terminalAfter(sim2,-1)>=1e7 ? '勝ち' : '★'+terminalAfter(sim2,-1);
+    bd[8][8]={t:'hKw',p:1}; loadState(mk(bd,{endOnRoyalCapture:true})); SFX.on=false;
+    const sim3=simulate(board,{fr:0,fc:0,tr:8,tc:0},-1,capYou,capEnemy);
+    R['④「王を1枚でも取ったら終わり」なら']= terminalAfter(sim3,-1)>=1e7 ? '1枚目で勝ち' : '★'+terminalAfter(sim3,-1);
+  }
+  // ⑤ 取り切るまで戦う：王を取っても終わらない。最後の1枚を取ったら勝ち
+  { const bd=B(); bd[0][4]={t:'hK',p:-1}; bd[8][0]={t:'hK',p:1}; bd[8][8]={t:'hP',p:1}; bd[0][0]={t:'hR',p:-1};
+    loadState(mk(bd,{captureAll:true})); SFX.on=false;
+    const sim=simulate(board,{fr:0,fc:0,tr:8,tc:0},-1,capYou,capEnemy);
+    R['⑤取り切り：王を取る']= terminalAfter(sim,-1)===null ? '続く（歩が残っている）' : '★勝ち扱い';
+  }
   return R;
 });
 console.log(JSON.stringify(out,null,1));

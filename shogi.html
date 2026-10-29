@@ -5172,12 +5172,17 @@ function scoreEvaluate(b,cy,ce){
 }
 /* 読みの中で、この手（side が指した。結果 s）で対局が終わるか。
    終わるなら相手(-1)視点の値（MATE＝相手の勝ち／-MATE＝あなたの勝ち／0＝引き分け）、続くなら null。
-   点数のルールでないときは今までどおり「相手の royal を取ったら勝ち」。 */
+   実際の対局と同じ終わり方を見る：
+   ・ふつう：相手の royal が盤上からぜんぶ消えたら（王が2枚あるなら、1枚取っただけでは終わらない）。
+     「王を1枚でも取ったら終わり」なら1枚目で終わる
+   ・取り切るまで戦う：相手の駒が（持ち駒も）なくなったら
+   ・相手の点数がなくなるまで戦う：相手の盤上の点数が0になったら
+   ・点数だけで勝負する：王で終わったときは、点数の多い方の勝ち */
 function terminalAfter(s, side){
   const win = side===-1? MATE : -MATE;
-  if(!scoreMode()) return s.king ? win : null;
   const cells=s.nb, pts=(s.nb&&s.nb.L&&s.nb.L.pts)||null, opp=-side;
   if(RULES.endByScore && boardScoreOn(cells,pts,opp)===0) return win;   // 相手の点数がなくなった
+  if(RULES.captureAll && piecesLeftOn(cells,pts,opp===1?s.ncy:s.nce,opp)===0) return win;
   if(royalDecides() && s.king){
     const ends = anyRoyalEnds() || !anyRoyalIn(cells, pts||[], opp);
     if(ends){
@@ -5188,6 +5193,12 @@ function terminalAfter(s, side){
     }
   }
   return null;
+}
+function piecesLeftOn(cells, pts, hand, side){
+  let n=(hand||[]).length;
+  for(let r=0;r<NR;r++){ const row=cells[r]; if(row) for(let c=0;c<NC;c++){ const q=row[c]; if(q&&q.p===side) n++; } }
+  if(pts) for(let r=0;r<=NR;r++){ const row=pts[r]; if(row) for(let c=0;c<=NC;c++){ const q=row[c]; if(q&&q.p===side) n++; } }
+  return n;
 }
 function evaluate(b,cy,ce){ return scoreMode()? scoreEvaluate(b,cy,ce) : classicEvaluate(b,cy,ce); }
 function classicEvaluate(b,cy,ce){ // 相手(-1)視点で大きいほど良い
