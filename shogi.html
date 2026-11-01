@@ -259,6 +259,9 @@
   .drag-ghost{position:fixed;z-index:9999;pointer-events:none;transform:translate(-50%,-50%);
     opacity:.92;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5));width:40px;height:44px;}
   .drag-ghost .koma{width:100%;height:100%;}
+  /* ドラッグ中に、交点の駒が落ちる先（交点／×のマスの中心）を示す輪 */
+  .drop-mark{position:absolute;z-index:8;pointer-events:none;transform:translate(-50%,-50%);border-radius:50%;
+    border:3px solid var(--glow);background:rgba(139,107,255,.25);box-shadow:0 0 10px var(--glow);}
   /* 長押しで編集モードに入る予備動作のフィードバック */
   .board.lp-armed{box-shadow:0 0 0 3px var(--glow), inset 0 0 24px rgba(106,74,30,.4);}
   .cell.check{
@@ -4342,10 +4345,11 @@ function dropPieceToZone(fr,fc,fromPt,zone){
 }
 function moveEditPiece(fr,fc,tr,tc,fromPt,toPt){
   ensurePts();
-  // 交点に乗る駒は交点レイヤー、それ以外はマスのレイヤーへ（種類で決まる）
   const SRC = fromPt? ptsBoard : board;
   const pc=SRC[fr]&&SRC[fr][fc]; if(!pc){ render(); return; }
-  const DST = SRC;   // ドラッグは同じ側の中で動かす（マス⇄交点は「置く場所」で切り替える）
+  // ドラッグはふつう同じ側の中で動かす（マス⇄交点は「置く場所」で切り替える）。
+  // ただし×のマスの中心は「マスであり交点でもある」共有点なので、交点の駒もそこへ出し入れできる
+  const DST = (!!toPt!==!!fromPt && layerAllows(pc.t, !!toPt, tr, tc)) ? (toPt? ptsBoard : board) : SRC;
   if(fr===tr&&fc===tc&&SRC===DST){ render(); return; }
   if(DST[tr][tc]){ render(); setStatus('そこには既に駒があるため移動できません（元に戻しました）','think'); return; }
   DST[tr][tc]={...pc};
@@ -4357,30 +4361,67 @@ function moveEditPiece(fr,fc,tr,tc,fromPt,toPt){
   const bd=document.getElementById('board'); if(!bd) return;
   bd.style.touchAction='none';   // 盤上ではブラウザのスクロール/ズームを抑止しジェスチャを取得
   const LP_MS=450, MOVE_TH=8;
-  let g=null, lpTimer=null, ghost=null;
+  let g=null, lpTimer=null, ghost=null, ghostDy=0, mark=null;
+  // 指で動かすときは、駒を指の少し上に浮かせて見えるようにし、落とす先もその駒の位置で決める
+  // （指の真下だと駒が隠れて、狙った交点の隣に落ちていた）
+  const aimY=y=>y+ghostDy;
+  const showMark=t=>{
+    if(!t || t.el && !t.pt && !t.shared){ if(mark){ mark.remove(); mark=null; } return; }
+    if(!mark){ mark=document.createElement('div'); mark.className='drop-mark'; bd.appendChild(mark); }
+    const cy = t.shared? t.r+0.5 : t.r, cx = t.shared? t.c+0.5 : t.c;
+    mark.style.left=(cx*100/NC)+'%'; mark.style.top=(cy*100/NR)+'%';
+    mark.style.width=(70/NC)+'%'; mark.style.height=(70/NR)+'%';
+  };
+  /* 指の位置から、いちばん近い置き場所を求める（交点の駒用）。
+     「交点」を選んでいると空の交点の当たり判定が盤全体を覆うので、要素を拾うと×のマスの中心
+     （マスであり交点でもある共有点）を押しても隣の交点になってしまう。位置で決めれば中心を選べる。
+     ×のマスの中心のほうが近ければ {r,c,pt:false,shared:true}、そうでなければいちばん近い交点。 */
+  const nearestPointAt=(x,y)=>{
+    const rc=bd.getBoundingClientRect(); if(!rc.width) return null;
+    const fy=(y-rc.top)/rc.height*NR, fx=(x-rc.left)/rc.width*NC;
+    const pr=Math.round(fy), pc=Math.round(fx);
+    const cr=Math.floor(fy), cc=Math.floor(fx);
+    if(cr>=0&&cr<NR&&cc>=0&&cc<NC&&isSharedPoint(cr,cc)){
+      const dC=Math.hypot(fy-(cr+0.5), fx-(cc+0.5)), dP=Math.hypot(fy-pr, fx-pc);
+      if(dC<dP) return {r:cr,c:cc,pt:false,shared:true};
+    }
+    if(pr<0||pr>NR||pc<0||pc>NC) return null;
+    return {r:pr,c:pc,pt:true};
+  };
   const cellOf=(el)=>{
     const pk = el&&el.closest? el.closest('[data-pt]') : null;   // 交点の駒を先に拾う
     if(pk && pk.dataset.r!==undefined) return {r:+pk.dataset.r,c:+pk.dataset.c,el:pk,pt:true};
     const c=el&&el.closest?el.closest('.cell'):null;
     return (c&&c.dataset&&c.dataset.r!==undefined)?{r:+c.dataset.r,c:+c.dataset.c,el:c}:null; };
+  // ドラッグ中の駒（g）の落とし先。交点の駒（×の中心に置いた交点の駒も）は位置でいちばん近い交点か×の中心、
+  // マスの駒は指の下のマス
+  const dropTargetAt=(x,y,el,d)=>{
+    if(!d) return cellOf(el);
+    const mv=d.pt? (ptsBoard[d.r]&&ptsBoard[d.r][d.c]) : (board[d.r]&&board[d.r][d.c]);
+    if(mv && (d.pt || isPointPiece(mv.t)) && layerAllows(mv.t,true)){ const n=nearestPointAt(x,y); if(n) return n; }
+    return cellOf(el);
+  };
   const clearLP=()=>{ if(lpTimer){clearTimeout(lpTimer); lpTimer=null;} };
-  function makeGhost(pc, srcEl, x, y){
+  function makeGhost(pc, srcEl, x, y, touch){
     ghost=document.createElement('div'); ghost.className='drag-ghost';
     const rect=srcEl?srcEl.getBoundingClientRect():null;
     if(rect){ ghost.style.width=rect.width+'px'; ghost.style.height=rect.height+'px'; }
+    ghostDy = touch? -Math.max(28, (rect?rect.height:40)*0.9) : 0;
     const k=document.createElement('div'); k.className='koma'+(pc.p===-1?' enemy':'');
     if(isGo(pc.t)){ const d=document.createElement('div'); d.className='go-disc '+(pc.t==='GOB'?'black':'white'); k.appendChild(d); }
     else if(pc.t==='OTH'){ const d=document.createElement('div'); d.className='othello-disc '+(pc.p===1?'black':'white'); k.appendChild(d); }
     else fillKoma(k, pc.t);
     ghost.appendChild(k); document.body.appendChild(ghost); moveGhost(x,y);
   }
-  const moveGhost=(x,y)=>{ if(ghost){ ghost.style.left=x+'px'; ghost.style.top=y+'px'; } };
-  function endGhost(){ if(ghost){ghost.remove(); ghost=null;}
+  const moveGhost=(x,y)=>{ if(ghost){ ghost.style.left=x+'px'; ghost.style.top=aimY(y)+'px'; } };
+  function endGhost(){ if(ghost){ghost.remove(); ghost=null;} ghostDy=0; if(mark){ mark.remove(); mark=null; }
     bd.querySelectorAll('.cell.drag-src,.cell.drag-over').forEach(c=>c.classList.remove('drag-src','drag-over')); }
   bd.addEventListener('pointerdown', e=>{
-    const cell=cellOf(e.target); if(!cell) return;
+    let cell=cellOf(e.target); if(!cell) return;
+    // 編集中に×のマスの中心を押したら、隣の交点ではなく中心（共有点）として扱う
+    if(editing && cell.pt){ const n=nearestPointAt(e.clientX,e.clientY); if(n&&n.shared) cell=n; }
     try{ bd.setPointerCapture(e.pointerId); }catch(_){}
-    g={r:cell.r,c:cell.c,pt:!!cell.pt,x0:e.clientX,y0:e.clientY,moved:false,dragging:false,longPress:false};
+    g={r:cell.r,c:cell.c,pt:!!cell.pt,shared:!!cell.shared,x0:e.clientX,y0:e.clientY,moved:false,dragging:false,longPress:false};
     // 長押し検出は両モードで有効：非編集→編集モードへ、編集→駒変更メニュー
     lpTimer=setTimeout(()=>{ if(g&&!g.moved&&!g.dragging){ g.longPress=true; bd.classList.add('lp-armed');
       if(navigator.vibrate){ try{navigator.vibrate(15);}catch(_){} } } }, LP_MS);
@@ -4391,7 +4432,7 @@ function moveEditPiece(fr,fc,tr,tc,fromPt,toPt){
     if(editing && g.moved && !g.dragging){
       const pc=g.pt? (ptsBoard[g.r]&&ptsBoard[g.r][g.c]) : (board[g.r]&&board[g.r][g.c]);
       if(pc){ g.dragging=true; const src=bd.querySelector((g.pt?'.pt-slot':'.cell')+'[data-r=\"'+g.r+'\"][data-c=\"'+g.c+'\"]');
-        if(src)src.classList.add('drag-src'); makeGhost(pc, src, e.clientX, e.clientY); }
+        if(src)src.classList.add('drag-src'); makeGhost(pc, src, e.clientX, e.clientY, e.pointerType==='touch'); }
       else { g=null; return; }
     }
     if(g.dragging){
@@ -4399,11 +4440,12 @@ function moveEditPiece(fr,fc,tr,tc,fromPt,toPt){
       bd.querySelectorAll('.cell.drag-over').forEach(c=>c.classList.remove('drag-over'));
       document.querySelectorAll('.captured.drop-over').forEach(x=>x.classList.remove('drop-over'));
       const tz=document.getElementById('trashZone'); if(tz) tz.classList.remove('over');
-      const el=document.elementFromPoint(e.clientX,e.clientY);
+      const el=document.elementFromPoint(e.clientX,aimY(e.clientY));
       const zone=dropZoneOf(el);
       if(zone==='trash'&&tz) tz.classList.add('over');
       else if(zone==='capYou'||zone==='capEnemy'){ const tr=document.getElementById(zone); if(tr) tr.classList.add('drop-over'); }
-      else { const t=cellOf(el); if(t&&t.el) t.el.classList.add('drag-over'); }
+      else { const t=dropTargetAt(e.clientX,aimY(e.clientY),el,g); showMark(t); if(t&&t.el&&!t.pt) t.el.classList.add('drag-over'); }
+      if(zone) showMark(null);
       e.preventDefault();
     }
   });
@@ -4412,9 +4454,10 @@ function moveEditPiece(fr,fc,tr,tc,fromPt,toPt){
     if(!g) return; const gg=g; g=null;
     // ドラッグ（編集中のみ発生）→ 移動
     if(gg.dragging){
-      const el=document.elementFromPoint(e.clientX,e.clientY);
+      const ax=e.clientX, ay=aimY(e.clientY);
+      const el=document.elementFromPoint(ax,ay);
       const zone=dropZoneOf(el);
-      const t=zone?null:cellOf(el);
+      const t=zone?null:dropTargetAt(ax,ay,el,gg);
       endGhost();
       const tz=document.getElementById('trashZone'); if(tz) tz.classList.remove('over');
       document.querySelectorAll('.captured.drop-over').forEach(x=>x.classList.remove('drop-over'));
@@ -4426,7 +4469,7 @@ function moveEditPiece(fr,fc,tr,tc,fromPt,toPt){
     // 長押し（動かさず）
     if(gg.longPress && !gg.moved){
       if(!editing){ setEditing(true); setStatus('編集モードに入りました（駒を長押しで変更、ドラッグで移動、タップで解除）','think'); }
-      else { openEditMenu(gg.r, gg.c, gg.pt); }   // 編集中の長押し→駒変更メニュー
+      else { openEditMenu(gg.r, gg.c, gg.shared? 'cell' : gg.pt); }   // 編集中の長押し→駒変更メニュー（×の中心はマス側）
       return;
     }
     // 軽いタップ（動かさず）
