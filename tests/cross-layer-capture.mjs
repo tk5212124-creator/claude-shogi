@@ -9,7 +9,7 @@ const out=await p.evaluate(()=>{
   const R={};
   const mk=(bd,pts,pm)=>JSON.stringify({v:2,NR:9,NC:9,PZ:0,turn:1,youAreSente:true,gameOver:false,
     RULES:{drops:true,keepPromoted:false,nifu:true,sennichiteMode:'none',captureAll:true,
-      banSennichite:false,pointMode:pm||'free',palaceEscape:false,allowPass:true},
+      banSennichite:false,pointMode:pm||'freeMove',palaceEscape:false,allowPass:true},
     board:bd||Array.from({length:9},()=>Array(9).fill(null)),
     pts:pts||Array.from({length:10},()=>Array(10).fill(null)),
     diag:Array.from({length:9},()=>Array(9).fill(null)),capYou:[],capEnemy:[]});

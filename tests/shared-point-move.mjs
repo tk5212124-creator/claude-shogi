@@ -48,12 +48,17 @@ const out=await p.evaluate((C50)=>{
     const dg=D(); dg[4][4]='x';
     R['⑤freeMove']=canReach(dg,'freeMove');
   }
-  // ⑥ 逆向きは通らない。マスの駒は × に居ても交点へは出られない（＝空であるべき）
+  // ⑥ 「行き来できない」（pointStrict）では逆向きは通らない。マスの駒は × に居ても交点へは出られない（＝空であるべき）。
+  //    既定の auto では ×の中からは行き来できる（交点へも出られる）
   {
     const dg=D(); dg[4][4]='x';
     const bd=B(); bd[4][4]={t:'hB',p:1};
+    loadState(mk(bd,P(),dg,'pointStrict')); SFX.on=false;
+    const a=moves(board,4,4).filter(m=>m[2]);
+    R['⑥pointStrict：×に居るマスの角行が入れる交点']= a.length? '★'+a.length+'か所' : 'なし';
     loadState(mk(bd,P(),dg,'auto')); SFX.on=false;
-    R['⑥×に居るマスの角行が入れる交点']=moves(board,4,4).filter(m=>m[2]).map(m=>'交点('+(m[0]+1)+'行'+(m[1]+1)+'列)').sort();
+    const b2=moves(board,4,4).filter(m=>m[2]);
+    R['⑥auto：×に居るマスの角行が入れる交点']= b2.length? b2.length+'か所（行き来できる）' : '★なし';
   }
   // ⑦ 実際に指せて、共有点の敵も取れる
   {

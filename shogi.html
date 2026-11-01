@@ -1076,15 +1076,15 @@
     <div class="bs-row" id="bsRowPt">
       <label for="ptSel">駒の置き方</label>
       <select id="ptSel">
-        <option value="auto">囲碁・シャンチー・チャンギの駒は交点に置く</option>
-        <option value="crossCap">囲碁・シャンチー・チャンギの駒は交点に置く（斜めの通り道の駒を取れる）</option>
+        <option value="auto">囲碁・シャンチー・チャンギの駒は交点に置く（交差宮マスからはマスと交点を行き来できる）</option>
+        <option value="pointStrict">囲碁・シャンチー・チャンギの駒は交点に置く（交差宮マスからも行き来できない）</option>
+        <option value="crossCap">囲碁・シャンチー・チャンギの駒は交点に置く（行き来できない・斜めの通り道の駒を取れる）</option>
         <option value="cell">すべての駒をマスの中に置く</option>
         <option value="point">すべての駒を交点に置く</option>
-        <option value="free">すべての駒をマスにも交点にも置ける（交差宮マスからは行き来できる）</option>
         <option value="freeMove">すべての駒がマスにも交点にも常時進める</option>
       </select>
     </div>
-    <div class="bs-note">※ 交点の駒とマスの駒は別の点にいるので、互いに取り合えません（斜めに動くときの障壁にはなります）。碁石が囲んだ駒は交点・マスに関係なく取れ、九宮の交差マス（×）だけは「マスであり交点でもある」共有点として、交点の駒が出入りでき、取り合えます。斜めに飛び越えて動く駒は交点の駒も取れます。<br>※「斜めの通り道の駒を取れる」を選ぶと、斜めに1歩・走りで動く駒も、通り道にいる相手レイヤーの駒（マスの駒から見た交点の駒／交点の駒から見たマスの駒）を取って進めます。</div>
+    <div class="bs-note">※ 交点の駒とマスの駒は別の点にいるので、互いに取り合えません（斜めに動くときの障壁にはなります）。碁石が囲んだ駒は交点・マスに関係なく取れ、九宮の交差マス（×）だけは「マスであり交点でもある」共有点として、交点の駒が出入りでき、取り合えます。既定の置き方では、×の中に入った駒は、マスの駒でも交点の駒でもそこからマスと交点を行き来できます（「行き来できない」を選ぶと、×の中に入った交点の駒は交点か他の×にしか行けず、マスの駒は交点へ出られません）。斜めに飛び越えて動く駒は交点の駒も取れます。<br>※「斜めの通り道の駒を取れる」を選ぶと、斜めに1歩・走りで動く駒も、通り道にいる相手レイヤーの駒（マスの駒から見た交点の駒／交点の駒から見たマスの駒）を取って進めます。</div>
     <div class="bs-row" id="bsPalaceRow">
       <button type="button" id="bsMakePalace">九宮をつくる</button>
       <button type="button" id="bsClearPalace">宮マスを消す</button>
@@ -2431,7 +2431,7 @@ function goesOnPoint(t){
   const m=RULES.pointMode;
   if(m==='cell')  return false;   // すべてマスの中
   if(m==='point') return true;    // すべて交点
-  return isPointPiece(t);         // 'auto'（既定）と 'free' は駒の種類で決める
+  return isPointPiece(t);         // 'auto'（既定）・'pointStrict'・'crossCap'・'freeMove' は駒の種類で決める
 }
 // 編集でその駒をその側へ置けるか
 // ×（交差宮マス）は「マスであり交点でもある」共有点なので、交点の駒はその中にも置ける。
@@ -2439,10 +2439,10 @@ function goesOnPoint(t){
 // 盤に×が1つでもあれば候補に出す（実際に置けるかは置くときに見る）。
 function layerAllows(t, isPt, r, c){
   const m=RULES.pointMode;
-  if(m==='free'||m==='freeMove') return true;    // どちらにも置ける
+  if(m==='freeMove') return true;                // どちらにも置ける
   if(m==='cell')  return !isPt;
   if(m==='point') return !!isPt;
-  if(!!isPt === isPointPiece(t)) return true;    // 'auto'：種類どおりの側
+  if(!!isPt === isPointPiece(t)) return true;    // 'auto' など：種類どおりの側（×から行き来した駒は動かして置く）
   // 交点の駒をマスの中へ置こうとしている。×のマスならそこは共有点なので置ける
   if(!isPt && isPointPiece(t)){
     if(r!==undefined) return isSharedPoint(r,c);
@@ -2458,7 +2458,7 @@ function anySharedPoint(){
 // 駒の種類に応じて2層へ振り分け直す（設定変更・配置後に呼ぶ）
 function syncLayers(){
   ensurePts();
-  if(RULES.pointMode==='free'||RULES.pointMode==='freeMove') return;   // 自由配置は置いた場所をそのまま保つ
+  if(RULES.pointMode==='freeMove') return;   // 自由配置は置いた場所をそのまま保つ
   for(let r=0;r<=NR;r++)for(let c=0;c<=NC;c++){
     const cell=(r<NR&&c<NC)?board[r][c]:null, pt=ptsBoard[r]&&ptsBoard[r][c];
     // ×（交差宮マス）は「マスであり交点でもある」共有点なので、そこに居る駒は動かさない
@@ -2845,7 +2845,7 @@ const RULES={
   scoreOnly:false,   // 勝ち負けを点数で決める（終わり方は変えない）
   banSennichite:true,  // 千日手回避：同一局面が4回目になる手を禁じる（＝千日手が成立しない）
   flyingGeneral:false, // 王不見王：帥と将を同じ筋で相対させる手は指せない（シャンチー）
-  pointMode:'auto',    // 駒の置き方：'auto'（囲碁・シャンチー・チャンギ駒があれば交点）|'point'|'cell'
+  pointMode:'auto',    // 駒の置き方：'auto'（種類どおり。×からは行き来できる）|'pointStrict'（種類どおり。行き来できない）|'crossCap'|'point'|'cell'|'freeMove'
   allowPass:false,     // パス（着手放棄）を認める。チャンギは既定でON
   palaceEscape:false,  // 九宮があっても、帥/將・仕/士が宮の外へ出られるようにする
   bikjang:false,       // ビッチャングン（チャンギ）：漢・楚が相対したまま解消できなければ引き分け
@@ -2973,6 +2973,9 @@ function loadState(text){
   } else if(d.RULES && d.RULES.endByScore===undefined && RULES.captureAll && RULES.scoreOnly){
     RULES.endByScore=true;
   }
+  // 「すべての駒をマスにも交点にも置ける（×からは行き来できる）」（'free'）はなくした。
+  // ×から行き来できるのは今の既定（'auto'）と同じなので、そちらで読む
+  if(RULES.pointMode==='free') RULES.pointMode='auto';
   setSennichiteMode(RULES.sennichiteMode||'avoid');
   youAreSente = d.youAreSente!==undefined? !!d.youAreSente : true;
   turn = d.turn===-1? -1 : 1;
@@ -3121,10 +3124,10 @@ function sharedBlockAt(b,r,c,p){
 /* ×（交差宮マス）は「マスであり交点でもある」中心なので、マスの層に持つ。
    だから ×に立てるのはマスの層に居る駒だけ。 */
 function atCrossCell(b,r,c){ return !(b&&b.isPts) && isSharedPoint(r,c); }
-// どこへでも層をまたげるか。「行き来できる」ルールでは ×の中に居るときだけ。
+// どこへでも層をまたげるか。既定（'auto'）は ×の中に居るときだけ。
 function crossLayerOn(b,r,c){
   if(RULES.pointMode==='freeMove') return true;                 // 常時どちらへも進める
-  if(RULES.pointMode==='free') return atCrossCell(b,r,c);       // ×の中に居るときだけ
+  if(RULES.pointMode==='auto') return atCrossCell(b,r,c);       // ×の中に居るときだけ（マスの駒も交点の駒も）
   return false;
 }
 /* 上のルールでないときでも、×は共有点なので、交点の駒だけは半歩ななめで ×の中へ入れる。
@@ -3132,7 +3135,7 @@ function crossLayerOn(b,r,c){
 // ×の中に居る「交点の駒」は、行き来できるルールでなければ交点か他の×にしか行けない
 function stuckOnCross(b,r,c,t){
   const m=RULES.pointMode;
-  if(m==='free'||m==='freeMove') return false;
+  if(m==='auto'||m==='freeMove') return false;
   return atCrossCell(b,r,c) && goesOnPoint(t);
 }
 function crossLayerMoves(b,r,c,p,flip,vecs){
@@ -4267,8 +4270,8 @@ function closeHandModal(){ handCtx=null; document.getElementById('handModal').cl
 let gameName='本将棋（9×9）';
 function ruleSummaryHTML(){
   const esc=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const PT_SHORT={auto:'囲碁・シャンチー・チャンギの駒は交点', crossCap:'囲碁などの駒は交点（斜めの通り道も取れる）',
-    cell:'すべてマスの中', point:'すべて交点', free:'マスにも交点にも置ける', freeMove:'マスにも交点にも常時進める'};
+  const PT_SHORT={auto:'囲碁などの駒は交点（×からは行き来できる）', pointStrict:'囲碁などの駒は交点（×からも行き来できない）',
+    crossCap:'囲碁などの駒は交点（斜めの通り道も取れる）', cell:'すべてマスの中', point:'すべて交点', freeMove:'マスにも交点にも常時進める'};
   const online=typeof Online!=='undefined' && Online.connected;
   const promo=[RULES.promoOnZone&&'敵陣に入る', RULES.promoOnLast&&'一番奥に着く', RULES.promoOnCapture&&'敵駒を取る'].filter(Boolean);
   const ends=[RULES.captureAll&&'相手の駒を取り切る', RULES.endByScore&&'相手の点数が0になる',
@@ -4749,7 +4752,7 @@ function foeStoneAt(L, rows, cols, r, c, side){
 // （layerAllows は編集のための関数なので、×の例外が入っている）
 function goStoneInCell(){
   const m=RULES.pointMode;
-  return m==='free'||m==='freeMove'||m==='cell';
+  return m==='freeMove'||m==='cell';
 }
 /* 交点(R,C)から (dr,dc) へ伸びる辺を挟む「2マス」。
      上へ … マス (R-1,C-1) と (R-1,C)      下へ … マス (R,C-1) と (R,C)
@@ -8600,7 +8603,10 @@ document.getElementById('ptSel').onchange=e=>{
   RULES.pointMode=e.target.value; syncLayers(); sel=null; render();
   setStatus(!ptLayerOn() ? 'すべての駒をマスの中に置きます'
     : crossCapMode() ? '交点に置きます。斜めの通り道にいる相手レイヤーの駒は取れます'
-    : '囲碁・シャンチー・チャンギの駒を線の交点に置きます');
+    : RULES.pointMode==='auto' ? '囲碁・シャンチー・チャンギの駒を線の交点に置きます。×の中からはマスと交点を行き来できます'
+    : RULES.pointMode==='pointStrict' ? '囲碁・シャンチー・チャンギの駒を線の交点に置きます（×からも行き来できません）'
+    : RULES.pointMode==='point' ? 'すべての駒を線の交点に置きます'
+    : 'すべての駒がマスにも交点にも進めます');
 };
 function updatePalacePending(){
   const note=document.getElementById('bsPalaceNote');

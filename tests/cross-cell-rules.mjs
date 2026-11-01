@@ -44,22 +44,22 @@ const out=await p.evaluate((C54)=>{
     R['①CPUがマスの駒を交点へ打つ手を作るか']=
       genMoves(board,1,capYou,capEnemy).filter(g=>g.drop&&g.pt&&!goesOnPoint(g.drop)).length;
   }
-  // ② 移動：マスの駒はどこからも交点へ行けない（×の上に居ても）
+  // ② 移動（「行き来できない」pointStrict）：マスの駒はどこからも交点へ行けない（×の上に居ても）
   {
     const bd=B(); bd[3][3]={t:'hB',p:1};
-    loadState(mk(bd,P(),X(),'auto')); SFX.on=false;
+    loadState(mk(bd,P(),X(),'pointStrict')); SFX.on=false;
     R['②ふつうのマスの角行→交点']=moves(board,3,3).filter(m=>m[2]).map(pt);
     board[3][3]=null; board[4][4]={t:'hB',p:1};
     R['②×のマスに居る角行→交点']=moves(board,4,4).filter(m=>m[2]).map(pt);
   }
-  // ③ 交点の駒は×の中へ入れる。入ったあとは交点か他の×にしか行けない
+  // ③ 交点の駒は×の中へ入れる。pointStrict では入ったあとは交点か他の×にしか行けない
   {
     // シャンチーの仕（交点の駒。斜め1歩）。× があるので、そのマスは宮のマスになる
     const pts=P(); pts[4][4]={t:'XA',p:1};
-    loadState(mk(B(),pts,X(),'auto')); SFX.on=false;
+    loadState(mk(B(),pts,X(),'pointStrict')); SFX.on=false;
     R['③交点の仕→入れる×']=moves(ptsBoard,4,4).filter(m=>m[2]).map(cell);
     const bd=B(); bd[4][4]={t:'XA',p:1};
-    loadState(mk(bd,P(),X(),'auto')); SFX.on=false;
+    loadState(mk(bd,P(),X(),'pointStrict')); SFX.on=false;
     R['③×の中の仕→戻れる交点']=moves(board,4,4).filter(m=>m[2]).map(pt);
     R['③×の中の仕→行けるマス']=moves(board,4,4).filter(m=>!m[2]).map(cell);
     // すべての駒を交点に置くルールなら、角行も同じように扱われる
@@ -72,14 +72,20 @@ const out=await p.evaluate((C54)=>{
     loadState(mk(B(),pts2,d2,'point')); SFX.on=false;
     R['③point：交点の角行→入れる×']=moves(ptsBoard,4,4).filter(m=>m[2]).map(cell);
   }
-  // ④ 「行き来できる」ルール（free）＝×の中に居るときだけ、マスの駒も交点へ出られる
+  // ④ 既定（auto）＝×の中に居るときだけ、マスの駒も交点へ出られる（前の free と同じ動き）
   {
     const bd=B(); bd[4][4]={t:'hB',p:1};
-    loadState(mk(bd,P(),X(),'free')); SFX.on=false;
-    R['④free：×の中の角行→交点']=moves(board,4,4).filter(m=>m[2]).map(pt).length;
+    loadState(mk(bd,P(),X(),'auto')); SFX.on=false;
+    R['④auto：×の中の角行→交点']=moves(board,4,4).filter(m=>m[2]).map(pt).length;
     bd[4][4]=null; bd[3][3]={t:'hB',p:1};
-    loadState(mk(bd,P(),X(),'free')); SFX.on=false;
-    R['④free：ふつうのマスの角行→交点']=moves(board,3,3).filter(m=>m[2]).map(pt);
+    loadState(mk(bd,P(),X(),'auto')); SFX.on=false;
+    R['④auto：ふつうのマスの角行→交点']=moves(board,3,3).filter(m=>m[2]).map(pt);
+    const bx=B(); bx[4][4]={t:'XA',p:1};
+    loadState(mk(bx,P(),X(),'auto')); SFX.on=false;
+    R['④auto：×の中の仕→行けるマス']=moves(board,4,4).filter(m=>!m[2]).map(cell);
+    // 古い保存の 'free' は 'auto' として読む
+    loadState(mk(B(),P(),X(),'free')); SFX.on=false;
+    R['④古い free の保存']=RULES.pointMode==='auto'?'auto として読む':'★'+RULES.pointMode;
   }
   // ⑤ 斜めの通り道：ふつうは塞がれるだけ。crossCap なら取って進める
   {
